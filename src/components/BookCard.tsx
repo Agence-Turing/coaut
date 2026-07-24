@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   BookSummary,
+  bookRef,
   playersOf,
   turnsCountOf,
 } from "@/lib/books";
@@ -8,11 +9,10 @@ import {
 export default function BookCard({ book }: { book: BookSummary }) {
   const players = playersOf(book);
   const turns = turnsCountOf(book);
-  const code = book.legacy_code?.replace("#", "");
 
   return (
     <Link
-      href={`/books/${code}`}
+      href={`/books/${bookRef(book)}`}
       className="group flex h-full flex-col rounded-3xl border border-ink/10 bg-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:shadow-xl"
     >
       <div className="flex flex-wrap items-center gap-2">

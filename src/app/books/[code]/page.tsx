@@ -3,8 +3,16 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { Cta } from "@/components/Buttons";
-import { getBook, getTurns, playersOf } from "@/lib/books";
+import JoinRequestForm from "@/components/JoinRequestForm";
+import { acceptRequest, rejectRequest } from "@/app/books/actions";
+import {
+  getBook,
+  getTurns,
+  getJoinRequests,
+  getMyJoinRequest,
+  playersOf,
+  bookRef,
+} from "@/lib/books";
 import { getCurrentUser } from "@/lib/auth";
 
 export async function generateMetadata({
@@ -23,16 +31,32 @@ export default async function BookPage({
   params: Promise<{ code: string }>;
 }) {
   const { code } = await params;
-  const [book, author] = await Promise.all([getBook(code), getCurrentUser()]);
+  const [book, user] = await Promise.all([getBook(code), getCurrentUser()]);
   if (!book) notFound();
   const turns = await getTurns(book.id);
   const players = playersOf(book);
   const writtenTurns = turns.filter((t) => t.content && t.is_ended);
   const currentTurn = turns.find((t) => !t.is_ended);
+  const ref = bookRef(book);
+
+  const isLauncher = Boolean(user?.authorId && book.launcher_id === user.authorId);
+  const isPlayer = Boolean(
+    user?.authorId && book.book_players.some((p) => p.author_id === user.authorId)
+  );
+  const teamFull = Boolean(
+    book.max_players && book.book_players.length >= book.max_players
+  );
+
+  const joinRequests = isLauncher ? await getJoinRequests(book.id) : [];
+  const pendingRequests = joinRequests.filter((r) => r.status === "pending");
+  const myRequest =
+    !isLauncher && !isPlayer && user?.authorId
+      ? await getMyJoinRequest(book.id, user.authorId)
+      : null;
 
   return (
     <>
-      <Header user={author} />
+      <Header user={user} />
       <main className="flex-1 bg-white">
         <section className="bg-aubergine text-white">
           <div className="mx-auto max-w-4xl px-4 py-12 md:px-6">
@@ -79,21 +103,114 @@ export default async function BookPage({
                   <span className="font-semibold text-white">
                     {players.join(", ")}
                   </span>
+                  {book.max_players
+                    ? ` (${book.book_players.length}/${book.max_players} co-auteurs)`
+                    : ""}
                   {" · "}
                 </>
               ) : null}
               {writtenTurns.length} tour{writtenTurns.length > 1 ? "s" : ""}{" "}
               d&rsquo;écriture
             </p>
-            {book.status === "launched" && (
-              <div className="mt-6">
-                <Cta href={author ? "#" : "/?mode=signup"}>
-                  Demander à rejoindre
-                </Cta>
+
+            {book.status === "launched" && !isLauncher && !isPlayer && (
+              <div className="mt-8 max-w-xl">
+                {myRequest ? (
+                  <p className="rounded-2xl bg-white/10 p-5 text-sm font-semibold">
+                    {myRequest.status === "pending" &&
+                      "✉️ Ta demande est envoyée, le lanceur du livre va te répondre."}
+                    {myRequest.status === "accepted" &&
+                      "🎉 Ta demande a été acceptée ! Tu fais partie de l'équipe."}
+                    {myRequest.status === "rejected" &&
+                      "Le lanceur n'a pas retenu ta demande pour ce livre. D'autres histoires t'attendent !"}
+                  </p>
+                ) : teamFull ? (
+                  <p className="rounded-2xl bg-white/10 p-5 text-sm font-semibold">
+                    L&rsquo;équipe est au complet pour ce livre.
+                  </p>
+                ) : (
+                  <JoinRequestForm bookId={book.id} bookRef={ref} />
+                )}
               </div>
             )}
           </div>
         </section>
+
+        {isLauncher && book.status === "launched" && (
+          <section className="border-b border-ink/10 bg-peche/10">
+            <div className="mx-auto max-w-4xl px-4 py-10 md:px-6">
+              <h2 className="font-display text-xl font-bold text-ink">
+                Demandes pour rejoindre ton livre
+                {pendingRequests.length > 0 && (
+                  <span className="ml-2 rounded-full bg-brand px-3 py-1 text-sm text-white">
+                    {pendingRequests.length}
+                  </span>
+                )}
+              </h2>
+
+              {joinRequests.length === 0 ? (
+                <p className="mt-4 text-sm text-graphite">
+                  Personne n&rsquo;a encore demandé à rejoindre ton histoire.
+                  Partage-la autour de toi !
+                </p>
+              ) : (
+                <ul className="mt-6 space-y-4">
+                  {joinRequests.map((r) => (
+                    <li
+                      key={r.id}
+                      className="rounded-2xl border border-ink/10 bg-white p-5"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="font-display font-bold text-ink">
+                          ✍️ {r.authors?.nickname ?? "Auteur inconnu"}
+                        </p>
+                        {r.status === "pending" ? (
+                          <div className="flex gap-2">
+                            <form action={acceptRequest}>
+                              <input type="hidden" name="request_id" value={r.id} />
+                              <input type="hidden" name="book_ref" value={ref} />
+                              <button
+                                type="submit"
+                                className="rounded-full bg-brand px-5 py-2 text-sm font-bold text-white transition-colors hover:bg-brand-dark"
+                              >
+                                Accepter
+                              </button>
+                            </form>
+                            <form action={rejectRequest}>
+                              <input type="hidden" name="request_id" value={r.id} />
+                              <input type="hidden" name="book_ref" value={ref} />
+                              <button
+                                type="submit"
+                                className="rounded-full border-2 border-ink/20 px-5 py-2 text-sm font-bold text-ink transition-colors hover:border-brand-dark hover:text-brand-dark"
+                              >
+                                Refuser
+                              </button>
+                            </form>
+                          </div>
+                        ) : (
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-bold ${
+                              r.status === "accepted"
+                                ? "bg-brand/10 text-brand-dark"
+                                : "bg-ink/5 text-graphite"
+                            }`}
+                          >
+                            {r.status === "accepted" ? "Accepté ✓" : "Refusé"}
+                          </span>
+                        )}
+                      </div>
+                      {r.message && (
+                        <p className="mt-3 text-sm italic text-graphite">
+                          &ldquo;{r.message}&rdquo;
+                        </p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </section>
+        )}
 
         <section className="mx-auto max-w-3xl px-4 py-12 md:px-6">
           {writtenTurns.length === 0 ? (

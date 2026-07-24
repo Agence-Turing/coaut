@@ -43,7 +43,7 @@ export default async function BooksPage({
               l&rsquo;imaginaire de la communauté avec les livres déjà écrits en
               équipe.
             </p>
-            <div className="mt-8 flex gap-3">
+            <div className="mt-8 flex flex-wrap items-center gap-3">
               {TABS.map((t) => (
                 <Link
                   key={t.key}
@@ -57,6 +57,12 @@ export default async function BooksPage({
                   {t.label}
                 </Link>
               ))}
+              <Link
+                href="/books/new"
+                className="ml-auto rounded-full bg-peche px-6 py-2.5 text-sm font-bold text-aubergine shadow-lg transition-colors hover:bg-white"
+              >
+                🚀 Lancer un livre
+              </Link>
             </div>
           </div>
         </section>

@@ -8,7 +8,12 @@ import { signOut } from "@/app/auth/actions";
 
 type HeaderUser = { nickname: string } | null;
 
-const NAV_LINKS = [{ href: "/books", label: "La bibliothèque" }];
+function navLinks(user: HeaderUser) {
+  return [
+    { href: "/books", label: "La bibliothèque" },
+    ...(user ? [{ href: "/books/mes-livres", label: "Mes livres" }] : []),
+  ];
+}
 
 function AuthZone({ user }: { user: HeaderUser }) {
   if (!user) {
@@ -53,7 +58,7 @@ export default function Header({ user = null }: { user?: HeaderUser }) {
         </Link>
 
         <nav className="hidden items-center gap-8 md:flex">
-          {NAV_LINKS.map((l) => (
+          {navLinks(user).map((l) => (
             <Link
               key={l.href}
               href={l.href}
@@ -87,7 +92,7 @@ export default function Header({ user = null }: { user?: HeaderUser }) {
       {open && (
         <nav className="border-t border-white/10 px-4 pb-5 pt-3 md:hidden">
           <div className="flex flex-col gap-4">
-            {NAV_LINKS.map((l) => (
+            {navLinks(user).map((l) => (
               <Link
                 key={l.href}
                 href={l.href}

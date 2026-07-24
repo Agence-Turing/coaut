@@ -6,7 +6,13 @@ import {
   turnsCountOf,
 } from "@/lib/books";
 
-export default function BookCard({ book }: { book: BookSummary }) {
+export default function BookCard({
+  book,
+  flags,
+}: {
+  book: BookSummary;
+  flags?: { launcher?: boolean; myTurn?: boolean };
+}) {
   const players = playersOf(book);
   const turns = turnsCountOf(book);
 
@@ -16,6 +22,16 @@ export default function BookCard({ book }: { book: BookSummary }) {
       className="group flex h-full flex-col rounded-3xl border border-ink/10 bg-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:shadow-xl"
     >
       <div className="flex flex-wrap items-center gap-2">
+        {flags?.myTurn && (
+          <span className="rounded-full bg-brand px-3 py-1 text-xs font-bold text-white">
+            ✍️ À toi d&rsquo;écrire !
+          </span>
+        )}
+        {flags?.launcher && (
+          <span className="rounded-full bg-aubergine px-3 py-1 text-xs font-bold text-white">
+            Lancé par toi
+          </span>
+        )}
         {book.themes.map((t) => (
           <span
             key={t}

@@ -110,6 +110,52 @@ export async function getTurns(bookId: string) {
   return data as unknown as Turn[];
 }
 
+/** Livres dont l'auteur fait partie de l'équipe. */
+export async function listMyBooks(authorId: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("books")
+    .select(`${BOOK_SUMMARY}, mine:book_players!inner(author_id)`)
+    .eq("mine.author_id", authorId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data as unknown as BookSummary[];
+}
+
+/** Demandes envoyées par l'auteur, avec le livre concerné. */
+export async function listMyRequests(authorId: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("join_requests")
+    .select(
+      "id, status, created_at, books(id, legacy_code, title, status)"
+    )
+    .eq("author_id", authorId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data as unknown as {
+    id: string;
+    status: JoinRequest["status"];
+    created_at: string;
+    books: Pick<BookSummary, "id" | "legacy_code" | "title" | "status"> | null;
+  }[];
+}
+
+/** Tours en cours (non terminés) des livres donnés : bookId → authorId du tour. */
+export async function getOpenTurns(bookIds: string[]) {
+  if (bookIds.length === 0) return new Map<string, string | null>();
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("turns")
+    .select("book_id, author_id")
+    .eq("is_ended", false)
+    .in("book_id", bookIds);
+  if (error) throw error;
+  return new Map<string, string | null>(
+    (data ?? []).map((t) => [t.book_id as string, t.author_id as string | null])
+  );
+}
+
 export function playersOf(book: BookSummary) {
   return book.book_players
     .slice()

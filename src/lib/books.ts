@@ -36,6 +36,7 @@ export type Turn = {
   number: number;
   content: string | null;
   is_ended: boolean;
+  author_id: string | null;
   authors: { nickname: string } | null;
 };
 
@@ -103,7 +104,7 @@ export async function getTurns(bookId: string) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("turns")
-    .select("id, number, content, is_ended, authors(nickname)")
+    .select("id, number, content, is_ended, author_id, authors(nickname)")
     .eq("book_id", bookId)
     .order("number", { ascending: true });
   if (error) throw error;
@@ -141,19 +142,38 @@ export async function listMyRequests(authorId: string) {
   }[];
 }
 
-/** Tours en cours (non terminés) des livres donnés : bookId → authorId du tour. */
-export async function getOpenTurns(bookIds: string[]) {
-  if (bookIds.length === 0) return new Map<string, string | null>();
+/** À qui le tour, pour chaque livre donné : bookId → authorId. */
+export async function getCurrentWriters(books: BookSummary[]) {
+  const map = new Map<string, string | null>();
+  if (books.length === 0) return map;
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("turns")
-    .select("book_id, author_id")
-    .eq("is_ended", false)
-    .in("book_id", bookIds);
+    .select("book_id, number, is_ended, author_id")
+    .in(
+      "book_id",
+      books.map((b) => b.id)
+    );
   if (error) throw error;
-  return new Map<string, string | null>(
-    (data ?? []).map((t) => [t.book_id as string, t.author_id as string | null])
-  );
+
+  for (const book of books) {
+    const turns = (data ?? []).filter((t) => t.book_id === book.id);
+    const open = turns.find((t) => !t.is_ended);
+    if (open) {
+      map.set(book.id, open.author_id as string | null);
+      continue;
+    }
+    const players = book.book_players
+      .slice()
+      .sort((a, b) => a.position - b.position);
+    if (players.length === 0) {
+      map.set(book.id, null);
+      continue;
+    }
+    const ended = turns.filter((t) => t.is_ended).length;
+    map.set(book.id, players[ended % players.length].author_id);
+  }
+  return map;
 }
 
 export function playersOf(book: BookSummary) {
@@ -166,4 +186,50 @@ export function playersOf(book: BookSummary) {
 
 export function turnsCountOf(book: BookSummary) {
   return book.turns[0]?.count ?? 0;
+}
+
+export type WritingState = {
+  /** Tour ouvert (brouillon en cours) s'il existe. */
+  openTurn: Turn | null;
+  /** Auteur dont c'est le tour (null si l'équipe est vide ou tour hérité orphelin). */
+  currentAuthorId: string | null;
+  currentNickname: string | null;
+  /** Numéro du tour à écrire. */
+  number: number;
+};
+
+/**
+ * À qui le tour ? S'il y a un tour ouvert, c'est le sien ; sinon la rotation
+ * suit l'ordre d'arrivée dans l'équipe (position), en repartant du lanceur.
+ */
+export function writingState(book: BookSummary, turns: Turn[]): WritingState {
+  const players = book.book_players
+    .slice()
+    .sort((a, b) => a.position - b.position);
+  const ended = turns.filter((t) => t.is_ended);
+  const openTurn = turns.find((t) => !t.is_ended) ?? null;
+  const maxNumber = turns.reduce((m, t) => Math.max(m, t.number), 0);
+
+  if (openTurn) {
+    const player = players.find((p) => p.author_id === openTurn.author_id);
+    return {
+      openTurn,
+      currentAuthorId: openTurn.author_id,
+      currentNickname:
+        player?.authors?.nickname ?? openTurn.authors?.nickname ?? null,
+      number: openTurn.number,
+    };
+  }
+
+  if (players.length === 0) {
+    return { openTurn: null, currentAuthorId: null, currentNickname: null, number: maxNumber + 1 };
+  }
+
+  const next = players[ended.length % players.length];
+  return {
+    openTurn: null,
+    currentAuthorId: next.author_id,
+    currentNickname: next.authors?.nickname ?? null,
+    number: maxNumber + 1,
+  };
 }

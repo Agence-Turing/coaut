@@ -7,7 +7,7 @@ import BookCard from "@/components/BookCard";
 import {
   listMyBooks,
   listMyRequests,
-  getOpenTurns,
+  getCurrentWriters,
   bookRef,
 } from "@/lib/books";
 import { getCurrentUser } from "@/lib/auth";
@@ -32,7 +32,7 @@ export default async function MyBooksPage() {
 
   const writing = books.filter((b) => b.status === "launched");
   const published = books.filter((b) => b.status === "published");
-  const openTurns = await getOpenTurns(writing.map((b) => b.id));
+  const currentWriters = await getCurrentWriters(writing);
   const pendingRequests = requests.filter((r) => r.status !== "accepted");
 
   return (
@@ -75,7 +75,7 @@ export default async function MyBooksPage() {
                   book={b}
                   flags={{
                     launcher: b.launcher_id === user.authorId,
-                    myTurn: openTurns.get(b.id) === user.authorId,
+                    myTurn: currentWriters.get(b.id) === user.authorId,
                   }}
                 />
               ))}

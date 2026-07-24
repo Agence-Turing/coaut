@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import JoinRequestForm from "@/components/JoinRequestForm";
+import TurnEditor from "@/components/TurnEditor";
+import PublishBookButton from "@/components/PublishBookButton";
 import { acceptRequest, rejectRequest } from "@/app/books/actions";
 import {
   getBook,
@@ -12,6 +14,7 @@ import {
   getMyJoinRequest,
   playersOf,
   bookRef,
+  writingState,
 } from "@/lib/books";
 import { getCurrentUser } from "@/lib/auth";
 
@@ -36,8 +39,8 @@ export default async function BookPage({
   const turns = await getTurns(book.id);
   const players = playersOf(book);
   const writtenTurns = turns.filter((t) => t.content && t.is_ended);
-  const currentTurn = turns.find((t) => !t.is_ended);
   const ref = bookRef(book);
+  const writing = book.status === "launched" ? writingState(book, turns) : null;
 
   const isLauncher = Boolean(user?.authorId && book.launcher_id === user.authorId);
   const isPlayer = Boolean(
@@ -45,6 +48,10 @@ export default async function BookPage({
   );
   const teamFull = Boolean(
     book.max_players && book.book_players.length >= book.max_players
+  );
+
+  const myTurn = Boolean(
+    writing && user?.authorId && writing.currentAuthorId === user.authorId && isPlayer
   );
 
   const joinRequests = isLauncher ? await getJoinRequests(book.id) : [];
@@ -112,6 +119,12 @@ export default async function BookPage({
               {writtenTurns.length} tour{writtenTurns.length > 1 ? "s" : ""}{" "}
               d&rsquo;écriture
             </p>
+
+            {isLauncher && book.status === "launched" && (
+              <div className="mt-6">
+                <PublishBookButton bookRef={ref} />
+              </div>
+            )}
 
             {book.status === "launched" && !isLauncher && !isPlayer && (
               <div className="mt-8 max-w-xl">
@@ -236,13 +249,23 @@ export default async function BookPage({
             </article>
           )}
 
-          {currentTurn && (
-            <p className="mt-10 rounded-2xl bg-peche/20 p-5 text-center text-sm font-semibold text-brand-dark">
-              ✍️ C&rsquo;est au tour de{" "}
-              {currentTurn.authors?.nickname ?? "un co-auteur"} d&rsquo;écrire la
-              suite…
-            </p>
-          )}
+          {writing &&
+            (myTurn ? (
+              <div className="mt-10">
+                <TurnEditor
+                  bookRef={ref}
+                  turnNumber={writing.number}
+                  draft={writing.openTurn?.content ?? ""}
+                />
+              </div>
+            ) : (
+              <p className="mt-10 rounded-2xl bg-peche/20 p-5 text-center text-sm font-semibold text-brand-dark">
+                {isPlayer ? "🔒 " : ""}✍️ C&rsquo;est au tour de{" "}
+                {writing.currentNickname ?? "un co-auteur"} d&rsquo;écrire la
+                suite…
+                {isPlayer && " Tu seras prévenu quand ce sera ton tour."}
+              </p>
+            ))}
 
           {book.status === "published" && (
             <p className="mt-10 text-center">

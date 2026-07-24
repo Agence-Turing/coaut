@@ -25,6 +25,8 @@ Palette reprise du site original : aubergine `#4F2740`, orange `#EC681C`, rouge 
 
 Statuts livres : `launched` (recherche co-auteurs / en cours) et `published` (terminé). Un tour avec `is_ended=false` = tour d'écriture en cours. `book_players.position` = ordre de passage.
 
-## Pages à construire (routes prévues)
+## Fonctionnement de l'app
 
-`/books` (livres à rejoindre), livres publiés (bibliothèque), « mes livres », page d'écriture au tour par tour, `/signup`, `/login`, `/comment-ca-marche`, `/contact`. La page d'accueil (`src/app/page.tsx` + `src/components/home/`) réplique fidèlement l'originale.
+`/` = connexion/inscription (le site vitrine reste le WordPress co-aut.com). Routes protégées par `src/proxy.ts` : `/books` (bibliothèque à rejoindre/publiés), `/books/new` (lancer un livre), `/books/mes-livres`, `/books/[code]` (lecture + écriture ; code hérité « 052 » ou uuid pour les nouveaux).
+
+Écriture au tour par tour : la RLS n'autorise à créer un tour que pour soi-même → le tour n'est PAS pré-créé pour le suivant ; « à qui le tour » est calculé par `writingState()` (tour ouvert sinon rotation `positions` : `nb tours terminés % taille équipe`). Publication par le lanceur uniquement, bloquée si un tour d'un autre auteur est ouvert. Demandes à rejoindre : `join_requests` + validation par le lanceur (accept → `book_players`).

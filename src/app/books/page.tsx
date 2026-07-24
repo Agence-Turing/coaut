@@ -4,6 +4,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import BookCard from "@/components/BookCard";
 import { listBooks } from "@/lib/books";
+import { getCurrentUser } from "@/lib/auth";
 
 export const metadata: Metadata = {
   title: "La bibliothèque | Co-Aut",
@@ -23,11 +24,14 @@ export default async function BooksPage({
 }) {
   const { statut } = await searchParams;
   const tab = TABS.find((t) => t.key === statut) ?? TABS[0];
-  const books = await listBooks(tab.status);
+  const [books, author] = await Promise.all([
+    listBooks(tab.status),
+    getCurrentUser(),
+  ]);
 
   return (
     <>
-      <Header />
+      <Header user={author} />
       <main className="flex-1 bg-white">
         <section className="bg-aubergine text-white">
           <div className="mx-auto max-w-6xl px-4 py-12 md:px-6">

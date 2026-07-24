@@ -4,19 +4,45 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { Cta } from "@/components/Buttons";
+import { signOut } from "@/app/auth/actions";
 
-const NAV_LINKS = [
-  { href: "/comment-ca-marche", label: "Comment ça marche ?" },
-  { href: "/books", label: "La bibliothèque" },
-];
+type HeaderUser = { nickname: string } | null;
 
-export default function Header() {
+const NAV_LINKS = [{ href: "/books", label: "La bibliothèque" }];
+
+function AuthZone({ user }: { user: HeaderUser }) {
+  if (!user) {
+    return (
+      <>
+        <Cta href="/?mode=signup">M&apos;inscrire</Cta>
+        <Cta href="/?mode=login" variant="outline">
+          Me connecter
+        </Cta>
+      </>
+    );
+  }
+  return (
+    <>
+      <span className="text-sm font-semibold text-peche">✍️ {user.nickname}</span>
+      <form action={signOut}>
+        <button
+          type="submit"
+          className="rounded-full border-2 border-white px-5 py-2 text-sm font-bold text-white transition-colors hover:bg-white hover:text-aubergine"
+        >
+          Se déconnecter
+        </button>
+      </form>
+    </>
+  );
+}
+
+export default function Header({ user = null }: { user?: HeaderUser }) {
   const [open, setOpen] = useState(false);
 
   return (
     <header className="sticky top-0 z-50 bg-aubergine shadow-md">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 md:px-6">
-        <Link href="/" className="shrink-0">
+        <Link href={user ? "/books" : "/"} className="shrink-0">
           <Image
             src="/images/logo-co-aut.png"
             alt="Logo Co-Aut"
@@ -39,10 +65,7 @@ export default function Header() {
         </nav>
 
         <div className="hidden items-center gap-3 md:flex">
-          <Cta href="/signup">M&apos;inscrire</Cta>
-          <Cta href="/login" variant="outline">
-            Me connecter
-          </Cta>
+          <AuthZone user={user} />
         </div>
 
         <button
@@ -74,11 +97,8 @@ export default function Header() {
                 {l.label}
               </Link>
             ))}
-            <div className="flex gap-3 pt-2">
-              <Cta href="/signup">M&apos;inscrire</Cta>
-              <Cta href="/login" variant="outline">
-                Me connecter
-              </Cta>
+            <div className="flex flex-wrap items-center gap-3 pt-2">
+              <AuthZone user={user} />
             </div>
           </div>
         </nav>

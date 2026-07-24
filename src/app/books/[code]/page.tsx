@@ -5,6 +5,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Cta } from "@/components/Buttons";
 import { getBook, getTurns, playersOf } from "@/lib/books";
+import { getCurrentUser } from "@/lib/auth";
 
 export async function generateMetadata({
   params,
@@ -22,7 +23,7 @@ export default async function BookPage({
   params: Promise<{ code: string }>;
 }) {
   const { code } = await params;
-  const book = await getBook(code);
+  const [book, author] = await Promise.all([getBook(code), getCurrentUser()]);
   if (!book) notFound();
   const turns = await getTurns(book.id);
   const players = playersOf(book);
@@ -31,7 +32,7 @@ export default async function BookPage({
 
   return (
     <>
-      <Header />
+      <Header user={author} />
       <main className="flex-1 bg-white">
         <section className="bg-aubergine text-white">
           <div className="mx-auto max-w-4xl px-4 py-12 md:px-6">
@@ -86,7 +87,9 @@ export default async function BookPage({
             </p>
             {book.status === "launched" && (
               <div className="mt-6">
-                <Cta href="/signup">Demander à rejoindre</Cta>
+                <Cta href={author ? "#" : "/?mode=signup"}>
+                  Demander à rejoindre
+                </Cta>
               </div>
             )}
           </div>

@@ -1,6 +1,6 @@
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { WaveBand } from "@/components/Wave";
+import Wave from "@/components/Wave";
 import Hero from "@/components/home/Hero";
 import EnJouant from "@/components/home/EnJouant";
 import ReveleAuteur from "@/components/home/ReveleAuteur";
@@ -19,9 +19,9 @@ export default function Home() {
         <EnJouant />
         <ReveleAuteur />
         <RecitAvec />
-        <WaveBand className="bg-white" />
+        <Wave className="h-10 bg-white text-ink md:h-14" />
         <PlusQuUnePlateforme />
-        <WaveBand className="bg-white" />
+        <Wave className="h-10 bg-white text-ink md:h-14" />
         <CommentEcrire />
         <Temoignages />
         <Faq />

@@ -1,0 +1,8808 @@
+-- Co-Aut v2 — schéma initial
+-- Modélisation propre du MVP existant : livres écrits à plusieurs, chacun son tour.
+
+create extension if not exists "pgcrypto";
+
+-- Les auteurs du MVP n'existent que par leur pseudonyme.
+-- user_id fera le lien avec auth.users quand l'auth sera en place.
+create table public.authors (
+  id uuid primary key default gen_random_uuid(),
+  nickname text not null unique,
+  user_id uuid unique references auth.users (id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+create table public.books (
+  id uuid primary key default gen_random_uuid(),
+  legacy_code text unique, -- code "#052" de l'ancien MVP
+  title text not null,
+  synopsis text,
+  themes text[] not null default '{}',
+  scolar_level text, -- niveau scolaire libre : CM1, 6eme, Adulte…
+  status text not null default 'launched' check (status in ('launched', 'published')),
+  launcher_id uuid references public.authors (id) on delete set null,
+  max_players integer, -- nombre de co-auteurs souhaité (absent de l'ancien MVP)
+  cover_url text,
+  file_url text,
+  created_at timestamptz not null default now()
+);
+
+-- Équipe d'un livre ; position = ordre de passage pour l'écriture au tour par tour.
+create table public.book_players (
+  book_id uuid not null references public.books (id) on delete cascade,
+  author_id uuid not null references public.authors (id) on delete cascade,
+  position integer not null default 0,
+  joined_at timestamptz not null default now(),
+  primary key (book_id, author_id)
+);
+
+-- Un tour = un passage d'écriture d'un auteur. is_ended=false = tour en cours.
+create table public.turns (
+  id uuid primary key default gen_random_uuid(),
+  legacy_id uuid unique,
+  book_id uuid not null references public.books (id) on delete cascade,
+  number integer not null,
+  author_id uuid references public.authors (id) on delete set null,
+  content text,
+  is_ended boolean not null default false,
+  is_validated boolean not null default false,
+  created_at timestamptz not null default now(),
+  unique (book_id, number)
+);
+create index turns_book_id_idx on public.turns (book_id);
+
+-- Demandes pour rejoindre l'écriture d'un livre.
+create table public.join_requests (
+  id uuid primary key default gen_random_uuid(),
+  book_id uuid not null references public.books (id) on delete cascade,
+  author_id uuid not null references public.authors (id) on delete cascade,
+  message text,
+  status text not null default 'pending' check (status in ('pending', 'accepted', 'rejected')),
+  created_at timestamptz not null default now(),
+  unique (book_id, author_id)
+);
+
+-- RLS : lecture publique pour tout le monde ; l'écriture passera par l'auth.
+alter table public.authors enable row level security;
+alter table public.books enable row level security;
+alter table public.book_players enable row level security;
+alter table public.turns enable row level security;
+alter table public.join_requests enable row level security;
+
+create policy "lecture publique" on public.authors for select using (true);
+create policy "lecture publique" on public.books for select using (true);
+create policy "lecture publique" on public.book_players for select using (true);
+create policy "lecture publique" on public.turns for select using (true);
+create policy "lecture publique" on public.join_requests for select using (true);
+-- Co-Aut v2 — seed : données réelles du MVP (72 livres, 448 tours)
+
+insert into public.authors (id, nickname) values
+  ('03b163e4-d310-4b1c-9b4e-c05e19b60882', 'Aded'),
+  ('d14a3f5f-ee62-4960-8c83-c6883a58af5a', 'Alba✏️'),
+  ('c1fc2b62-85bc-4947-ad5f-efffce5326e3', 'Albireoo'),
+  ('6b4649cd-5edb-473c-8187-0e2ee38350c6', 'Alice123456789'),
+  ('389110f8-0fb1-436b-9a44-4786d2eee581', 'Amypaquet'),
+  ('4ae84535-8038-43bf-bc48-3308ca2b7866', 'AnneCe16'),
+  ('4d406103-f605-4122-a234-03f57028b953', 'Anonyme_CoAut'),
+  ('6507542d-0f94-44cc-b838-7fec446b76e7', 'Armonie✏️✏️✏️'),
+  ('78979bcd-aaa2-42f8-aec9-b524632158e8', 'Backloop'),
+  ('f02f60b2-144f-459a-aff0-1d8637ef7d9d', 'Cacahouete'),
+  ('9d5d5adb-44c5-4397-98e1-20d16992a1a5', 'Camcam99'),
+  ('f56db665-2fbc-4f7c-9ddc-4a1885f00a67', 'Charlie33✏️'),
+  ('a43b6ef6-85a1-4c6e-b444-bfc692258c97', 'Chomiere95'),
+  ('6f4d0c54-5e85-4826-b358-63dff4a9dc59', 'Clotilde'),
+  ('ec0a7c63-f21c-4d60-8f61-41e1de285f5e', 'Createur_de_mondes'),
+  ('9134860b-0489-45f1-a793-b8437cfbb262', 'DAMIRS'),
+  ('b26480cc-4a3d-4dd4-ac97-4ef65b4dda9d', 'DianaLina'),
+  ('1b3cccdb-660b-48d8-b774-5868049621cb', 'Doldid'),
+  ('2adccf21-2b08-4366-9c56-5ac67fdfe3c4', 'Dragondefeu✏️✏️'),
+  ('e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Eddie14✏️✏️✏️'),
+  ('d5f96569-59b5-44e9-bf0c-4a25d61bb5dc', 'Elyon✏️✏️'),
+  ('e313e602-44e3-481e-8211-6a6ef48a0bfc', 'Fiya@14'),
+  ('cab4b3ca-1338-4682-946a-349281215674', 'Hermione✏️'),
+  ('16867c4c-ba7f-49cf-903b-617b7a3eb3cb', 'Hugo'),
+  ('f81dde7c-9afd-462d-8476-0f237a41a760', 'Iron'),
+  ('f6486e05-256c-40a1-9c6d-ddfa53a79b64', 'Isabelle89'),
+  ('882d0697-a4b9-453e-b5f5-d5896101605e', 'Kathe'),
+  ('4099fb22-81fb-4e6e-af0b-51d40fca2f59', 'Kiki'),
+  ('649a325c-44f1-4ece-9391-fd5fbbee6010', 'LaCagouille'),
+  ('d61dc894-7bb2-4694-b6f0-7638b4e55923', 'Laura✏️✏️'),
+  ('0e55d083-e6f9-4597-95f1-d90f23db498d', 'Leaetana'),
+  ('b86cf747-d570-4d8f-a4f8-aed265ec6f6d', 'Lulu'),
+  ('7cf95fa2-24e9-4ac2-93e3-1a9a227cdf67', 'Margaux33✏️'),
+  ('c7385ffb-e83b-4455-bae7-d842217bc4d1', 'Margaux✏️'),
+  ('d5fd8ed5-d926-4b60-8ac2-8c594323a558', 'Mentine31✏️'),
+  ('c12ca8e2-fc17-4d47-9097-170abd04b3dc', 'Minipuce✏️'),
+  ('ebf99c25-cb89-4bb5-a419-922dd594de1a', 'Noe'),
+  ('2022d619-081a-4d37-8b6b-6bf6f03b91db', 'Oasis'),
+  ('5ebad498-92fe-4c7d-b3b1-b22668c52f6a', 'Ohuolm✏️✏️'),
+  ('e42465e5-58bc-4e2d-953b-95f6dc2d5a75', 'Overbooked'),
+  ('3cb19e95-5f47-42c4-8641-15598fd4aa80', 'Plume'),
+  ('2e8f1f06-6edb-4a83-8ea8-dbe89e2d0c29', 'Renar'),
+  ('f4a95fdd-ff64-4cc5-9322-69f9cf0fe452', 'Roromantique'),
+  ('99f1703d-6e10-4ac7-bc13-99521e611fd6', 'Roxane'),
+  ('f5956625-d496-4a23-ad78-1240c062d08f', 'Sarkie✏️✏️'),
+  ('505ec087-89d9-4c57-b9b2-b021564e213c', 'Surcouf✏️'),
+  ('3a34e53f-a3e8-4bda-991b-45b9b76179d2', 'Taylor'),
+  ('4059db4f-191f-4ee0-b4b8-b25656bf77ed', 'Tenshi'),
+  ('d97fccb2-2c86-4ec2-8aa3-97aa0ed9bb0e', 'Timi16'),
+  ('9efcd04f-0aaf-403e-9b29-aea8d72897de', 'Vincent'),
+  ('c69c78fa-cc1d-4ab0-88ae-6798b9a66d9f', 'Vince✏️'),
+  ('2d76631e-fa35-4545-8430-a9c392c5cc5f', 'Yagamed'),
+  ('7b590374-c445-4dc0-8c57-6e7567c93219', 'Zorate✏️'),
+  ('d63652f4-df16-4825-bd01-3f210196aee9', 'Zoro'),
+  ('093d4d99-c077-46bc-bfb3-d96d06184245', 'adele33'),
+  ('545378a4-93af-433b-ae1f-98a9cb401801', 'atlantique'),
+  ('63c7102b-7697-4606-a8a2-91c8f5f2b1e0', 'chachoo'),
+  ('23e58c00-a6ea-4334-a747-d0d971f666f1', 'dragonbleu✏️✏️✏️'),
+  ('6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'edeys2526'),
+  ('77526b89-3c4e-49ab-8290-bcac03980158', 'galawan'),
+  ('211f9a97-f98c-4b54-ab30-64ce77fb639a', 'jesgar'),
+  ('ac68805f-3c02-40e4-8fbd-2c4e4f09196b', 'liatalbot'),
+  ('b3f6a9cf-e5a8-4cb4-9065-e7c69d0491bc', 'lou'),
+  ('f247b16e-dbbe-4c28-9e30-b45eb90c7621', 'm_vince18'),
+  ('9ee5c32d-c6f9-4b8e-843b-5a779492f36a', 'mamiebea✏️✏️'),
+  ('8d8b7080-1c46-4ec0-8a43-a21b5c4c4e5a', 'manolo');
+
+insert into public.books (id, legacy_code, title, synopsis, themes, scolar_level, status, launcher_id) values
+  ('b6395a35-d7c4-4646-913e-8d821a2a2e77', '#000', 'Exemple Lancer un livre', 'Comment lancer un livre : Je choisis le titre, le(s) thème(s), et le nombre de co-auteurs avec qui je veux écrire, puis j’écris le synopsis pour présenter mon histoire. Si je souhaite écrire avec des personnes que je connais, j’indique les informations nécessaires ; Exemple : Avec “son pseudonyme” ou “son prénom”, ou Avec mon grand-père, ou En famille… Si je souhaite lancer un livre pour ma classe, alors je commence le synopsis par : PROJET DE CLASSE. Une fois le livre prêt, il n’y a plus qu’à commencer à écrire.', array['fantastique', 'mémoires']::text[], null, 'launched', null),
+  ('b7bc7fe3-53c6-4f2f-aab6-9bb918feb5a5', '#001', 'Le secret de Lola - Tome 1 - écrit : Oct 23 - Mars 24', 'Je m''appelle Lola. Je vis dans un appartement au dernier étage d''un grand immeuble. Je vis avec ma mère et je craque pour le voisin d''en dessous, Liam', array['Amour']::text[], 'CM1', 'published', '6507542d-0f94-44cc-b838-7fec446b76e7'),
+  ('584e5e2c-0673-4769-b70f-c956d366d6e4', '#002', 'Harry Potter et les dragons du nord - Tome 1 - écrit : Sept 23 - Déc 23', 'Harry Potter, orphelin veut connaître son histoire avec ses deux amis Ron et Hermione, ils vont partir à la découverte de mondes mystérieux et remplis de créatures fantastiques comme des dragons…', array['FanFiction']::text[], '6eme', 'published', '23e58c00-a6ea-4334-a747-d0d971f666f1'),
+  ('9ff72d95-f664-4ddd-a370-a2ebce802703', '#007', 'Tchoky le dauphin - Cycle 1 - Le Commencement - Tome 1 - écrit : Sept 23 - Déc 23', 'Selon la légende, dans les fonds marins, une forêt de coraux et d''anémones colorés abritait poissons et mammifères marins, dont une troupe de dauphins. Parmi eux, il y avait Tchoky le dauphin. C''était un jeune mâle souvent à l''écart. Personne ne lui prêtait grande attention. Tous les jours, il parcourait la forêt de coraux et d''anémones. Mais voilà qu''un jour, il décide de partir…', array['Aventure']::text[], 'CM1', 'published', '6507542d-0f94-44cc-b838-7fec446b76e7'),
+  ('4c87c82c-9f9b-480a-99a1-9531d4d06c53', '#009', 'Sacha et ses rêves - écrit : Sept 23 - Mars 24', 'Sacha a onze ans, il habite une yourte dans la steppe de Mongolie. Il est le deuxième enfant d''une fratrie de quatre. Il aime monter à cheval, traire les yacks et boire leur lait tout chaud. Mais ce qu''il aime par dessus tout, c''est en été, voir arriver des cars de touristes qui s''arrêtent dans son village, Zadgad. Alors là, Sacha se met à réver.......
+ 
+ ', array['Aventure']::text[], 'Adulte', 'published', '9ee5c32d-c6f9-4b8e-843b-5a779492f36a'),
+  ('b1f5a390-299d-4959-8434-a6c65f9007f9', '#010', 'Les amis c’est la vie - écrit : Nov 20 - Juin 23', 'C’est l’histoire d’une fille qui s’appelle Fibi, elle fait connaissance dans son jardin d’une autre fille, Ely.
+Au fil du temps, elles rencontrent des animaux et une autre fille, et tous ensemble vivent de grandes aventures incroyables.
+Les trois filles et les animaux vont devenir les meilleurs amis.', array['Aventure', 'fantastique']::text[], 'CM1', 'published', null),
+  ('c405ff4b-e39b-4580-a190-275e31949a4c', '#018', 'Les aventures mystérieuses - Tome 1 - écrit : Oct 23 - Déc 23', 'avec Elyon et Mentine31', array['Aventure']::text[], 'CE2', 'published', 'd5fd8ed5-d926-4b60-8ac2-8c594323a558'),
+  ('33314ceb-e3a6-465c-91f1-e4679cbae041', '#023', 'Un merveilleux Noël - écrit : Nov 23 - Oct 24', 'Je m''appelle Léo et j''ai 8 ans. Je vis avec ma mère dans une petite chaumière, dans une magnifique forêt bien verte. Nous sommes pauvres depuis la mort de mon père, je me souviens pas beaucoup de lui, mais j''ai de très bons souvenirs avec ma mère et lui. Peu après sa mort, maman est tombée gravement malade. Comme nous n''avions pas assez d''argent, nous ne pouvions pas payer un médecin pour la soigner. A peu près toutes les nuits je veillais sur elle et une nuit du 25 décembre, je vis quelque chose voler dans le ciel.', array['fantastique', 'Aventure', 'Féérique']::text[], '6eme', 'published', '23e58c00-a6ea-4334-a747-d0d971f666f1'),
+  ('ab6f83bd-edd5-4c0d-a5d3-921e19443d7a', '#024', 'Au pays des zombies et des squelettes - Tome 1 - écrit : Janv 24 - Mars 24', 'C''est l''histoire d’un garçon nommé Jack Firac qui débouche dans les catacombes en 1994 et voit des zombies et des squelettes et leur chef Anubis.', array['fantastique']::text[], 'CM1', 'published', 'd5f96569-59b5-44e9-bf0c-4a25d61bb5dc'),
+  ('9cd17e98-9b6e-4b55-8902-0f158b20d882', '#029', 'Le chevalier et le dragon - écrit : Déc 23', 'C''est l''histoire d''Antoine, un chevalier qui adore combattre les dragons. Mais un jour, il devient ami avec le plus vieux des dragons, Destrictore.', array['fantastique', 'Aventure']::text[], 'CP', 'published', '2adccf21-2b08-4366-9c56-5ac67fdfe3c4'),
+  ('048b179c-3474-457f-8426-a9df5ca80068', '#031', 'Le vol - écrit : Déc 23 - Janv 24', 'Un vol a été commis dans une bijouterie à Marseille. L''enquête est confiée à Bertrand qui débute à peine dans la police…', array['Policier']::text[], 'CE2', 'published', 'd61dc894-7bb2-4694-b6f0-7638b4e55923'),
+  ('f1456e5d-c073-46db-a650-ecf7d6f33275', '#033', 'Harry Potter et les dragons du Nord - Tome 2 - écrit : Déc 23 - Fév 24', 'Alors que les trois amis ont enfin réussi à ouvrir le placard de la chambre de Harry, ils se retrouvent devant un portail qui semble être un vortex qui mène quelque part…', array['FanFiction']::text[], '6eme', 'published', '23e58c00-a6ea-4334-a747-d0d971f666f1'),
+  ('91e88f57-f9dc-4bd3-bde8-1f1f6264830f', '#044', 'Tchoky le dauphin - Cycle 1 - Le Commencement - Tome 2 - écrit : Fév 24 - juin 24', 'Après que Laya ait rejoint le trio constitué de Tchoky, Ella et Alicia, nos quatre amis découvrent un étrange signe. Gerardo, un vieux poulpe, leur annonce que c’est un portail qui mène à la Marraine du roi des océans. Mais, la petite équipe se sépare. Tchoky, Laya et Ella retournent à la forêt marine et Alicia réussi à ouvrir le portail.
+Elle va faire la connaissance de la Marraine du roi des océans, une grande raie manta aux yeux bleu gris et au corps argenté. Cette raie va prévenir Alicia qu’un terrible danger menace l’océan. Celle-ci va aussitôt prévenir Tchoky, Ella et Laya.
+Quel danger menace le monde sous marin ? Laya, Tchoky, Ella et Alicia réussiront ils à sauver l’océan, avec l’aide de la Marraine du roi des océans nommée Christalina ?', array['Aventure']::text[], 'CM1', 'published', '6507542d-0f94-44cc-b838-7fec446b76e7'),
+  ('6a6b152d-8f51-40c9-9134-589e354665be', '#050', 'Harry Potter et les dragons du nord - Tome 3 - écrit fév 24', 'Alors que les trois amis découvrent Poudlard en ruine, ils se font surprendre par… Voldemort ! …', array['Aventure', 'fantastique']::text[], '5ème', 'published', '23e58c00-a6ea-4334-a747-d0d971f666f1'),
+  ('49942478-410a-4bc8-956c-0d1624185853', '#052', 'Harry Potter et les dragons du nord - Tome 4', 'Livre commencé - Recherche 1 co-auteur : Harry Potter, orphelin veut connaître son histoire avec ses deux amis Ron et Hermione, ils vont partir à la découverte de mondes mystérieux et remplis de créatures fantastiques comme des dragons…', array['FanFiction', 'Aventure']::text[], '4ème', 'launched', '23e58c00-a6ea-4334-a747-d0d971f666f1'),
+  ('b018891b-7b9d-4acd-8115-afc641e13067', '#053', 'Le secret de Lola - Tome 2 - écrit : mars 24 à fév 25', 'Je m’appelle Lola. Je vis dans un appartement au dernier étage d’un grand immeuble. Je vis avec ma mère et je craque pour le voisin d’en dessous, Liam.', array['Amour']::text[], 'CM2', 'published', '6507542d-0f94-44cc-b838-7fec446b76e7'),
+  ('9233ab2d-3510-4ff5-a75f-bcee884c2c03', '#055', 'Les aventures d’Albert - écrit : avril 24 - déc 24', 'Albert, 17 ans, vit seul avec ses deux chats, jusqu’au jour où…', array['Aventure']::text[], 'CM1', 'published', 'd61dc894-7bb2-4694-b6f0-7638b4e55923'),
+  ('874374b7-78c0-4a67-87dd-25f4918d1079', '#061', 'Comment trouver un amoureux en 365 jours', 'Bérénice a 28 ans et veut se marier. Le jour du mariage de sa petite soeur, elle décide que cette union tant espérée sera pour l''année prochaine. Mais... voilà... Bérénice n''a pas d''amoureux. Alors, elle va partir en quête de son prince charmant.', array['Aventure']::text[], 'Adulte', 'published', '9ee5c32d-c6f9-4b8e-843b-5a779492f36a'),
+  ('e6cdfb67-8a4e-46f5-beec-1ba56fda1718', '#062', 'Le dragon qui n’arrivait pas à cracher du feu - écrit : Sept 24 - Nov 24', 'Hector le dragon vivait dans une caverne. Mais tous les autres dragons se moquaient de lui, parce qu''il n''arrivait pas à cracher du feu.', array['fantastique', 'Aventure']::text[], 'CE1', 'published', '2adccf21-2b08-4366-9c56-5ac67fdfe3c4'),
+  ('7dc6ccb2-a7ed-43c5-b6bc-36391ce04029', '#065', 'La colo', 'Livre commencé - Recherche 1 co-auteur : Valentine et ses deux meilleures amies, Sarah et Clémence, partent pour les vacances de Pâques en colo dans les Pyrénées. Le jour du départ, devant le car qui va les emmener dans les Pyrénées, Valentine et ses amies remarquent un jeune garçon blond, à la peau très claire et aux yeux bleus à tomber parterre… Les filles se regardent bouche bée et souriantes jusqu’à ce qu’elles comprennent qu’elles ont toutes craqué sur ce beau prince charmant. Valentine et ses amies vont alors entreprendre une guerre amicale pour essayer de plaire à ce bel inconnu.', array['Amour']::text[], '6eme', 'launched', 'e48fb777-7efa-42f7-aa37-1b2cb5c69480'),
+  ('2d1aa9f9-25a2-450b-adf8-8998390b21c4', '#067', 'Tchoky le dauphin - Cycle 1 - Le Commencement - Tome 3 - écrit : juin 24 - janv 25', 'Aujourd’hui aussi, un grand danger court sur les océans, un danger que seul quelques animaux marins sont capables d''arrêter. Selon la prophétie il s''agirait de trois jeunes dauphins et une tortue. Les quatre amis réussiront ils à empêcher ce nouveau cataclysme ? Quel était le secret de Aquaria, la cité engloutie ?', array['Aventure']::text[], 'CM2', 'published', '6507542d-0f94-44cc-b838-7fec446b76e7'),
+  ('48fcadf8-1e89-4a6a-8444-f37c77482b3c', '#070', 'Graffiti l’astro-chat', 'Livre commencé - Avec 1 enfant, Arnaud de la société Albiréoo, se propose d’accompagner un jeune auteur dans la création de cette histoire : “ Graffiti est un chat espiègle qui s''est trouvé une belle cachette pour la nuit. Il ne sait pas que cet immense arbre blanc est la fusée Apollo 18 qui doit décoller le lendemain en direction de la Lune. Un drôle de réveil l''attend ! “ Je suis un adulte et mon métier est de faire découvrir l''espace. Je te propose de rejoindre mon livre. A toi de continuer cette histoire comme tu en as envie. De temps en temps je te donnerai quelques conseils ou je t''expliquerai comment se passe la vie à bord d''une fusée.', array['Science-Fiction']::text[], 'Enfant', 'launched', 'c1fc2b62-85bc-4947-ad5f-efffce5326e3'),
+  ('f071ce10-85dc-415d-96c9-fd008ba9daaa', '#073', 'Du langage et de l’origine', 'Un jour, un jeu invita des personnes inconnues à communiquer via des lignes. Afin de rendre beau l''original et l''individuel. Et que bien que chacun s''ignore, cela parfois se retrouvera. Ainsi, que ceux qui cherchent leurs cœurs d''écrire se pressent, car ils peuvent l''entendre l''écho qui viendra les chercher. Ohleolaha aohanalamaealae. Encore une fois ces mots ne viennent pas de mon cœur, pourtant ils viennent bien de moi, et bien de quelque part, je me demande si les vôtres s''y trouveront ou voyageront ils d''ailleurs? Pelono oalaal ei Nala ehowa jy mialei lu ran na taka mira oasahon plu-a-i-lï !', '{}'::text[], 'Adulte', 'published', '5ebad498-92fe-4c7d-b3b1-b22668c52f6a'),
+  ('37103d8a-d026-4be0-b465-4230e71864fe', '#084', 'Enlèvement au collège', 'Recherche 1 co-auteur : Bonjour, je m''appelle Alix et je suis en 3ème 4 au collège Victor Hugo à Toulouse. Professeurs et élèves coulent des jours heureux dans cet établissement. Mais, un jour, la directrice disparaît mystérieusement. Ma classe, les 3èmes 4 va tout faire pour la retrouver. Mais allons-nous y arriver ? La route est longue et semée d''embûches. La classe va devoir affronter de nombreux dangers.', array['Aventure', 'fantastique']::text[], '2nde', 'launched', '093d4d99-c077-46bc-bfb3-d96d06184245'),
+  ('d0a5918e-8cca-4ac7-95a0-393d0564b7f8', '#085', 'A la recherche de l’œuf de dragon - écrit : mars 25 - nov 25', 'A la Ludo-Médiathèque du Taillan-Médoc, on apprend qu''un œuf de dragon a été déposé quelque part dans le parc du Polca. Toute l''équipe appréhende le moment où l''œuf va s''ouvrir.  Il faut vite le trouver et chercher une solution pour ce bébé dragon qui va naître.  Une équipe de jeunes venus à la médiathèque ce jour-là, apprend la nouvelle et se met à sa recherche avant qu''il ne soit trop tard... Où peut bien être cet œuf ? Le parc du Polca est grand et regorge de cachette. Il faut se dépêcher, le temps presse... que se passera t''il quand l’oeuf va éclore  ?', array['Aventure', 'fantastique']::text[], 'Enfant', 'published', null),
+  ('66dd8d58-6834-45b0-9504-add017b12df0', '#091', 'Les âmes liées ', 'Avec 2 co-auteurs : Harry un garçon populaire au lycée toujours de bonne humeur il y avait toujours des filles qui lui tournaient autour sauf une Ines elle était souvent seule elle avait une amie celle-ci s''appelait Lou-Ann mais un jour tout bascula dans la vie de Harry …', array['Amour', 'Humour']::text[], 'Enfant', 'launched', '4099fb22-81fb-4e6e-af0b-51d40fca2f59'),
+  ('81d7c288-648a-4625-8244-fbf03587ede6', '#099', 'La jeune fille perdue de l’île d’Oléron', 'Avec 2 co-auteurs : Dans cette histoire mêlée d''aventure, d''amour et de suspens, la jeune fille, Amanda, 13 ans, arrive avec sa mère sur une île, l''île d''Oléron. Un beau jour, perdue dans ses pensées, elle tomba d''une falaise. La rumeur dit qu''elle rôde toujours dans les parages, comme si elle existait vraiment. Un jeune garçon nommé Julien partit à sa recherche.', array['fantastique']::text[], '6eme', 'launched', 'f02f60b2-144f-459a-aff0-1d8637ef7d9d'),
+  ('e864aa16-613d-4fd1-a645-b9b9b6817389', '#100', 'Robot 124', 'Avec 2 co-auteurs : C''est une usine à robot, ils les construisent, les animent et les habituent au monde humain. Mais un des robots n''est pas comme les autres, le robot 124 qui décide de changer le monde…', array['fantastique', 'Science-Fiction']::text[], 'Enfant', 'launched', 'f02f60b2-144f-459a-aff0-1d8637ef7d9d'),
+  ('a676d1bb-8e04-46f5-aea8-8f90eb728d49', '#110', 'Une histoire d’amitié', 'Recherche 1 co-auteur : Marion et Adèle sont deux élèves de quatrième dans le même collège, rien ne semble les rapprocher : la première à l''esprit de compétition quand l''autre se tient timidement dans l''ombre de ce que les autres attendent d''elle. Pourtant une chose les rassemble : la lecture ! Elles s''inscrivent toutes les deux au club lecture de leur collège et participent à un concours d''écriture…', array['Amitiè', 'Lecture']::text[], '2nde', 'launched', '03b163e4-d310-4b1c-9b4e-c05e19b60882'),
+  ('d3a81d6b-c756-4b90-95e4-d2dec5172d75', '#111', 'Une colo un peu mouvementée', 'Avec 2 co-auteurs : Les grandes vacances ont commencé et le car de la colonie Evasion soleil quitte la ville de Bordeaux en direction de la Corse avec à son bord 20 jeunes qui ont entre 12 et 16 ans et 5 animateurs dont parmi eux la directrice du centre. Au programme visite du village d''Evia, baignade et visite de la magnifique ville de Calvi, randonné et autres activités mais tout ne va pas se passer comme prévue…', array['Humour', 'Aventure', 'fantaisie']::text[], 'Enfant', 'launched', 'f56db665-2fbc-4f7c-9ddc-4a1885f00a67'),
+  ('ae3a345d-8d3e-44c9-9238-9e9a96f9cd9b', '#112', 'Ma vie sans limite(s)', 'Avec 2 co-auteurs :  Je me nomme Julien et j''adore la guitare, sauf que mes parents me l''interdisent car ils préfèrent que je me concentre sur mes études…', array['roman']::text[], '6eme', 'launched', '9d5d5adb-44c5-4397-98e1-20d16992a1a5'),
+  ('7611831e-8acd-4da5-8898-6dda4a2ed7d6', '#113', 'Amour perdu ?', 'Recherche 1 co-auteur : Une jeune fille nommée lou-Ann vient de perdre ses parents elle vient toujours en cours et tombe amoureuse d’un garçon nommé Louka. Mais elle a peur de pas lui plaire, elle perd confiance en elle !', array['Amour', 'drame']::text[], '6eme', 'launched', '4099fb22-81fb-4e6e-af0b-51d40fca2f59'),
+  ('1156c41f-425d-4531-ac79-05a2f8692ad2', '#114', 'Un effet de mode', 'Avec 2 co-auteurs : Une jeune fille nommée Carla se faisait harceler étant plus petite, arrivée au lycée elle se met à la mode et devient populaire. Un garçon l’invite à un bal, ils commencent à sortir ensemble mais ses amis disent que c’est juste un effet de mode', array['Romance', 'Amitiè']::text[], 'Enfant', 'launched', '4099fb22-81fb-4e6e-af0b-51d40fca2f59'),
+  ('a78f9523-e852-4da4-a8d0-a657dbccab41', '#122', 'La vie d’Eleanor', 'Avec 2 co-auteurs : C''est l''histoire d''une fille qui vit avec ses parents mais qui a un démon qui la possède et ses parents n’ont pas beaucoup d''argent pour l''exorciser…', array['Science-Fiction']::text[], 'Enfant', 'launched', '63c7102b-7697-4606-a8a2-91c8f5f2b1e0'),
+  ('e9acdd3a-6b2d-4061-8869-2174480bae8e', '#126', 'Un été en France', 'Recherche 1 co-auteur : Un adolescent Québécois de 15 ans va en voyage en France et découvre un portail menant vers un monde fantastique. Là-bas il découvre non seulement des animaux incroyables, mais aussi l''amour.', array['fantastique', 'Aventure', 'Romance']::text[], '2nde', 'launched', 'd63652f4-df16-4825-bd01-3f210196aee9'),
+  ('c5453c07-d9da-44e5-b06b-8e74936dc58f', '#129', 'Croquette et Noirot dans la forêt Amazonienne - écrit : déc 25', 'Histoire écrite par Augustin et Batiste lors d’un atelier : C''est l''histoire de Croquette le chat et Noirot le lapin qui se perdent dans la forêt Amazonienne et rencontrent des villageois qui les amènent dans leur village, et leur donnent à manger.', array['Suspense', 'Aventure']::text[], 'CE1', 'published', '4d406103-f605-4122-a234-03f57028b953'),
+  ('0914693d-0ef0-46b1-addb-2638ce867691', '#131', 'Quand les amies deviennent des ennemies', 'Recherche 1 co-auteur : Romane pensait avoir des amies pour toujours. Mais un jour, une dispute change tout. Les messages deviennent méchants, les groupes se séparent et les amitiés se brisent. Peu à peu, Romane se retrouve presque seule dans la cour de récréation. Entre les disputes, les rumeurs et les trahisons, Romane essaie de comprendre pourquoi tout a changé. Certaines personnes s''éloignent, d''autres reviennent, et parfois les mots font plus mal qu''on ne l''imagine. Heureusement, il reste quelques lumières dans cette tempête : une amie qui reste à ses côtés, des promenades avec son père pour parler et se calmer, et surtout l''espoir qu''un jour tout ira mieux. C''est l''histoire d''une fille qui traverse des moments difficiles, mais qui apprend peu à peu à être plus forte que la méchanceté des autres.', array['Amitiè', 'Trahison', 'Solitude']::text[], '4ème', 'launched', 'f4a95fdd-ff64-4cc5-9322-69f9cf0fe452'),
+  ('ef19c41f-4433-49ef-ac20-4b544981825d', '#132', 'Roméa et Julien', 'Recherche 2 co-auteurs : Julien trompe Roméa et elle fait croire qu''elle se suicide mais elle découvre qu''il la trompe avec sa meilleure amie.', array['drame', 'comédie']::text[], '4ème', 'launched', '0e55d083-e6f9-4597-95f1-d90f23db498d'),
+  ('19b6b145-bc37-4de7-8453-b8f2b2faa895', '#133', 'Et si la vie était là ?', 'Recherche 2 co-auteurs : Lisa, jeune fille de 15 ans n''a jamais été amoureuse. Jour après jour elle se demande ce que ça fait d''aimer quelqu''un. Puis tout bascule le jour où elle est percutée par une voiture et que seul un garçon se présente a l''hôpital. Est-on obligé d''aimer pour vivre ? Une question que Lisa va devoir répondre.', array['Amour', 'drame', 'psychologie']::text[], '2nde', 'launched', '8d8b7080-1c46-4ec0-8a43-a21b5c4c4e5a'),
+  ('024d8cfc-936b-4f8d-920c-477185595012', '#134', 'La bataille du Docteur et son ami contre le prototype - Écrit : mars - mai 26', 'Projet de classe : Ce sont des enfants qui font une sortie scolaire et qui vont dans une usine abandonnée. Et ils se perdent, heureusement ils rencontrent deux personnes qui les aident à s''échapper.', array['fantastique']::text[], 'CM2', 'published', '6bfe64cc-54e9-4b5d-a831-da98fd5ee857'),
+  ('58a76807-e387-4ffd-be5b-01bc2242807b', '#135', 'Iris et sa beauté - Écrit : mars - mai 26', 'Projet de classe : Iris se perd dans la forêt elle est paniquée. Elle rencontre deux garçons. Les deux veulent la conquérir.', array['Amour']::text[], 'CM2', 'published', '6bfe64cc-54e9-4b5d-a831-da98fd5ee857'),
+  ('3ab1625a-291f-444b-955a-f4de845bc4e1', '#136', 'Rose et le livre magique - Écrit : mars - mai 26', 'Projet de classe : Des parents n’aimaient pas leur enfant. Rose a 10 ans. Un livre magique apparait dans sa chambre, ce livre permet de se téléporter dans les mondes du livre, et il y en a beaucoup…', array['fantastique']::text[], 'CM2', 'published', '6bfe64cc-54e9-4b5d-a831-da98fd5ee857'),
+  ('917b7b45-3689-4fac-91ef-6999040287ba', '#137', 'Les trois enfants internautes - Écrit : mars - juin 26', 'Trois garçons achètent une maison. A l''intérieur, il y a un cube bleu. Il le touche et un portail s''ouvre…', array['fantastique']::text[], 'CM2', 'published', '6bfe64cc-54e9-4b5d-a831-da98fd5ee857'),
+  ('5bed9ada-aa42-42ab-b5a1-285ebedd9541', '#138', '13:15 depuis 2h', 'Recherche 1 co-auteur : Une jeune femme s''endort dans une gare souterraine en attendant son tram et en se réveillant elle voit que l''heure n''a pas bougé. En essayant de chercher la sortie elle fait face à des évènements étranges…', array['fantastique']::text[], '4ème', 'launched', '4059db4f-191f-4ee0-b4b8-b25656bf77ed'),
+  ('3be22f31-61df-4098-bcc3-53ae590f1161', '#141', 'Le chat', 'Recherche 1 co-auteur : Il était une fois un chat qui rencontre une chate qui l''aimait beaucoup. Il se baladait sur les toits dans Paris en regardant la tour Eiffel. Ils étaient très heureux, ils voulaient rester ensemble, Mais une fois …', array['Amour']::text[], '6eme', 'launched', 'd97fccb2-2c86-4ec2-8aa3-97aa0ed9bb0e'),
+  ('43a2fa80-1933-4108-8dec-6e9865699b6c', '#142', 'La quatrième dimension - écrit : avril 26', 'Histoire écrite par Matéo et Morgan lors d’un atelier : Mathias un petit garçon de 9 ans découvre pendant ses vacances une guitare magique qui l''envoie dans une quatrième dimension. Il se retrouve seul. Seul, vraiment ?', array['fantastique', 'Aventure']::text[], 'CM1', 'published', '4d406103-f605-4122-a234-03f57028b953'),
+  ('bb9935ca-8f5a-406a-ba7f-86fb065799d4', '#143', 'Une douleur enfouie', 'Avec 2 co-auteurs : Alors qu''un groupe d''amis créé sur Discord ce rejoint dans une villa au milieu d''une foret d''Amazonie, une étrange rumeur tourne sur cette foret où ont  été trouvés des corps décapités. Entre amour et peur, réussiront ils a rester en vie pendant leurs séjours ?', array['Romance', 'horreur']::text[], '4ème', 'launched', '9134860b-0489-45f1-a793-b8437cfbb262'),
+  ('08a1b931-ea80-4f53-b022-59e0604e4a97', '#144', 'Entre nuage et océan', 'Recherche 2 co-auteurs : Maria, 13 ans, elle vit en orphelina depuis toujours. avec ses cheveux d''un roux éclatant elle n''est jamais adoptée. Mais au jour de ses 14 ans un vieil homme vient et dit être celui qu''elle attend depuis toujours. Qui est-il ? Pourquoi il a l''air de la connaitre tant ?', array['fantastique', 'Aventure']::text[], '2nde', 'launched', '8d8b7080-1c46-4ec0-8a43-a21b5c4c4e5a'),
+  ('b0e524ed-457e-4bf9-9492-4363c6febd3b', '#148', 'Mathilde et la bibliothèque magique', 'Recherche 2 co-auteurs : Mathilde est une fille qui a 13 ans et elle a une bibliothèque où il y a plein de livres. Un jour, elle se téléporte dans ses livres qui sont…', array['magie']::text[], '6eme', 'launched', 'd97fccb2-2c86-4ec2-8aa3-97aa0ed9bb0e'),
+  ('4e62d57d-5c04-4848-8e84-25ae99df90c1', '#149', 'Les Gardiens du Lys d’Argent', 'Recherche 4 co-auteurs : Dans un monde où la magie est née d''une pluie d''étoiles et d''un mystérieux Lys de cristal, Kiara, 16 ans, rêve d''intégrer la prestigieuse Académie Daemon. Mais son pouvoir est une malédiction : elle peut créer des objets aléatoires, sans aucun contrôle. Méprisée par la noblesse et réduite au rang de servante au palais depuis un incident d''enfance avec le prince Eryx, elle doit prouver sa valeur dans un monde qui ne croit pas en elle. Mais pendant ce temps, dans l''ombre, une secte adore l''ancien roi démon Sulfur et œuvre secrètement pour briser la barrière magique qui emprisonne les monstres des abysses…', array['fantastique']::text[], '1ère', 'launched', 'ec0a7c63-f21c-4d60-8f61-41e1de285f5e'),
+  ('8a3c0e30-c4c8-4b93-b946-4922774c6f10', '#150', 'Lilou et le doudou', 'Recherche 2 co-auteurs : C’est une fille qui a un doudou qui l’emmène dans des mondes parallèles', array['fantastique']::text[], '6eme', 'launched', 'd97fccb2-2c86-4ec2-8aa3-97aa0ed9bb0e'),
+  ('f307a4a9-4eb3-49ee-86d5-29962b84e265', '#151', 'Colombe, Tome 1 : De la cité des nuages', 'Recherche 2 co-auteurs : Colombe, jeune fille de la cité des nuages, mène une vie agréable et grâce à ses amis, elle vit plein d''aventures. Malheureusement, la cité des nuages est en guerre contre celle du feu. Mais elle va vite découvrir que ses habitants ne sont pas forcément tous méchants…', array['fantastique', 'Aventure']::text[], 'CM2', 'launched', 'b86cf747-d570-4d8f-a4f8-aed265ec6f6d'),
+  ('57bb63a0-b08f-4215-898a-fe13f919d744', '#500', 'Qui es-tu maman ? Retour vers le futur', 'Recherche 1 co-auteur : Enfants et petits enfants questionnent Manou, leur mère et grand-mère pour mieux connaitre l''histoire de leur famille. Les chapitres s''organiseront autour de thèmes, en privilégiant des lieux riches d''histoire de la famille. Chaque participant pourra alimenter le chapitre à partir de souvenirs qui lui sont propres. Chacun d''entre nous pourrions à tour de rôle, organiser avec Manou, une visite d''un lieu, d''une maison, d''une rue et écrire dans ce livre les souvenirs et les émotions que cela suscite chez Manou. Toute autre façon de participer est la bienvenue.', array['Généalogie', 'Romance']::text[], 'Adulte', 'launched', '9efcd04f-0aaf-403e-9b29-aea8d72897de'),
+  ('e1548d6c-c8ad-4974-b847-77cc01173ab1', '#501', 'Contre-utopie écologique', 'Avec 2 co-auteurs : Dans le futur, une nouvelle guerre froide a lieu entre les États-Unis et la Russie. La Russie a reconstruit un empire équivalent à celui de l''URSS. Pendant ce temps, en France, il y a eu une révolution écologique. L''histoire commence quand un espion russe arrive en France pour comprendre cette nouvelle société utopique pour la détruire, mais au contact de celle-ci, cet agent double est progressivement séduit par cette nouvelle société.', array['Aventure', 'Science-Fiction', 'écologie']::text[], 'Adulte', 'launched', '2022d619-081a-4d37-8b6b-6bf6f03b91db'),
+  ('79fce8c7-ada1-4e7f-b813-11f9af1848b7', '#502', 'L’enseignante excentrique', 'Recherche 2 co-auteurs : Une enseignante de sixième année est très spéciale à l''école Dupré-Beaudet. Elle a toujours les pieds dans les plats et toutes sortes de malheurs lui arrivent.. à suivre…', array['Aventure']::text[], 'Adulte', 'launched', '389110f8-0fb1-436b-9a44-4786d2eee581'),
+  ('5642bb0a-e7c8-4dfc-a8fd-fa08af651947', '#503', 'Pas aimé, mal aimé', 'Recherche 2 co-auteurs : Pas aimé, mal aimé raconte la descente aux enfers d''une adolescente harcelée, son réveil d''un comas après une tentative suicide grâce à un rêve salvateur, puis son incroyable résilience : une plongée brutale dans la souffrance, suivie d''une remontée où la musique, l''acceptation de soi et l''amour deviennent les piliers d''une renaissance.', array['Amour', 'Résilience']::text[], 'Adulte', 'launched', 'b3f6a9cf-e5a8-4cb4-9065-e7c69d0491bc'),
+  ('a807cb7b-6b1a-4ce8-bf03-5eab870bc7b5', '#504', 'Le cœur sur la patte ', 'Recherche 1 co-auteur : 10 Août, à Paris. Sous une chaleur écrasante, Eva est bloquée dans la capitale pour cet été. Alors qu''elle s''apprête à se poser dans un parc, elle tombe sur Poppy, un chiot berger, qui semble être abandonné. Quel destin ce chiot lui réserve-t-elle ? Vont-ils s''unir pour la vie, ou faire comme si, ils ne s''étaient jamais rencontrés?', array['Amitiè']::text[], 'Adulte', 'launched', 'b26480cc-4a3d-4dd4-ac97-4ef65b4dda9d'),
+  ('6274752d-dfa1-499a-a6ce-a4c750d7a5c2', '#505', 'Pour une école sans frontière', 'Recherche 10 co-auteurs : A l''ere de la globalisation, des nouvelles technologies, des réseaux sociaux, les valeurs universelles se généralisent dans tous les continents, au détriment d''un individualisme hermétique. Ce nouvel état d''esprit crée un rapprochement et un entendement impressionnant qui se tisse au quotidien entre les internautes, enseignants praticiens, chercheurs, artistes, membres de différents réseaux, professionnels et autres. Ces échanges virtuels génèrent une ouverture sur des pays avant gardistes en éducation et formation, créant des possibilités de mobilité et de coopération. Une éducation de qualité devient un rêve pour tous.
+
+', '{}'::text[], 'Adulte', 'launched', '2d76631e-fa35-4545-8430-a9c392c5cc5f'),
+  ('14fe7a4e-53b0-470d-bac7-87980150e904', '#506', 'Octavia et Alarick', 'Recherche 2 co-auteurs : Octavia et Alarick sont ce qu''on appelle des inséparables. Ils ont toujours plus ou moins vécu ensemble, D''abord comme de simples voisins enfants puis à la mort du seul parent de la petite, comme les meilleurs amis qu''ils sont toujours. Sauf que voilà bien qu''ayant plus ou moins toujours sacrifié une partie de leur vie pour rester que tout les deux, ils ont développé des sentiments, assentiments et repentis bien à eux ! Aujourd''hui après un nouveau coup dur ils sont de nouveau seuls contre le monde, ils montent leur boite de tatouage sur une nouvelle ile de retour aux états unis. Suivons ensembles leur vie chacun dans son journal intime.', array['Dark Romance']::text[], 'Adulte', 'launched', '99f1703d-6e10-4ac7-bc13-99521e611fd6'),
+  ('656c76d8-44b0-40b9-9bf7-6179498288fb', '#507', 'Et si on inventait une histoire ?', 'Recherche 10 co-auteurs : La seule limite c’est toi', array['Humour']::text[], 'Adulte', 'launched', 'ebf99c25-cb89-4bb5-a419-922dd594de1a'),
+  ('cf7c02b0-b187-4b29-a5e8-56dd4557395d', '#508', 'Diego', 'Recherche 1 co-auteur : Dans les années 2010, Diego est un combattant particulier. Le jour il prend part à de nombreux combats à mains nues aux issues souvent sanglantes ; le soir, il devient Niña Pistola, drag queen sensuelle pour qui la nuit est une possibilité infinie. Si cette ambivalence lui colle au corps, certains événements pourraient bien bouleverser cet équilibre.', array['Initiatique']::text[], 'Adulte', 'launched', '77526b89-3c4e-49ab-8290-bcac03980158'),
+  ('18679d47-266f-4b0f-961c-d5696c6c9d1a', '#509', 'Hope', 'Recherche 1 co-auteur : Mei, 16 ans, est une Lycéenne banale, s''ennuyant de cette vie trop fade pour elle et ayant des troubles de la mémoire. Elle va faire la rencontre de Umeko, un garçon plein de vie qui va tenter de donner un sens à la sienne', array['horreur', 'drame', 'Romance']::text[], 'Adulte', 'launched', '6b4649cd-5edb-473c-8187-0e2ee38350c6'),
+  ('e7d8e48c-435c-4438-97eb-84ed13f9471b', '#512', 'Mon badboy', 'Recherche 2 co-auteurs : C''est le meilleur joueur de Hockey du campus. Je le déteste, il me déteste mais pourquoi mon corps s''embrase lorsqu''il est dans les parages ? Et pourquoi j''ai si mal lorsque je le vois avec d''autres filles ?', array['Romance']::text[], 'Adulte', 'launched', 'e313e602-44e3-481e-8211-6a6ef48a0bfc'),
+  ('39bae254-b3a0-40a5-a1f8-45cee4dd691f', '#513', 'C’est quoi l’amour', 'Recherche 2 co-auteurs : C''est quoi l''amour maman ? C''est quoi l''amour papa ? Du haut de ses 11 ans Clotilde se pose beaucoup de questions…', array['Amour']::text[], 'Adulte', 'launched', '6f4d0c54-5e85-4826-b358-63dff4a9dc59'),
+  ('e1f2fe8a-b596-4fe2-9973-a641115f51af', '#514', 'La Malédiction des Aftons', 'Recherche 1 co-auteur : Après la mort de la famille Afton, Michael, le fils cadet, décide de retourner dans son ancienne maison, pour espèrer réparer les fautes de sa famille... ainsi que les siennes.', array['horreur', 'Suspense']::text[], 'Adulte', 'launched', null),
+  ('6977f91e-bafe-4c9f-ba60-f864a4f71fa9', '#515', 'Le sous sol de l’école', 'Recherche 1 co-auteur :  Un petit garçon veut visiter le sous sol de l''école', array['Suspense']::text[], 'Adulte', 'launched', 'ac68805f-3c02-40e4-8fbd-2c4e4f09196b'),
+  ('7dff0f8c-e801-4527-8ea8-060321027f32', '#517', 'Vie sphérique', 'Avec 2 co-auteurs : Dans un avenir lointain, la vie n''est plus possible sur Terre sauf si on fait parti de l''Elite qui vit dans des Dômes. Les Autres vivent au fond dans l''océan dans différentes sphères. Je fais partie des Autres, une loterie a lieu tous les ans pour que 2 personnes rejoignent la surface mais à quel prix ?', array['Science-Fiction']::text[], 'Adulte', 'launched', '211f9a97-f98c-4b54-ab30-64ce77fb639a'),
+  ('80f0803e-8441-4c22-8c21-6b3ed62fdd23', '#521', 'Un jour j’irai aux JO - Tome 1 - écrit : janv 24 - janv 26', 'J''ai 13 ans, je m''appelle Stéphane, mais on m''appelle Titi. Mon rêve est de participer un jour aux jeux Olympiques. Je viens d''un village perdu au fin fond de la Dordogne et j''adore le vélo cross country. J''en fais tout le temps, pour toutes occasions, et même quand il n''y en a pas. Je suis bon, enfin je pense. Mais je ne fais pas partie d''un club. Le club le plus proche est trop loin de mon village, et mes parents n''ont pas assez d''argent pour ça. Mais un jour, j''irai aux JO. Les prochains sont dans un an, il faut que je trouve une solution…', array['Aventure', 'Sport']::text[], 'Adulte', 'published', 'c12ca8e2-fc17-4d47-9097-170abd04b3dc'),
+  ('acc65eed-c47a-41b8-8f9e-a1d3226ad6e4', '#526', 'Léo', 'Recherche 4 co-auteurs : Léo a 14 ans. Interne, il rentre pour le week-end. Son père vient le chercher un jour glacial.', array['roman']::text[], 'Adulte', 'launched', '1b3cccdb-660b-48d8-b774-5868049621cb'),
+  ('7b0e343a-edf4-4ccb-8878-732baa0e7d50', '#528', 'Mémoires dormantes', 'Recherche 3 co-auteurs : Rien ne se perd, rien ne se créer, tout se transforme ! Pourquoi en serait-il autrement pour la mémoire ? C''est ce que David découvre, après un violent accident de voiture, lorsqu''il se retrouve avec un souvenir qui n''est pas le sien mais celui de son défunt grand-père. Une promesse faite, un objet mystérieux à retrouver. Est-ce de la folie ou du courage se demande David en se lançant sans réfléchir dans cette aventure qui l''amènera au plus profond de lui-même, au plus profond de la mémoire humaine.', array['mémoires', 'roman', 'psychologie']::text[], 'Adulte', 'launched', 'a43b6ef6-85a1-4c6e-b444-bfc692258c97'),
+  ('6c6bc884-0d61-4cca-acc1-bcef33322c04', '#529', 'Le 23 décembre', 'Recherche 1 co-auteur : Le 23 décembre, quand Maxwell est sortit de chez moi, je ne pensais pas que c''était pour la dernière fois, enfin par pour toujours bien sûr, ou si ? Peut-être ? Tout ce qui est sûr, c''est que la première personne à qui il s''est confié c''est moi, car, pendant que la police ne faisait rien, moi j''enquêtais !', array['Enquête']::text[], 'Adulte', 'launched', '16867c4c-ba7f-49cf-903b-617b7a3eb3cb'),
+  ('01a5528d-c03a-4239-a9c3-15cff8c8fdd1', '#530', 'Les flammes de la lune', 'Recherche 2 co-auteurs : La face cachée de la lune est recouverte de flammes noires intenses et interminables.', array['Mystique']::text[], 'Adulte', 'launched', '3a34e53f-a3e8-4bda-991b-45b9b76179d2');
+
+insert into public.book_players (book_id, author_id, position) values
+  ('b7bc7fe3-53c6-4f2f-aab6-9bb918feb5a5', '6507542d-0f94-44cc-b838-7fec446b76e7', 0),
+  ('b7bc7fe3-53c6-4f2f-aab6-9bb918feb5a5', 'f5956625-d496-4a23-ad78-1240c062d08f', 1),
+  ('584e5e2c-0673-4769-b70f-c956d366d6e4', '23e58c00-a6ea-4334-a747-d0d971f666f1', 0),
+  ('584e5e2c-0673-4769-b70f-c956d366d6e4', 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 1),
+  ('9ff72d95-f664-4ddd-a370-a2ebce802703', '6507542d-0f94-44cc-b838-7fec446b76e7', 0),
+  ('9ff72d95-f664-4ddd-a370-a2ebce802703', 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 1),
+  ('4c87c82c-9f9b-480a-99a1-9531d4d06c53', '9ee5c32d-c6f9-4b8e-843b-5a779492f36a', 0),
+  ('4c87c82c-9f9b-480a-99a1-9531d4d06c53', '6507542d-0f94-44cc-b838-7fec446b76e7', 1),
+  ('4c87c82c-9f9b-480a-99a1-9531d4d06c53', 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 2),
+  ('c405ff4b-e39b-4580-a190-275e31949a4c', 'd5fd8ed5-d926-4b60-8ac2-8c594323a558', 0),
+  ('c405ff4b-e39b-4580-a190-275e31949a4c', 'd5f96569-59b5-44e9-bf0c-4a25d61bb5dc', 1),
+  ('33314ceb-e3a6-465c-91f1-e4679cbae041', '23e58c00-a6ea-4334-a747-d0d971f666f1', 0),
+  ('33314ceb-e3a6-465c-91f1-e4679cbae041', 'cab4b3ca-1338-4682-946a-349281215674', 1),
+  ('ab6f83bd-edd5-4c0d-a5d3-921e19443d7a', 'd5f96569-59b5-44e9-bf0c-4a25d61bb5dc', 0),
+  ('ab6f83bd-edd5-4c0d-a5d3-921e19443d7a', 'c69c78fa-cc1d-4ab0-88ae-6798b9a66d9f', 1),
+  ('9cd17e98-9b6e-4b55-8902-0f158b20d882', '2adccf21-2b08-4366-9c56-5ac67fdfe3c4', 0),
+  ('9cd17e98-9b6e-4b55-8902-0f158b20d882', '23e58c00-a6ea-4334-a747-d0d971f666f1', 1),
+  ('048b179c-3474-457f-8426-a9df5ca80068', 'd61dc894-7bb2-4694-b6f0-7638b4e55923', 0),
+  ('048b179c-3474-457f-8426-a9df5ca80068', '6507542d-0f94-44cc-b838-7fec446b76e7', 1),
+  ('f1456e5d-c073-46db-a650-ecf7d6f33275', '23e58c00-a6ea-4334-a747-d0d971f666f1', 0),
+  ('f1456e5d-c073-46db-a650-ecf7d6f33275', 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 1),
+  ('91e88f57-f9dc-4bd3-bde8-1f1f6264830f', '6507542d-0f94-44cc-b838-7fec446b76e7', 0),
+  ('91e88f57-f9dc-4bd3-bde8-1f1f6264830f', 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 1),
+  ('6a6b152d-8f51-40c9-9134-589e354665be', '23e58c00-a6ea-4334-a747-d0d971f666f1', 0),
+  ('6a6b152d-8f51-40c9-9134-589e354665be', 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 1),
+  ('49942478-410a-4bc8-956c-0d1624185853', '23e58c00-a6ea-4334-a747-d0d971f666f1', 0),
+  ('b018891b-7b9d-4acd-8115-afc641e13067', '6507542d-0f94-44cc-b838-7fec446b76e7', 0),
+  ('b018891b-7b9d-4acd-8115-afc641e13067', 'f5956625-d496-4a23-ad78-1240c062d08f', 1),
+  ('9233ab2d-3510-4ff5-a75f-bcee884c2c03', 'd61dc894-7bb2-4694-b6f0-7638b4e55923', 0),
+  ('9233ab2d-3510-4ff5-a75f-bcee884c2c03', '505ec087-89d9-4c57-b9b2-b021564e213c', 1),
+  ('874374b7-78c0-4a67-87dd-25f4918d1079', '9ee5c32d-c6f9-4b8e-843b-5a779492f36a', 0),
+  ('874374b7-78c0-4a67-87dd-25f4918d1079', '3cb19e95-5f47-42c4-8641-15598fd4aa80', 1),
+  ('874374b7-78c0-4a67-87dd-25f4918d1079', '5ebad498-92fe-4c7d-b3b1-b22668c52f6a', 2),
+  ('e6cdfb67-8a4e-46f5-beec-1ba56fda1718', '2adccf21-2b08-4366-9c56-5ac67fdfe3c4', 0),
+  ('e6cdfb67-8a4e-46f5-beec-1ba56fda1718', '7cf95fa2-24e9-4ac2-93e3-1a9a227cdf67', 1),
+  ('7dc6ccb2-a7ed-43c5-b6bc-36391ce04029', '6507542d-0f94-44cc-b838-7fec446b76e7', 0),
+  ('2d1aa9f9-25a2-450b-adf8-8998390b21c4', '6507542d-0f94-44cc-b838-7fec446b76e7', 0),
+  ('2d1aa9f9-25a2-450b-adf8-8998390b21c4', 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 1),
+  ('48fcadf8-1e89-4a6a-8444-f37c77482b3c', 'c1fc2b62-85bc-4947-ad5f-efffce5326e3', 0),
+  ('f071ce10-85dc-415d-96c9-fd008ba9daaa', '5ebad498-92fe-4c7d-b3b1-b22668c52f6a', 0),
+  ('f071ce10-85dc-415d-96c9-fd008ba9daaa', 'd14a3f5f-ee62-4960-8c83-c6883a58af5a', 1),
+  ('37103d8a-d026-4be0-b465-4230e71864fe', '8d8b7080-1c46-4ec0-8a43-a21b5c4c4e5a', 0),
+  ('d0a5918e-8cca-4ac7-95a0-393d0564b7f8', 'c7385ffb-e83b-4455-bae7-d842217bc4d1', 0),
+  ('d0a5918e-8cca-4ac7-95a0-393d0564b7f8', 'f56db665-2fbc-4f7c-9ddc-4a1885f00a67', 1),
+  ('a676d1bb-8e04-46f5-aea8-8f90eb728d49', '8d8b7080-1c46-4ec0-8a43-a21b5c4c4e5a', 0),
+  ('ae3a345d-8d3e-44c9-9238-9e9a96f9cd9b', 'f4a95fdd-ff64-4cc5-9322-69f9cf0fe452', 0),
+  ('7611831e-8acd-4da5-8898-6dda4a2ed7d6', 'd97fccb2-2c86-4ec2-8aa3-97aa0ed9bb0e', 0),
+  ('e9acdd3a-6b2d-4061-8869-2174480bae8e', '8d8b7080-1c46-4ec0-8a43-a21b5c4c4e5a', 0),
+  ('c5453c07-d9da-44e5-b06b-8e74936dc58f', '4d406103-f605-4122-a234-03f57028b953', 0),
+  ('0914693d-0ef0-46b1-addb-2638ce867691', '0e55d083-e6f9-4597-95f1-d90f23db498d', 0),
+  ('ef19c41f-4433-49ef-ac20-4b544981825d', '0e55d083-e6f9-4597-95f1-d90f23db498d', 0),
+  ('19b6b145-bc37-4de7-8453-b8f2b2faa895', '8d8b7080-1c46-4ec0-8a43-a21b5c4c4e5a', 0),
+  ('024d8cfc-936b-4f8d-920c-477185595012', '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 0),
+  ('58a76807-e387-4ffd-be5b-01bc2242807b', '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 0),
+  ('3ab1625a-291f-444b-955a-f4de845bc4e1', '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 0),
+  ('917b7b45-3689-4fac-91ef-6999040287ba', '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 0),
+  ('5bed9ada-aa42-42ab-b5a1-285ebedd9541', '4059db4f-191f-4ee0-b4b8-b25656bf77ed', 0),
+  ('3be22f31-61df-4098-bcc3-53ae590f1161', 'd97fccb2-2c86-4ec2-8aa3-97aa0ed9bb0e', 0),
+  ('43a2fa80-1933-4108-8dec-6e9865699b6c', '4d406103-f605-4122-a234-03f57028b953', 0),
+  ('08a1b931-ea80-4f53-b022-59e0604e4a97', '8d8b7080-1c46-4ec0-8a43-a21b5c4c4e5a', 0),
+  ('b0e524ed-457e-4bf9-9492-4363c6febd3b', 'd97fccb2-2c86-4ec2-8aa3-97aa0ed9bb0e', 0),
+  ('4e62d57d-5c04-4848-8e84-25ae99df90c1', 'ec0a7c63-f21c-4d60-8f61-41e1de285f5e', 0),
+  ('4e62d57d-5c04-4848-8e84-25ae99df90c1', '8d8b7080-1c46-4ec0-8a43-a21b5c4c4e5a', 1),
+  ('8a3c0e30-c4c8-4b93-b946-4922774c6f10', 'd97fccb2-2c86-4ec2-8aa3-97aa0ed9bb0e', 0),
+  ('f307a4a9-4eb3-49ee-86d5-29962b84e265', 'b86cf747-d570-4d8f-a4f8-aed265ec6f6d', 0),
+  ('57bb63a0-b08f-4215-898a-fe13f919d744', 'd14a3f5f-ee62-4960-8c83-c6883a58af5a', 0),
+  ('79fce8c7-ada1-4e7f-b813-11f9af1848b7', '78979bcd-aaa2-42f8-aec9-b524632158e8', 0),
+  ('5642bb0a-e7c8-4dfc-a8fd-fa08af651947', '5ebad498-92fe-4c7d-b3b1-b22668c52f6a', 0),
+  ('5642bb0a-e7c8-4dfc-a8fd-fa08af651947', 'f247b16e-dbbe-4c28-9e30-b45eb90c7621', 1),
+  ('a807cb7b-6b1a-4ce8-bf03-5eab870bc7b5', 'f6486e05-256c-40a1-9c6d-ddfa53a79b64', 0),
+  ('6274752d-dfa1-499a-a6ce-a4c750d7a5c2', '2d76631e-fa35-4545-8430-a9c392c5cc5f', 0),
+  ('14fe7a4e-53b0-470d-bac7-87980150e904', '99f1703d-6e10-4ac7-bc13-99521e611fd6', 0),
+  ('656c76d8-44b0-40b9-9bf7-6179498288fb', '2e8f1f06-6edb-4a83-8ea8-dbe89e2d0c29', 0),
+  ('cf7c02b0-b187-4b29-a5e8-56dd4557395d', '9ee5c32d-c6f9-4b8e-843b-5a779492f36a', 0),
+  ('18679d47-266f-4b0f-961c-d5696c6c9d1a', 'c12ca8e2-fc17-4d47-9097-170abd04b3dc', 0),
+  ('e7d8e48c-435c-4438-97eb-84ed13f9471b', 'c12ca8e2-fc17-4d47-9097-170abd04b3dc', 0),
+  ('39bae254-b3a0-40a5-a1f8-45cee4dd691f', '6f4d0c54-5e85-4826-b358-63dff4a9dc59', 0),
+  ('6977f91e-bafe-4c9f-ba60-f864a4f71fa9', 'e42465e5-58bc-4e2d-953b-95f6dc2d5a75', 0),
+  ('80f0803e-8441-4c22-8c21-6b3ed62fdd23', '7b590374-c445-4dc0-8c57-6e7567c93219', 0),
+  ('80f0803e-8441-4c22-8c21-6b3ed62fdd23', 'c12ca8e2-fc17-4d47-9097-170abd04b3dc', 1),
+  ('acc65eed-c47a-41b8-8f9e-a1d3226ad6e4', '1b3cccdb-660b-48d8-b774-5868049621cb', 0),
+  ('7b0e343a-edf4-4ccb-8878-732baa0e7d50', '4ae84535-8038-43bf-bc48-3308ca2b7866', 0),
+  ('6c6bc884-0d61-4cca-acc1-bcef33322c04', '16867c4c-ba7f-49cf-903b-617b7a3eb3cb', 0),
+  ('01a5528d-c03a-4239-a9c3-15cff8c8fdd1', '3a34e53f-a3e8-4bda-991b-45b9b76179d2', 0);
+
+insert into public.turns (id, legacy_id, book_id, number, author_id, content, is_ended, is_validated) values
+  ('e225adaf-d1fc-4300-8348-91c4b5439611', 'e225adaf-d1fc-4300-8348-91c4b5439611', 'b7bc7fe3-53c6-4f2f-aab6-9bb918feb5a5', 1, '6507542d-0f94-44cc-b838-7fec446b76e7', '- Debout Lola !
+
+C''est Maman qui me tire du sommeil. Déjà l''odeur des sablés au miel sortant du four me chatouille les narines. Avec ma mère, je vis au dernier étage d''un grand immeuble en pierre blanche et au toit en ardoise.
+
+À l''appartement du dessous, habite un garçon de mon âge, Liam, pour qui mon cœur bat la chamade. Maman ouvre les rideaux. Comme tous les matins, en cet hiver neigeux, il fait encore nuit sur Chamonix. Avec mes longs cheveux blonds bouclés et mes lunettes bleu nuit, je fais partie des filles qu''on ignore un peu en 5ème. Je ne peux compter que sur ma meilleure amie, Alice. Comme toujours, il y a dans ma classe une petite peste. Carole ! Une vraie REBELLE celle-là ! TOUJOURS à vouloir être la meilleure et à se croire au-dessus des autres. Évidemment, c''est ELLE la chouchoute de la prof principale.
+
+Je me lève doucement.
+
+- Habille toi chaudement, il fait froid dehors, me recommande ma mère. Je te laisse, je vais préparer du porridge.
+
+J''ouvre mon placard et j''enfile mon pantalon large à fourrure et mon pull col roulé à torsades. Puis, je file vers la salle de bains pour me brosser les cheveux, histoire d''être présentable à Liam. Liam, c''est le garçon le plus craquant que je n''ai jamais vu. Je le connais depuis la maternelle. On a toujours été dans la même classe. Bizarre, hein ! Il a les cheveux châtains et un air pas comme les autres.
+
+Quand j''ai fini, je vais retrouver ma mère pour le petit déj. Cette fois, c''est du miel de tournesols qu''elle a mis dans ses sablés. Ma maman, elle cuisine très bien. Mais sa spécialité c''est la tartelette au citron.
+
+Je m''installe à table devant mon bol de porridge et mon assiette de sablés. Je commence à manger.
+
+- Tu as bien dormi ma chérie ? Demande Maman.
+
+J''acquiesce en hochant la tête.
+
+- Hum, Hum
+
+- Tu as l''air fatiguée Lola. Tu as mal dormi à cause du voisin de palier ?
+
+- Pfff, cet idiot a encore mis la musique à fond cette nuit.
+
+- Et pourquoi donc ?
+
+- Il a fait une boum et a invité tous ses amis.
+
+- Oh le voyou !!! Il ne sait pas qu''il y a des gens qui dorment à côté ? s''exclame maman.
+
+Quelques minutes plus tard, je sors de l''appartement. Je descends rapidement pour ne pas être en retard au collège. J''ai enfilé ma doudoune blanche à fourrure et mes Moon Boots marron clair avec de la laine à l''intérieur qui ressort en haut. J''ai aussi posé sur ma tête, mon cache oreilles blanc assorti à ma doudoune. Avant de partir j''ai saisi mon sac en cuir bleu marine.
+
+J''arrive sur la grande rue. Cette nuit encore, il a neigé sur Chamonix, ce petit village des Alpes que j''aime tant. Mais, s''il y a bien une chose que j''aime encore plus que ce village montagnard, c''est bien Liam, l''élu de mon cœur. Évidemment, personne ne sait que je craque pour lui. J''arrive à l''école et la journée se passe comme tous les lundis.
+
+En rentrant le soir, alors que j''arrive au 2ème étage de mon immeuble, je tombe sur... Liam qui descend faire je ne sais quoi...
+
+Il me sourit en m''adressant un signe de la main. Ça me coupe le souffle. Je monte quatre à quatre les marches des derniers étages et entre précipitamment dans mon appartement. Alors qu''on dîne, maman me dit :
+
+- Qu''est-ce qu''il se passe ma chérie, tu as eu encore un problème avec Carole ?
+
+- Non ! Il a juste fait froid aujourd''hui ! Dis-je en mentant.
+
+', true, true),
+  ('e85406de-f437-46b0-97e8-874706472e89', 'e85406de-f437-46b0-97e8-874706472e89', 'b7bc7fe3-53c6-4f2f-aab6-9bb918feb5a5', 2, 'f5956625-d496-4a23-ad78-1240c062d08f', 'Je ne m''étais pas assez habillée aujourd''hui.
+
+- Si tu le dis, dit ma mère. Va te coucher maintenant, il se fait tard, demain tu as école.
+
+Le lendemain matin, me voilà partie à l''école, sur le chemin je croise Liam…
+
+', true, true),
+  ('19276026-0585-4337-b11d-84a54177daf1', '19276026-0585-4337-b11d-84a54177daf1', 'b7bc7fe3-53c6-4f2f-aab6-9bb918feb5a5', 3, '6507542d-0f94-44cc-b838-7fec446b76e7', '- Salut Lola, ça va ?
+
+- Liia…amm, Salut, tu vas bien ? Je dois aller à la boulangerie chercher un croissant.
+
+- Ça tombe bien moi aussi je dois y aller, dit Liam, on y va ensemble alors.
+
+Je rougis et je lui fais signe de me suivre. Une fois dans la boutique, j''achète un croissant et dis à Liam :
+
+- Je t''attends dehors.
+
+Arrivée sur le trottoir, je fais semblant d''attendre Liam, puis voyant Alice de l''autre côté de la rue, je cours la rejoindre et laisse Liam derrière moi.
+Arrivée devant le collège, je commence enfin à manger mon croissant tout chaud.
+C''est alors qu''une voix horriblement familière surgit derrière moi.
+
+- Eh bien Lola, tu n''as pas eu le temps de manger ou bien ta mère n''est pas assez riche pour te nourrir ?
+
+C''était Carole, la racaille du collège. Elle venait de dire ce qu''il ne fallait pas. Insulter ma mère c''était comme commettre un crime pour moi. Je m''avance vers elle et lui dis simplement "Tu n''aurais pas dû dire ça, espèce de sale peste détraquée !“ Avant de lui ficher un gros coup de poing dans le nez.', true, true),
+  ('6441c403-d9f8-4eaa-87f1-75c0e2b87046', '6441c403-d9f8-4eaa-87f1-75c0e2b87046', 'b7bc7fe3-53c6-4f2f-aab6-9bb918feb5a5', 4, 'f5956625-d496-4a23-ad78-1240c062d08f', '- Grrr... protesta Carole, comment oses-tu me faire ça, j''en parlerai au principal. Sachant que Carole était la chouchoute de la principale, je prends peur, je pouvais être renvoyée !
+
+Les cours se passent bien mais je redoute le moment de la sonnerie où je devrai aller chez la principale.
+
+Gloups... Je gloussais de peur à l''idée d''être renvoyée, à cause de cette grosse peste de Carole.
+
+- Drinnnng... Nonnnn ! Pas la sonnerie, cela ne voulait dire qu''une chose, je serai sûrement renvoyée, je ne pourrai plus voir Liam, j''aurai trop honte de rester dans cette ville.', true, true),
+  ('2f3c64a9-5968-4918-be54-134d1ee06d87', '2f3c64a9-5968-4918-be54-134d1ee06d87', 'b7bc7fe3-53c6-4f2f-aab6-9bb918feb5a5', 5, '6507542d-0f94-44cc-b838-7fec446b76e7', '- Allez, viens Lola, dit Alice d’une voix qu’elle voulait douce.
+
+Mais je savais qu’elle était aussi stressée que moi.
+
+On sort dans la cour et Alice et moi nous nous dirigeons vers notre cachette secrète. C’est une sorte de grotte dans les buissons, l’entrée dissimulée par une grosse pierre. L’endroit est assez large pour que 3 personnes s’y assoient. On ne peut pas s’y mettre debout mais c’est très confortable. Le dessus est fait de branchages entortillés, entremêlés et tressés.
+
+Mais alors qu’on s’approchait, une voix m’interpelle : « Lola ! »
+
+Gloups, la professeure principale. Carole a dû lui dire ce qu’il s’est passé. Alice me sert le bras si fort qu’elle me fait mal. Soudain son étreinte se desserre.
+
+L’estomac noué, la gorge serrée, je repars en arrière après avoir jeté un dernier coup d’œil à Alice.
+
+Comme je m’y attendais, Carole se trouve à côté de la professeure principale, mais à ma grande stupéfaction elle n’est pas seule. Sa meilleure amie à elle, Eugénie, se trouve à ses côtés. Notre professeur me dit :
+
+- Il serait préférable que vous ameniez votre amie, Miss Reda.
+
+- Bien sûr, Madame, répondis-je surprise.
+
+Seulement, au lieu de retourner près d’Alice, je crie par-dessus mon épaule « Aliiice !!! » Ma meilleure amie déboule en s’exclamant :
+
+- Ouiii ? Qu’est-ce qu’il y a ?
+
+- Tu peux venir avec moi, la principale l’a dit.
+
+- Je veux bien.
+
+Nous montons dans le bâtiment, mais à notre grande surprise, la prof principale ne nous emmène pas dans son bureau.
+
+Elle nous fait monter un escalier, puis un autre, nous fait suivre un couloir, tourne à droite, passe par une porte battante, puis devant le bureau du directeur, tourne à gauche puis à droite, remonte un escalier, tourne encore à gauche et arrive devant une magnifique porte à double battant.
+
+Elle était faite de bois poli et vernis. Ses poignées et son contour fait en or et les statues placées à ses côtés étaient sculptées en or aussi étincelant que les poignées de cette porte de contes de fée.
+
+La prof s’avance et sort de la poche de sa veste une petite clef également en or, incrustée de rubis. Elle la fait tourner dans la serrure et la porte s’ouvre.
+
+Le couloir sur lequel elle donnait était aussi somptueux que la porte elle-même. Le parquet des autres couloirs avait laissé place à une magnifique moquette violette.
+
+Des petites commodes et de grandes bibliothèques en bois vernis étaient disposées le long du couloir par intervalles. Des rangées de livres épais en cuir ou en velours coloré parsemaient les bibliothèques. Et, sur les petites commodes, posés sur des napperons de dentelle, on avait disposé de jolis bouquets de fleurs dans de magnifiques vases. Notre professeur avançait rapidement et Carole, Eugénie, Alice et moi, nous devions presque courir pour ne pas être distancées. La moquette étouffait le bruit de ses talons et son air digne nous faisait un peu peur. La prof marche le long de ce couloir rapidement, puis elle nous fit entrer dans une salle magnifique, le parquet était recouvert d’un tapis rouge, de petites tables entourées de fauteuils et des poufs avaient été disposés de manière à faire une sorte de salon de thé. Aux fenêtres, des rideaux de soie violets étaient soigneusement accrochés avec des petits rubans dorés. Des chariots en or étaient posés contre le mur. Mais la professeure principale ne nous laisse pas le temps d’admirer cette pièce magique, déjà elle nous dit :
+
+- Asseyez-vous.
+
+On obéit, puis elle s’assoit sur un fauteuil face à nous, et nous dit :
+
+- Vous allez m’expliquer clairement ce qu’il s’est passé.
+
+Carole prit la parole :
+
+- Voyez-vous Madame, j’étais en train de parler tranquillement à mes copines, quand soudain Lola arrive et sans explication elle me donne un coup de poing dans le nez.
+
+Je m’exclame indignée :
+
+- Elle venait d’insulter ma mère !
+
+- C’est vrai, ajoute Alice, je l’ai entendu. Et je peux même vous dire que Carole a dit que la mère de Lola n’était pas assez riche pour la nourrir.
+
+- C’est pas vrai ! Hurle Eugénie.
+
+- Si et toi je te rappelle que tu as voulu me frapper l’œil et que tu as lâché ton bulldog juste pour qu’il me morde !
+
+- Mais Lola, à cause d’elle, eh ben, j’ai le nez en sang maintenant !
+
+- Ne te fais pas de scénario, sale petite détraquée, tu n’as rien au nez. Lui dis-je d’une voix calme, mais menaçante.
+
+Alice hurle alors :
+
+- Eugénie m’a rouée de coups, simplement parce que je défendais Lola.
+
+- Eh bien toi, tu m’as envoyé de la neige plein dans mon sac, espèce de chouette. Lui répond Eugénie.
+
+- STOP !!! J’ai compris. Miss Reda (c’est moi) et Miss Balassie (Carole) vous aurez toutes les deux une punition. Je vous expliquerai votre punition à midi. En attendant, retournez dans la cour.
+
+Alice et moi, nous nous réfugions dans notre cachette.
+
+J’attrape mes genoux et je mets ma tête entre les mains.
+
+- Si seulement j’avais pu me retenir, je n’aurais pas eu de punition.
+
+- Oui mais Carole ne serait jamais allée lui dire et même si tu l’avais dit, que Carole a traité ta mère de pauvre, le prof n’aurait rien dit puisque Carole est sa chouchoute, me rappelle Alice.
+
+J’allais lui répondre quand soudain elle se fige, devient raide, s’approche de l’entrée de notre cachette, et pose un doigt sur sa bouche pour me signaler de ne plus faire de bruit. Elle écarte un tout petit peu les branchages des buissons, eut un haut-le-cœur, puis me fait signe d’approcher. J’observe… et là horreur, Carole et ses copines s’approchent bruyamment. Je prends peur, que se passerait-il si Carole apprenait l’existence de notre cachette ? Irait-elle le dire au directeur ou garderait-elle le secret, viendrait-elle chaque jour dans notre cachette ou nous laisserait-elle tranquille ?
+
+Heureusement, comme si elle avait senti le danger, la sonnerie retentit. Ouf, Carole ne découvrira pas l’existence de cette grotte secrète.
+
+Les cours se passent comme d’habitude, puis à la pause de midi, la professeure principale vient me voir pour m’annoncer que ma punition sera de nettoyer les bassins de l’infirmerie.
+
+Aussi à treize heures, je me retrouve avec un chiffon dans une main et du produit nettoyant dans l’autre, devant un bassin de l’infirmerie alors qu’Alice déjeunait chez elle.
+
+Quelle horreur !', true, true),
+  ('bb33658c-2844-4b84-9c00-9554e3f8e4f3', 'bb33658c-2844-4b84-9c00-9554e3f8e4f3', 'b7bc7fe3-53c6-4f2f-aab6-9bb918feb5a5', 6, 'f5956625-d496-4a23-ad78-1240c062d08f', 'Enfin c''est ce que je croyais. À la récréation, elles s''approchèrent dangereusement de notre cachette, heureusement elles ne pouvaient pas se douter de quoi que ce soit puisqu''on était sur le banc.
+
+C''est là que Carole et sa bande (le cci, le club des filles « canons » et « intelligentes ») se sont alors dirigées vers nous, qu''est-ce qu''elles nous voulaient ? On avait enfin réussi à être tranquilles. Nous sommes alors allées dans notre cachette, maintenant hors de danger.', true, true),
+  ('255c4b07-884b-4fd2-9fee-a62af7d22e6c', '255c4b07-884b-4fd2-9fee-a62af7d22e6c', 'b7bc7fe3-53c6-4f2f-aab6-9bb918feb5a5', 7, '6507542d-0f94-44cc-b838-7fec446b76e7', 'Sauf qu''on se trompait un peu avec Alice. Le C.C.I. nous avait vu filer. Lorsque j''en pris conscience, je le dis à ma B.F.F. (Best Friend Forever). Elle prit un air horrifié, puis soudain, sembla avoir une idée. Elle me chuchote à l''oreille :
+
+- Lola, tu te souviens de ce qu''on a fait toutes les deux, spécialement pour les moments les plus délicats, comme celui-ci ?
+
+- Celui qu''on s''est promis de ne l''utiliser qu''en cas d''urgence extrême, je lui réponds à voix basse.
+
+- Oui !
+
+- Celui qu''on a utilisé que très rarement jusqu''à présent !
+
+- Oui !
+
+- Eh bien, qu''est-ce qu''il a ?
+
+- Je pense que cette fois, on va être obligé de le prendre, mais en vitesse.
+
+Je hoche la tête, puis je me retourne vers le fond de notre cachette. Je pousse une autre pierre, semblable à celle qui est à l''entrée de notre cachette. J''écarte de la végétation pour dévoiler la chose dont on parlait avec Alice. Un tunnel. Un immense tunnel, pas très large qu''on avait creusé il y a bien longtemps, pour les cas d''urgence. Il contournait le banc qui était à quelques mètres de notre cachette, passait derrière le grand arbre, puis débouchait derrière le local à poubelles...
+
+C''était notre œuvre. Nous l''avions creusé de nos mains, nous l''avions dissimulé et nous l''avions baptisé « Le Couloir Secret ». On s''en était servi deux fois au cours de l''année dernière. Une première fois pour échapper au regard perçant du prof de Maths et une seconde fois pour le même cas qu''aujourd''hui, échapper au C.C.I.
+
+Alice regarde discrètement à l''entrée de notre cachette, puis me dit :
+
+- Il faut traverser le Couloir Secret en vitesse ! Les six chouettes se rapprochent.
+
+Elle parlait de Carole et de ses copines. Je hoche la tête à nouveau, puis je m''enfonce dans les profondeurs du tunnel. Alice me suit, après avoir repoussé la pierre et la végétation derrière elle. Le sol est recouvert d''aiguilles et d''une couche de feuilles, étouffant nos pas. Nous étions à quatre pattes, mais nous avancions le plus vite possible, nous n''avions plus beaucoup de temps. Carole et sa bande se rapprochaient dangereusement de notre cachette.
+
+Le tunnel bifurquait brusquement vers la gauche. Je le savais grâce à ma mémoire, nous allions bientôt passer derrière le banc. Je continuais, quand soudain, je m''arrête net. Une voix familière me parvient aux oreilles. Celle de Liam ! Il parlait à ses copains, comme si de rien n''était. Je me sens rougir. Puis, comme si elle avait fait exprès de gâcher ce moment, Alice débarque derrière moi et me dit de me dépêcher. Je grommelle un peu, puis continue d''avancer. Enfin, le tunnel tourne une nouvelle fois à gauche et bientôt nous arrivons à sa sortie. J''écarte la végétation et la pierre, puis je me glisse par le trou pour me retrouver derrière le local à poubelles.
+
+Alice me suit, puis referme le trou. La sortie est dissimulée. Nous nous mettons alors à courir vers le C.C.I. qui s''approchait dangereusement de notre cachette. Carole, qui était tout devant, n''était plus qu''à deux mètres de la pierre qui dissimulait l''entrée de notre cachette. Alice fit alors une accélération que je n''aurais jamais cru possible. En dix secondes elle avait dépassé le banc où Liam parlait. Et en cinq secondes passe devant Carole et lui dit :
+
+- Salut Carole ! Tu cherches quelque chose ? Parce que là, tu vois, il n''y a rien. Après, je ne sais pas si tu le vois, tu es peut-être aveugle.
+
+- Tais-toi bouffonne ! Et laisse moi passer !
+
+Je déboule et je rétorque.
+
+- Bien sûr que non, on ne va pas te laisser passer ! Non mais pour qui tu te prends pour nous donner des ordres comme ça ? On n''est pas tes servantes, que je sache. La sonnerie retentit soudain, pile au moment où j''allais réussir à ridiculiser Carole. Je me demandais si elle ne faisait pas exprès.
+
+Nous montons en cours de français et la professeure nous distribue un papier. Je le regarde et mon cœur bondit de joie. Dans un mois et demi, toutes les classes de 5ème partiront une semaine en classe d''équitation. Or, il se trouve que j''adore l''équitation. Je jette un coup d''œil à Alice, tout aussi contente que moi, puis à Liam qui lui paraît horrifié. Je me demande pourquoi. Mais avant que j''aie pu réfléchir à la réponse, la professeure dit d''une voix forte :
+
+- Allons, allons ! Messieurs, Mesdemoiselles un peu moins de bruit s''il vous plaît. Comme vous le constatez, nous partirons pendant une semaine en classe d''équitation. À la fin du cours, je vous distribuerai une fiche de santé qui devra être rendue au prochain cours de français. Mais pas la peine de s''exciter, nous sommes pour l''instant en cours. Et maintenant sortez vos cahiers et sans bavardage je vous prie.
+
+Elle se mit à écrire au tableau notre nouvelle leçon. Je me mets à rêver de ce que nous allons pouvoir faire pendant cette classe d''équitation. Et c''est dans un immense bonheur qu’après deux heures de français et une heure de sciences, je descends pour la pause de l''après-midi. C''est alors que je remarque Liam. Il n''est pas en train de chahuter avec ses copains au foot, ou à discuter sur le banc comme à son habitude. Il s''est assis contre un arbre et reste seul.
+
+Intriguée, je dis à Alice de m''attendre près du banc et je m''accroupis à côté de Liam.
+
+- Qu''est-ce qu''il se passe Liam ? Pourquoi tu fais cette tête ?
+
+- Et bien, avoue t-il en devenant tout rouge, je suis nul en équitation.
+
+- Ce n''est pas grave, ce n''est pas un concours, et puis si jamais, je t''aiderai. Ne t''inquiète pas, ça va bien se passer. Je te le promets.', true, true),
+  ('1f398dec-3e50-4df9-a2fe-ffde8cba9b1c', '1f398dec-3e50-4df9-a2fe-ffde8cba9b1c', 'b7bc7fe3-53c6-4f2f-aab6-9bb918feb5a5', 8, 'f5956625-d496-4a23-ad78-1240c062d08f', 'C''est alors que Lola ressentit une grande douleur dans le dos, c''était un énorme caillou, elle se dit que cela ne pouvait être que Carole, elle se retourne et lui balance un grand coup de pied dans les tibias, Carole se met à hurler et ameute toute l''école. Le proviseur sort de son bureau en courant comme un fou. Tout le monde retenait sa respiration, on pouvait entendre une mouche voler, le proviseur prit sévèrement la parole.
+
+- Qu''est-ce qu’il se passe ici ?!
+
+Carole faisait sa Diva, elle se prenait sûrement pour un grand joueur de foot. Elle gémissait, grimaçait, et se tordait de douleur !
+
+- Je suis blessée, j''ai très mal.
+
+Alice se précipite sur moi pour venir à mon secours, tandis que la bande du C.C.I accourt aux pieds de Carole.
+
+- Monsieur, je vous le jure, je n''ai rien fait. (Dis-je en mentant)
+
+Comme le proviseur savait qu''une de nous deux mentait, mais qu''il ne savait pas encore qui, il dit en terminant la discussion.
+
+- Vous serez toutes les deux collées, le même jour à la même heure, dans la même salle.
+
+Je me suis dit :
+
+- Au secours, pas deux heures ENFERMÉE avec cette punaise...', true, true),
+  ('9f7135b7-9918-43f8-b0b8-f7c08e31ecb4', '9f7135b7-9918-43f8-b0b8-f7c08e31ecb4', 'b7bc7fe3-53c6-4f2f-aab6-9bb918feb5a5', 9, '6507542d-0f94-44cc-b838-7fec446b76e7', 'Une semaine plus tard, le proviseur vient me voir alors que je sors pour la pause du matin.
+
+- Mademoiselle Reda, souvenez-vous bien de vos deux heures de colle demain, vous, ainsi que Mademoiselle Balassie.
+
+Oh non, me dis-je, j''avais totalement oublié la colle avec la peste de Carole.
+
+- Notre secrétaire, Mme Rozdainbour, est absente depuis plusieurs jours, et son travail a besoin d''être avancé. Vous viendrez avec moi dès demain matin dans son bureau et je vous expliquerai ce que vous aurez à faire.
+
+La journée fut monotone et passa à une vitesse stupéfiante. Alors que moi, tout ce que je souhaitais, c''était qu''elle passe le plus lentement possible.
+
+Ce soir, rentrant de l''école, je vois le CCI entrer dans la boulangerie pour acheter des sandwichs.
+
+Je ne peux pas me retenir, je ramasse une grosse boule de neige et je l''envoie vers la tête hideuse et laide de Carole.
+
+Celle-ci la prend en pleine figure.
+
+"Et hop dans ta vilaine face !"
+
+Puis je me souviens que demain matin je vais devoir passer deux heures avec elle et pendant qu''elle se met à hurler à ses copines de fouiller les environs à la recherche de la personne qui avait osé faire ça, je m''éclipse, le cœur lourd.
+
+Cinq minutes plus tard, quand je pousse la porte de chez moi, ma mère me sert contre elle et accroche ma doudoune au portemanteau.
+
+- Comment s''est passée la journée, mon chaton, me demande-t-elle.
+
+- Je me suis pris une colle.
+
+- Comment ça ?
+
+- Demain de huit heures à dix heures.
+
+Ma mère grommelle et me sert du gratin de courgettes. Je le mange en silence, puis Maman apporte la salade de clémentines et d’ananas.
+
+Quand j''ai terminé mon repas, ma mère s''installe dans le salon et allume le petit poste radio.
+
+- Il va y avoir une tempête de neige cette nuit et demain matin tombera fort.
+
+Quand je me couche, j''espère qu''il y aura tellement de neige que la colle sera annulée.
+
+Malheureusement, le lendemain je suis obligée de revenir à l''école et à huit heures on commence de longs dossiers. Carole me lance :
+
+- C''est ta faute si on est là !
+
+Je rétorque :
+
+- Non, c''est la tienne.
+
+- N''importe quoi.
+
+- Bien sûr que si !
+
+En une minute, c''est la bagarre.
+
+Je lance un encrier vers Carole, qui riposte en m''envoyant des tonnes de papiers roulés en boule. Bientôt c''est la pagaille dans le bureau de la secrétaire.
+
+Heureusement, la grande horloge du collège sonne dix heures. Aussi, je me dépêche de rassembler mes affaires et je cours vers chez moi.
+
+Quand je déboule dans l''entrée, ma mère me crie depuis la cuisine.
+
+- Comment s''est passée cette colle ?
+
+Je lui réponds que tout s''est bien passé et que j''ai compris la leçon.
+
+Par contre je lui annonce que je suis frigorifiée tellement il neige. Ce qui est vrai.
+
+Aussitôt, ma mère me pousse vers la table et me sert un grand bol de bouillon et du pain perdu pour le dessert.', true, true),
+  ('d4439df3-f64d-4fb5-a336-7ef8530763d1', 'd4439df3-f64d-4fb5-a336-7ef8530763d1', 'b7bc7fe3-53c6-4f2f-aab6-9bb918feb5a5', 10, 'f5956625-d496-4a23-ad78-1240c062d08f', '- Merci maman, je peux aller me coucher, demain je pars en classe d’équitation, souviens-toi.
+
+- Bien sûr ma chérie, mais n''oublie pas de débarrasser la table.
+
+- Ok m''man !
+
+Une fois la table propre et bien rangée, je me dirige vers la salle de bains d''un pas fatigué.
+
+Ça fatigue les colles !
+
+Je me brosse les dents et c''est parti pour le lit, une bonne nuit de sommeil après une telle journée c''est important.
+
+Le lendemain je me réveille du mauvais pied, l''immeuble voisin est en travaux, pas facile de dormir avec les bruits de scies, de marteaux, de visseuses et j''en passe.
+
+Bref, j''ai mal dormi.
+
+Une douce odeur vient me redonner le sourire : des crêpes !
+
+J''entends une voix :
+
+- Chaton, viens manger tes crêpes, elles vont refroidir.
+
+- Ok j''arrive.
+
+- Merci maman, elles sont DÉ-LI-CIEUSES !
+
+- De rien mon chaton, mais maintenant file t''habiller, tu vas être en retard !
+
+- D''accord.
+
+Je file dans ma chambre, enfile mon uniforme et me brosse les dents. Je mets ensuite mes chaussures et me rue sur la porte.
+
+- N''oublie pas tes gants, ton bonnet et surtout tes affaires d''équitation, il fait froid.
+
+- Oui oui, maman.
+
+Sur le chemin je croise Liam.
+
+- Alors Liam, pas trop stressé pour l''équitation ?
+
+- Tu ne peux pas imaginer comme j''ai peur !', true, true),
+  ('bc840a32-d827-4c66-87a8-1919b9229bbd', 'bc840a32-d827-4c66-87a8-1919b9229bbd', 'b7bc7fe3-53c6-4f2f-aab6-9bb918feb5a5', 11, '6507542d-0f94-44cc-b838-7fec446b76e7', '- Eh bien moi, j''ai trop hâte !
+
+Arrivée devant le collège, je sors mon téléphone, j''envoie un message à ma Bestie et j''en profite pour embrasser ma mère par email. Alice me répond illico, comme si elle était collée à son portable en attendant de mes nouvelles.
+
+« Coucou ma Lola, je suis devant les maternelles. »
+
+Je la rejoins et la serre dans mes bras. Je vois très bien qu''elle est aussi excitée que moi. Sa main dans laquelle elle tient sa valise, tremble de hâte.
+
+- Je viens de voir la prof principale, me dit Alice, elle est dans tous ses états. Elle essaye de regrouper tous les élèves de sa classe. Mais comme il y a des petits frères et des petites sœurs qui viennent et des parents qui embrassent leurs enfants, elle n''y arrive pas ! En plus, la valise de Théo vient de s''ouvrir et toutes ses affaires sont tombées. Une de ses bottes d''équitation a atterri sur le pied de Carole et cette limace est en train d''hurler comme une folle. C''est très drôle !!!
+
+En effet, Carole est en train d''hurler des injures à Théo qui, lui, n''en mène pas large. Une fois la situation calmée, Liam vient aider Théo à ramasser ses affaires. Au fond de moi, je me dis, c''est fou ce qu''il pense aux autres Liam. Puis je m''intéresse à la troupe de Carole. Celle-ci a repris son air rebelle et est en train de se vanter devant ses copines en leur présentant sa valise. Je l''entends expliquer :
+
+- Solide, toute dorée avec poignée en argent et avec agrandissement compris. C''est mon père qui me l''a achetée. Vous savez, vu qu''il est préfet, il peut avoir ce qu''il y a de mieux.
+
+Je lève les yeux au ciel puis nous nous mettons en rang devant notre prof.
+
+Un quart d''heure plus tard, lorsque les professeurs ont réussi à ramener le calme et l''ordre et quand Madame Jabit a fait monter les 5ème 7 dans le car, nous pouvons enfin nous installer. Alice et moi, nous nous asseyons côte à côte sur une rangée de 2 vers le milieu du car. Je me penche au-dessus du fauteuil de devant et je vois Liam et Hugo s''installer juste devant nous. Quelle chance ! Puis je m''installe sur le fauteuil à côté de la fenêtre. C''est un car de Luxe que l''on a ! Les fauteuils sont moelleux, agréables et doux, il y a des rideaux de satin rouge si l''on veut dormir dans l''obscurité. Aussi, des tablettes repliables où l''on peut poser un verre, quatre accoudoirs, deux pour chacune et au-dessus de notre tête, des sortes de petits placards où ranger nos sacs. Il y a même une dame qui circule en nous proposant des journaux et même des boissons. Je murmure à l''oreille d''Alice :
+
+- Je crois que le voyage ne va pas être ennuyeux.
+
+Celle-ci approuve en souriant puis regarde dans l''allée centrale alors que les 5ème 4 entrent dans le car. Nous, les 5ème 6, les 5ème 7 et les 5ème 5, nous partageons un même bus. J''observe les professeurs qui sont en train de mettre les valises dans la soute, quand soudain un petit papier mauve m''atterrit sur les genoux. Je le saisis et je reconnais l''écriture de Liam :
+
+« Merci pour ton soutien, tes encouragements et ta gentillesse. Je te rendrai la pareille, Liam »
+
+Mon cœur se met à battre très vite ! Je glisse le papier dans ma poche juste à temps pour voir la dame aux boissons se poster devant nous.
+
+- Vous voulez quelque chose ?
+
+- Oui, répond Alice, sûre d''elle. Un thé au lait et...
+
+- Un chocolat chaud. Je termine.
+
+- Très bien, dit la dame en nous les tendant.
+
+- Et un journal, ajoute Alice.
+
+La dame donne le journal à ma meilleure amie et continue son chemin.
+
+Je pose mon chocolat chaud devant moi et je sors mes écouteurs. Je me mets une musique au hasard et prends un livre. De temps en temps, je jette un coup d''œil à Liam que je peux observer entre les deux dossiers devant nous. C''est parti pour l''aventure !', true, true),
+  ('3ba8facf-e213-4d76-9002-7c23bab8df55', '3ba8facf-e213-4d76-9002-7c23bab8df55', 'b7bc7fe3-53c6-4f2f-aab6-9bb918feb5a5', 12, 'f5956625-d496-4a23-ad78-1240c062d08f', 'Mais avant de se lancer pour une grande aventure, je dors, nous sommes partis très tard et le voyage est long.
+
+À l''arrivée, le chauffeur ouvre la soute pour distribuer les valises.
+
+Chaque enfant récupère la sienne et là, horreur !
+
+Un cri strident transperce nos tympans !
+
+Carole se retrouve avec les mains toutes rouges.
+
+Alice me regarde étonnée.
+
+- Qu''est-ce qu''elle a encore ?
+
+- Je ne sais pas, mais il y a un attroupement autour d''elle et je ne vois rien.
+
+Liam arrive vers nous hilare...
+
+- Hé les filles ! Vous savez quoi ? La fameuse valise en or avec sa poignée argent est recouverte de confiture !
+
+- De confiture ? Vraiment ?
+
+- Non, ce n''est pas une blague !
+
+Alice éclate de rire.
+
+- Oh Lola, la jolie valise dorée, viens vite, je ne veux pas rater ça !
+
+Mme Jabit essaye de se faire entendre.
+
+- Mais d''où vient cette confiture ?
+
+Tout le monde se retourne vers Victor, il est réputé pour être le glouton de la classe.
+
+Le pauvre Victor se tourne dans tous les sens, il cherche lui aussi le coupable.
+
+Mme Jabit décide de rentrer dans le Horse Club et de régler le problème plus tard.
+
+Liam revient vers nous.
+
+- Je sais, c''est Victor, sa maman a glissé un pot de confiture de fraises que sa grand-mère a fait dans ses bagages, mais il ne faut rien dire...', true, true),
+  ('e2b8f7c0-4853-47c1-94da-5bbd2d5746c4', 'e2b8f7c0-4853-47c1-94da-5bbd2d5746c4', 'b7bc7fe3-53c6-4f2f-aab6-9bb918feb5a5', 13, '6507542d-0f94-44cc-b838-7fec446b76e7', 'Madame Jabi nous annonce :
+
+- Il va falloir marcher un peu pour arriver au Horse Club.
+
+En effet, même si nous avions déjà passé la clôture, il y avait un petit sentier qui traversait une belle forêt.
+
+Notre classe se met en marche, et un quart d''heure plus tard, nous sortons de la forêt. Le sentier continue un peu jusqu''au Horse Club.
+
+C''est un bâtiment en pierre blanche avec un toit rouge et une porte et les contours de fenêtres jaunes. D''autres portes également jaunes se révèlent être des entrées extérieures de boxes. Une barrière entourant chaque entrée forme une sorte de jardin pour les chevaux propriétaires des boxes.
+
+Deux dames et un monsieur nous attendent devant l''entrée.
+
+Nous nous avançons et l''une des dames prend la parole :
+
+- Bonjour les enfants. Je m''appelle Stéphanie et je suis championne d''équitation et directrice de ce centre. Si vous avez besoin d''un conseil ou d''une aide, surtout, n''hésitez pas à venir me voir.
+
+Nous applaudissons et la seconde dame annonce :
+
+- Bonjour, je suis Clara et je suis une ancienne cow-boy. Avec moi, vous monterez à cheval, vous apprendrez les différentes races de chevaux et aussi leur mode de vie.
+
+Nous applaudissons encore et l''homme déclare :
+
+- Coucou les enfants. Moi, c''est Henri. Je suis palefrenier. Quand vous serez avec moi, nous étudierons les soins des chevaux et les systèmes de monte.
+
+Après une nouvelle valse d''applaudissements, Stéphanie nous montre nos chambres.
+
+Alice et moi, nous partageons la nôtre avec Romy, Juliette, Clémence et Marine.
+
+Le soir, je m''endors vite car la journée a été longue. J''envoie juste un message à ma mère pour lui dire qu''on est bien arrivés et que tout va très bien.', true, true),
+  ('d2b0f7a4-a0c8-4079-b066-ce94b34bcb0c', 'd2b0f7a4-a0c8-4079-b066-ce94b34bcb0c', 'b7bc7fe3-53c6-4f2f-aab6-9bb918feb5a5', 14, 'f5956625-d496-4a23-ad78-1240c062d08f', 'Le lendemain matin, Clara nous demande de nous réveiller, grâce aux micros placés dans les couloirs.
+
+Mais cela fait longtemps que nous sommes réveillées, Alice, moi, et nos colocataires, car le coq s''est mis très tôt à chanter.
+
+- Allez les filles, douchez-vous, habillez-vous en tenue d''équitation et rendez-vous en bas pour le petit-déjeuner. Nous dit Clara tout en pénétrant dans notre dortoir en souriant.
+
+C''est la bousculade pour être la première aux douches.
+
+Tout le monde glissait, il y avait plein de savon par terre.
+
+Quand Alice et moi avons terminé de nous doucher et de nous habiller, nous descendons pour prendre le petit-déjeuner.
+
+Arrivés en bas, Carole manque à l''appel, elle était encore dans son dortoir, qu’elle partageait avec : Eugénie, Stella, Flore, Amélie et Mona (comme par hasard toutes les filles du CCI).
+
+Et comme si cela ne suffisait pas, Romy avait lancé une alerte.
+
+- AAAAAAAAAAAAAAHHHHHHHH! Une souris !
+
+En effet une petite souris grise, affolée, circulait sous les tables.
+
+C''était la panique. Mme JABIT cherchait Carole partout tandis que Clara essayait de calmer l''atmosphère.
+
+Alerté par les cris, Henri accourt tout essoufflé.', true, true),
+  ('7c82d972-a6fa-482c-b484-20e397dc2d87', '7c82d972-a6fa-482c-b484-20e397dc2d87', 'b7bc7fe3-53c6-4f2f-aab6-9bb918feb5a5', 15, '6507542d-0f94-44cc-b838-7fec446b76e7', '- Qu’est-ce qu’il se passe ici ? demande-t-il.
+
+Finalement, après le déjeuner, tout le monde est prêt. Nous allons dans les boxes pour une promenade à cheval. Je choisis une belle jument marron avec une tache blanche sur le museau.
+
+Elle s''appelle Astra. Du coin de l''œil, je vois Liam qui galère sérieusement. Je m''approche pour l''aider. Le cheval qu''il a choisi s’appelle Flux.
+
+C''est parti pour la promenade !', true, true),
+  ('63f8b16b-b4bc-4e1a-9011-c7943ca1e959', '63f8b16b-b4bc-4e1a-9011-c7943ca1e959', 'b7bc7fe3-53c6-4f2f-aab6-9bb918feb5a5', 16, 'f5956625-d496-4a23-ad78-1240c062d08f', 'Sur le chemin nous croisons toutes sortes d''animaux : des lièvres, des écureuils et même des chats des maisons voisines.
+
+Soudain j''entends un gros boum. C''est Liam qui vient de tomber de son cheval, Clara l''amène tout de suite à l''infirmerie et nous retournons tous aux box.
+
+Quand Liam sort de l''infirmerie, il a la jambe dans le plâtre...', true, true),
+  ('d70f0d35-415c-4155-981f-1697b838382e', 'd70f0d35-415c-4155-981f-1697b838382e', 'b7bc7fe3-53c6-4f2f-aab6-9bb918feb5a5', 17, '6507542d-0f94-44cc-b838-7fec446b76e7', 'Henri, qui accompagnait la balade, décide de laisser tomber la promenade et de passer aux activités. Pendant que Stéphanie prévient la maman de Liam de l''accident de son fils, Clara et Henri se chargent des groupes.
+
+- Des collègues à nous viendront nous aider pour que tout le monde soit occupé, chaque classe sera répartie en deux groupes. Les professeurs vous diront quel groupe vous êtes et vous rejoindrez celui-ci pour faire les activités.
+
+- Et à l''heure du déjeuner, tout le monde se regroupera près des box pour voir mettre bas "Aristie", une jument.
+
+Quelques minutes plus tard les groupes étaient faits et tout le monde part faire les activités.
+
+Nous étions avec Clara et cela nous réjouit Alice et moi. Clara nous emmène dans le manège puis disparaît dans les box. Quelques instants plus tard, elle revient avec une superbe jument couleur caramel.
+
+- Je vous présente "Falia". Nous allons nous entraîner avec elle aujourd''hui.
+
+Un par un, elle nous fait monter sur Falia pour voir ce qu''on savait faire. Lorsque c’est au tour d''Alice, ma meilleure amie se met debout sur la selle du cheval sous les acclamations du groupe. Puis c’est mon tour. Je me mets aussitôt debout et, sur l''ordre de Clara, Falia se met à trotter. Je ferme les yeux pour me souvenir du conseil de notre prof. Lorsque je descends, Alice me fait un Tcheck et un clin d''œil qui semble vouloir dire : Bien joué !
+
+A midi, comme prévu, nous allons voir Aristie mettre bas. Tout le monde est silencieux. Henri et Clara sont accroupis près de la future maman et du vétérinaire. Les minutes passent...
+
+Enfin, le petit poulain sort entièrement du ventre de sa mère. Il était tout noir, comme Aristie.
+
+Lorsque nous arrivons dans la salle à manger, tout le monde se met à parler de la naissance du petit poulain nommé "Chikoo". Mais après le déjeuner, alors qu''on allait faire un temps calme, j''entends quelqu''un murmurer "Cette fois le poulain ne m''échappera pas".
+
+Quand je me glisse dans mon lit pour le temps calme, je me demande qui peut bien en vouloir à Aristie et son petit.', true, true),
+  ('b3e9d65e-304f-408a-aec7-0d7f7f2b9068', 'b3e9d65e-304f-408a-aec7-0d7f7f2b9068', 'b7bc7fe3-53c6-4f2f-aab6-9bb918feb5a5', 18, 'f5956625-d496-4a23-ad78-1240c062d08f', 'Pendant que tout le monde se repose, je décide avec Alice de mener notre petite enquête. Nous nous faufilons sur la pointe des pieds hors du dortoir. Il ne faut surtout pas que Carole nous aperçoive.
+Nous déambulons dans les couloirs quand soudain nous entendons des voix, vers le bureau de Stéphanie.
+Nous nous approchons le plus discrètement possible.
+
+- Tu comprends quelque chose, toi ?
+
+- Non, et toi ?
+
+- Rien du tout.
+
+- Approchons-nous un peu plus.
+
+- Chut, ne me pousse pas.
+
+Nous entendons une grosse voix d''homme dire :
+
+- Bon allez je vais m''occuper de Chikoo.
+
+Nous nous approchons de la porte entrouverte, et là on aperçoit un homme en blouse blanche avec une grosse seringue dans la main. Je regarde Alice.
+
+- Mon Dieu, il va tuer le poulain.
+
+- Mais non, ce n''est pas possible !
+
+- Si si j''ai vu à la télévision un cheval de course qui était blessé et le vétérinaire lui a fait une piqûre car on ne pouvait pas le soigner.
+
+Alice se met à pleurer. La porte s''ouvre. Nous partons en courant pour nous cacher.
+
+- Viens vite on va le suivre.
+
+Il s''approche du box d''Aristie et de son petit.
+
+Nous restons pétrifiées.
+
+- Mais que faites-vous là à espionner le vétérinaire ?!
+
+- ZUT, c''est la directrice !
+
+- EUHHH...EUHH...EUHH...
+
+- Voilà mon bonhomme, tu n''as pas pu échapper à ton vaccin.
+
+- Je viendrai faire le second le mois prochain.
+
+Je regarde Alice et j''éclate de rire et nous repartons en courant vers le dortoir.', true, true),
+  ('b7182ba2-d2fb-48f2-89cc-a2ed95a0eae7', 'b7182ba2-d2fb-48f2-89cc-a2ed95a0eae7', 'b7bc7fe3-53c6-4f2f-aab6-9bb918feb5a5', 19, '6507542d-0f94-44cc-b838-7fec446b76e7', 'L''après-midi, notre groupe se retrouve avec Henri. Mais moi, je m''en fiche puisque je ne pense qu''à Liam. Et c''est une erreur. Car, quand je m''approche, la jument me hennit dessus.
+
+Je m''enfuis en pleurant. Quand je relève la tête, Liam est là. Il a posé sa main sur mon épaule. Alors je l''embrasse...', true, true),
+  ('c1218c4b-0e33-40d2-a663-39093ae1b6a1', 'c1218c4b-0e33-40d2-a663-39093ae1b6a1', '584e5e2c-0673-4769-b70f-c956d366d6e4', 1, '23e58c00-a6ea-4334-a747-d0d971f666f1', 'Harry Potter habite à Bordeaux, il aura 11 ans en septembre. Il est d''un blond remarquable avec des yeux bleu ciel, il est aussi très grand pour son âge. Il a perdu ses parents à 4 ans, enfin c''est ce qu''on lui a dit, parce qu''il n''a aucun souvenir avant 4 ans. Des personnes très gentilles (Vernon et Sandrine Delacroix) l''ont pris aux policiers qui l''avait récupéré après l''incendie de sa maison qui a tué ses parents.
+
+Quand je reviens de l''école les lumières de la maison sont allumées. J''ouvre la porte prudemment.
+
+- Papa, Maman crie-je surpris.
+
+- Ah, Harry te voilà nous t''attendions ton père et moi.
+
+- Nous avons quelque chose à te dire, dit celui-ci.
+
+- Tu sais que ton père n''a plus de travail et qu''il en cherche un, dit ma mère.
+
+- Oui je sais.
+
+- Eh bien devine quoi, il en a trouvé un !
+
+- Super c''est quoi ?
+
+- Notaire ! S''écria mon père, le sourire aux lèvres.
+
+- Bon le seul petit problème, reprit ma mère, c''est que ...
+
+- L''office où je vais travailler, dit mon père, se trouve à Paris.
+
+Je me trouve dans le train Bordeaux-Paris. La semaine dernière quand j''ai appris la nouvelle au début j''étais en même temps surpris et j''avais peur aussi, peur de partir d''ici.', true, true),
+  ('a29b6607-606d-4188-9f13-7f6a26f10e44', 'a29b6607-606d-4188-9f13-7f6a26f10e44', '584e5e2c-0673-4769-b70f-c956d366d6e4', 2, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Je disais à mon père que ce n''été peut-être pas une bonne idée mais c''était trop tard. Alors il m''a dit : 
+
+- Harry j'' ai une idée tu vas m''accompagner le 1er jour dans mon bureau ! 
+
+Alors je répondis : 
+
+- C''est très aimable à vous père mais je ne suis pas sûr d''accepter. ', true, true),
+  ('d49bb2bd-1c2b-4906-b7b8-fe3ba22af16d', 'd49bb2bd-1c2b-4906-b7b8-fe3ba22af16d', '584e5e2c-0673-4769-b70f-c956d366d6e4', 3, '23e58c00-a6ea-4334-a747-d0d971f666f1', '
+
+
+
+- Mais si, mais si, tu verras c''est magnifique. Me répond mon père.
+
+Ma mère fait une tête de détective et dit :
+
+- Ça c''est à voir.
+
+- Et ho, lui répond mon père.
+
+- Non, dit ma mère, Harry tu viendra avec moi, on visitera la ville, ton école, le parc, on ira faire des courses alimentaires et vestimentaires et aussi acheter des nouveaux meuble pour la maison, dire bonjour aux voisins, et en parlant de voisins, ceux de gauche ont pleins d''enfants, dont, un garçon de ton âge.
+
+- Et ceux de droite ?
+
+- Ceux de droite, ils ont une fille unique et je crois qu''elle s''appelle Hermione.
+
+- Hermione ?
+
+- Oui.
+
+- Ha.
+
+- Ah oui, hum ton père et moi organisons une petite fête en l''honneur de notre arrivée.
+
+- Cool, et il y aura qui, je demande.
+
+- Les voisins.
+
+- Ah et il y aura les autres enfants.
+
+- Oui.
+
+- Mais du coup avec les frère et sœur du garçon de mon âge, ça va faire beaucoup de monde.
+
+- Oui effectivement. Mais ne n''inquiète pas nous allons gérer cela.
+
+- D''accord. Répondis-je . Je vais me préparer pour partir.
+
+- Vas y, réponds ma mère je t''attends en bas.
+
+- D''accord.
+
+', true, true),
+  ('6d1f3a66-f471-4402-ba80-3275912035fa', '6d1f3a66-f471-4402-ba80-3275912035fa', '584e5e2c-0673-4769-b70f-c956d366d6e4', 4, '23e58c00-a6ea-4334-a747-d0d971f666f1', 'Harry y monta les escaliers quatre à quatre, entra dans la salle de bains, se déshabilla et s''allongea dans la baignoire. Quand il eu finit, il s''habilla et descendit, sa mère était déjà prête à partir.
+
+', true, true),
+  ('dbc2976c-1653-43ab-8ce3-6be1f5690cbf', 'dbc2976c-1653-43ab-8ce3-6be1f5690cbf', '584e5e2c-0673-4769-b70f-c956d366d6e4', 5, '23e58c00-a6ea-4334-a747-d0d971f666f1', '- Ah super, tu es prêt ! Dis ma mère depuis le seuil de la porte.
+
+Nous commençons par aller au petit supermarché dans la rue d''à côté. Il y fait bon et quand nous passons à la caisse une dame nous sourit d''un sourire éclatant. Celle-ci est un peu grosse mais à l''air gentille. Ma mère et elle commencent à discuter de la ville et du travail. Quand nous sortons, il fait déjà sombre. A la maison, mon père est en train de préparer la raclette pour ce soir. Au moment où je commence à monter dans ma chambre pour me préparer, j''entends la sonnette qui sonne. DING DONG. Je file dans ma chambre pour me préparer vite fait et j''entends en bas ma mère dire :
+
+- Bonjour Monsieur et Madame Granger ! Ah et voici sûrement votre fille ?
+
+- Bonjour la famille Potter. Vous vous plaisez ici ? Où habitiez-vous avant ?
+
+Et mon père qui répond :
+
+- Nous étions à Bordeaux avant.
+
+J''entends une voix enfantine qui dit :
+
+- Ah j''ai une amie qui habite Bordeaux ! Les cannelés, la Porte de Bourgogne, elle m''a envoyé pleins de photos.
+
+Ma mère dit soudain :
+
+- Harry ! Descends, la famille Granger est là.
+
+Quand je descends, je vois en premier une fille aux cheveux châtains et ondulés. Elle a des beaux yeux verts et à l''air très intelligente.
+
+- Harry, dis mon père, Hermione et toi serez dans la même école à la rentrée.
+
+- Ah ! Dis-je. Enchanté, je m''appelle Harry.
+
+- Et moi je m''appelle Hermione, Hermione Granger.
+
+Je lui tends ma main et elle hésite avant de la serrer. Quand soudain la sonnette sonne à nouveau.
+
+- Ah ! Dis mon père. Ça doit être la famille Weasley !
+
+Effectivement, quand il ouvre la porte, une tribu arrive. En premier, sûrement le père et la mère, tous les deux roux. La mère, elle, est un peu forte. Tandis que le père, lui, est grand et maigre. Arrivent derrière, trois grands garçons qui devaient avoir entre 14 et 18 ans, aussi roux et avec des tâches de rousseur. Puis un garçon de mon âge et une petite fille plus jeune.
+
+- Bonjour la famille Potter, dit la mère. Et la famille Granger, mais nous nous connaissons déjà. Je me présente Molly et voici mon mari Artur, nos trois plus grands garçons Charlie, Bill et Perçy.
+
+Je leur serre la main. Et Monsieur Weasley continue :
+
+- Puis voici Ron et Ginny.
+
+Je serre la main de Ron et très vite nous partons Ron, Hermione et moi, dans ma chambre.', true, true),
+  ('00fbb021-b4f4-4f9b-9b37-3c14ee1f4ddf', '00fbb021-b4f4-4f9b-9b37-3c14ee1f4ddf', '584e5e2c-0673-4769-b70f-c956d366d6e4', 6, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Hermione me dit :
+
+- L''année prochaine on va être dans la même école ! J''ai relu les livres de Poudlard des dizaines de fois au moins !
+Je lui réponds :
+
+- Ha ! Tant mieux Hermione tu pourras nous aider !
+
+Ron me dit :
+
+- Cool la chambre !
+
+Je lui répondis :
+
+- Merci ! Lui dis-je content d''avoir reçu un compliment de mon nouvel ami !
+
+Hermione me demanda :
+- Qui a t-il dans ce placard ?
+Je lui répondis :
+
+- Je ne sais pas ! Il faut une clé !
+
+Elle me répondit :
+- N''as tu jamais eu envie de l''ouvrir ?
+Je lui répondis :
+
+- Si ! Évidemment ! Mais je n''ai pas le droit !
+
+Ron me dit :
+
+- Qui a la clé ?
+
+Je lui répondis :
+
+- C''est mon parrain ! Et il arrive ce soir !
+
+Ron me dit :
+
+- Ce soir, on lui demande la clé et on ouvre ton placard !
+
+Je lui dis :
+
+- Il ne me passera pas la clé ! J''ai déjà essayé ! Et puis il n''y a peut-être rien d''important dans ce placard !
+
+Hermione me répondit aussi tôt :
+
+- Évidemment qu''il y a quelque chose d''important sinon il te laisserai l''ouvrir sans problème !
+
+Je lui dis :
+
+- Ok Ron ! Ce soir on lui vole la clé !', true, true),
+  ('cb48308b-3028-46ad-8e1b-481d2878504c', 'cb48308b-3028-46ad-8e1b-481d2878504c', '584e5e2c-0673-4769-b70f-c956d366d6e4', 7, '23e58c00-a6ea-4334-a747-d0d971f666f1', '- Sinon, dit Hermione, on pourrait utiliser « Aholomora ».
+
+- T''es sûr que ça en est un ?
+
+- Oui, je l''ai senti dès que je suis arrivée.
+
+- Heuuuu.... Dis-je, vous parlez de quoi ?
+
+- Tu vois, je te l''avais dit, il ne connaît pas, dit Ron à Hermione.
+
+- Mais si, mais si, je l''ai senti quand je suis arrivée, si ça se trouve il ne le sait pas encore, s''exclama Hermione.
+
+- Vous pouvez m''expliquer de quoi vous parlez, s''il vous plait, et moi je ne vais pas à Poudlard mais à Fénelon.
+
+- Écoute, dit Hermione, tu es un sorcier, tu pratiques la magie et tu iras à Poudlard, l''école des sorciers, normalement, comme nous. C''est difficile à comprendre mais c''est la vérité.
+
+- Mais, je ne fais pas de la magie et puis comment savez vous que je suis un sorcier, alors que moi je ne le sais pas, je n''ai jamais pratiqué de la magie.
+
+- Oui, dit Ron, bien sur, tu ne le sais pas car tes parents ne sont pas des sorcier, ce sont, ce que nous, sorciers, appelons des Moldus.
+
+- Des quoi ? demandai je.
+
+- Des Moldus, m''expliqua Hermione d''un air savant, ce sont des personnes qui n''ont pas de pouvoirs magiques.
+
+Je regarda mes mains dans l''espoir que y j''haïrai des étincelles.
+
+- Mais non, me dit Hermione, en rigolant, avec une baguette magique.
+
+- Et comment je peux en avoir une, c''est comment, pour faire de la magie, on doit dire quelque chose ?
+
+- Ouhla, alors il y en a au Chemin flottant, pourquoi flottant, tout simplement parce que, quand tu passe les frontières tu te mets à planer. Me réponds Hermione toujours avec son air savant, mais un peu déboussolées par le nombre de questions que je posait. Oui, on doit dire des formules et une baguette ça ressemble à ça, dit-elle on sortant un long bâton de sa poche.
+
+- Tu en as déjà une ? S''exclama Ron.
+
+- Mes parents on jugeait bon de m''acheter une baguette avant même de recevoir la liste des fournitures.
+
+- Comment va-t-on recevoir cette liste de fournitures ?
+
+- Par hiboux, me répond Ron.
+
+- Par quoi !', true, true),
+  ('15bca50f-59e8-449d-83d9-4e53859e2248', '15bca50f-59e8-449d-83d9-4e53859e2248', '584e5e2c-0673-4769-b70f-c956d366d6e4', 8, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', '- Par hiboux !!! me répondit Hermione.
+
+Ron nous dit :
+
+- Revenons à cette histoire de placard, Hermione vas-y lance Alohomora !
+
+Hermione lui répondit :
+
+- D''accord j''y vais ! Alohomora !!!!! dit-elle très fortement et distinctement.
+
+Ron nous dit :
+
+- Tiens, bizarre ça ne marche pas !!! Réessaye tu l''as peut-être mal fait ?
+
+Hermione répondit furibonde :
+
+- Moi mal fait !!!!! Tu penses faire mieux Ron Weasley !!!!! Vas-y essaye !!! Si tu penses faire mieux !!!!
+
+Je dit à Hermione :
+
+- Du calme, du calme Hermione je crois savoir pourquoi elle ne marche pas.
+
+Ils répondirent tous les deux en même temps :
+
+Pourquoi ???????????
+
+Je leur dis :
+
+- Mes parents m''on dit qu''elle était ensorcelé ! Ho début, je ne comprenais pas et ne les croyais pas maintenant tout commence à prendre forme !! Sinon, il n''y a pas un sort plus puissant ?
+
+Hermione me répondit :
+
+- Si il y en a des tonnes. Mais on n''y a pas encore accès !
+
+Ron me dit :
+
+- Ton parrain arrive on prends la clé et on ouvre ton placard !!
+
+A ce moment, la sonnette retentit : Ding Dong !
+
+On répondit :
+
+On y va !!', true, true),
+  ('4f6f468a-c6d1-452c-8bf1-646cdc1e5fe9', '4f6f468a-c6d1-452c-8bf1-646cdc1e5fe9', '584e5e2c-0673-4769-b70f-c956d366d6e4', 9, '23e58c00-a6ea-4334-a747-d0d971f666f1', 'Les gamins dévalent les escaliers, Harry le premier s''écria : Parrain ! On peut te parler s''il te plaît ?
+
+- Oui si tu veux, mais est-ce que je peux juste dire bonjour à tes parents.
+
+- Oui oui bien sûr, désolé, mais dépêche-toi.
+
+- Ah la la… les enfants !
+
+Hermione, Ron et Harry grimpent les marches de l''escalier lentement.
+
+- Avant c''était la maison de mon oncle. Fit Harry.
+
+- Ah et il s''appelle comment ton oncle ? demanda Ron.
+
+- Jean Claude.
+
+- Jean qui !
+
+- Jean Claude !
+
+- Ah, c''est bizarre comme prénom.
+
+- Non... commença Harry.
+
+Il s''interrompit au milieu de sa phrase, alors que son oncle rentrait et jetait un coup d''œil à sa chambre.
+
+- Et bien cette chambre a changé je me souviens quand j''étais petit j''avais des posters de groupe de rock accrochés partout !
+
+- Ah ! fit Harry, je ne savais pas que tu étais fan de rock.
+
+Il regarda sa propre chambre décorée en ce moment de poster de forêt, d''animaux, de champs avec des bergers gardant leurs moutons, de vol d''oiseaux au coucher du soleil, il y avait une tapisserie accrochée au mur, c''était des feuilles avec derrière un fond blanc beige.
+
+- Bon passons aux choses sérieuses, avec mes amis, Ron et Hermione des voisins, nous voulons te demander si tu avais la clé de l''armoire, dit Harry en pointant du doigt le placard en bois à côté de lui.
+
+- La clé, pourquoi la veux tu ! S''exclama Jean-Claude
+
+- Bah, pour l''ouvrir, monsieur, dit Ron.
+
+- L''ouvrir, mais pourquoi voulez-vous l''ouvrir, vous ne savez même pas ce qu''il y a dedans, et puis non !
+
+- Justement, dis Harry s''il te plaît tonton comme ça on pourra tous voir ce qu''il y a dedans.
+
+- J''ai dit non cria Jean-Claude. Il sortit de la chambre tout en claquant la porte derrière lui.
+
+- Nom d''un chien mais c''est quoi cet oncle il veut vraiment pas nous donner cette clé.
+
+- Eh, dit Harry, je sais, on peut demander si vous pouvez dormir ici, mon oncle passe le weekend à la maison. Pendant la nuit, on lui vole la clé et voilà, le tour est joué.
+
+- Super ! Répondirent en cœur Ron et Hermione.
+
+Les enfants descendirent les escaliers et allèrent demander à leurs parents respectifs si Ron et Hermione pouvaient dormir ici.
+
+- Papa maman, demanda Harry, est-ce que Ron et Hermione peuvent dormir ici ?
+
+- Oui bien sûr !', true, true),
+  ('bc0ce291-bba9-4fa5-96dd-987c0d3eaccc', 'bc0ce291-bba9-4fa5-96dd-987c0d3eaccc', '584e5e2c-0673-4769-b70f-c956d366d6e4', 10, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Dit Harry, c''est pas ton parrain qui a la clé ? dit-Hermione d''un air étonné.
+
+Harry lui répondit :
+
+- Si mais j''ai vu que mon parrain lui a passé la clé !
+
+Hermione lui répondit moins étonné :
+
+- Ha ! D''accord !
+
+Ron leur répondit :
+
+- On doit prendre cette clé c''est hyper important !
+
+Ils répondirent tous ensemble :
+
+- On est d''accord !!
+
+le temps passe et les enfants se racontent leur vie, leur famille, leurs animaux de compagnie...
+
+Alors la maman de Harry appela les enfants pour dîner.
+
+- Les enfants venez manger !!dit-la maman d''Harry toute contente.', true, true),
+  ('445580bf-a521-4c13-b947-488d7ebdbf37', '445580bf-a521-4c13-b947-488d7ebdbf37', '584e5e2c-0673-4769-b70f-c956d366d6e4', 11, '23e58c00-a6ea-4334-a747-d0d971f666f1', 'Les enfants dévalent les escaliers. Et une raclette les attend en bas avec des bonnes pommes de terre.
+
+- Oui, crient les enfants, affamés.
+
+- Du calme, dit la mère d''Harry.
+
+Quand le repas est fini, Harry, Ron et Hermione retournent dans la chambre.
+
+- Mauvaise nouvelle, dit Harry, en fermant la porte de sa chambre, mon oncle ne dort pas ici, il va dans l''hôtel St Gabriel, ce n''est pas très loin, mais quand même.
+
+- Oh, je sais, s''exclame Ron, on va quand même pas renoncer, alors on prend un sac, on met des affaires comme une corde... Et on lui vole la clé.
+
+- Ça sera risqué, dit Hermione, mais ça peut le faire.
+
+- C''est d''accord, dit Harry, mais on le fait cette nuit, le temps de préparer l'' excursion.
+
+Les enfants mettent dans un sac : une corde, une gourde, une lampe, des gâteaux et bien sûr un petit sac, où mettre la clé.', true, true),
+  ('ac60390c-3358-498c-8c79-21d126c9c074', 'ac60390c-3358-498c-8c79-21d126c9c074', '584e5e2c-0673-4769-b70f-c956d366d6e4', 12, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Les enfants : pyjama et au lit ! dit la maman d''Harry.
+
+- Oui maman on le fait ! dit Harry sans le faire.
+
+Ils se mettent au lit, dès qu''il n''y eu plus un bruit ils partirent direction l''hôtel St Gabriel.
+
+Hermione dit :
+
+- C''est à combien de temps de marche ?
+
+Je lui répondis :
+
+- 6 minutes !
+
+On prit la route tout se passe bien mais il faut s''activer un peu !
+
+Ron dit :
+
+- On est arrivé je crois !
+
+Je lui répondis :
+
+- Oui, en effet !
+
+On entre, je demande à l''accueil :
+
+- Bonsoir madame, j''aimerai savoir où est la chambre de Jean-Claude Potter s''il vous plait !
+
+Elle me demanda :
+
+- Vous êtes de sa famille ?
+
+Je lui répondis :
+
+- Oui, c''est mon oncle !
+
+Elle me dit :
+
+- Chambre 50 au 7 étage !
+
+On répondit :
+
+- Merci, bonne soirée !
+
+On prit l''ascenseur, on arriva devant la chambre !
+
+Ron dit :
+
+- Mince ça a l''air fermé !
+
+Hermione répondit :
+
+- Mais non regarde !
+
+Elle ouvrit la porte tout doucement pour ne pas réveiller mon oncle. On se faufila discrètement et prit la clé qu''on mit dans le petit sac.
+
+On repartit la dame nous dit :
+
+- Au revoir, bonne soirée !
+
+On lui répondit :
+
+- A vous aussi madame !
+
+On repartit très vite chez moi, pour ouvrir le placard.
+
+- On y est ! dit Ron.
+
+On monta dans ma chambre. On y est le moment de vérité. Que-est ce que mes parents me cachaient sur ce placard ?
+
+J''ouvris le placard.
+
+Ron nous dit :
+
+- Tiens c''est bizarre on dirait un portail !
+
+Hermione dit d''un ton savent :
+
+- C''est un vortex, un portail qui va à un autre endroit mais où...?', true, true),
+  ('476d6ca9-f233-493d-a2f3-af3747823421', '476d6ca9-f233-493d-a2f3-af3747823421', '9ff72d95-f664-4ddd-a370-a2ebce802703', 1, '6507542d-0f94-44cc-b838-7fec446b76e7', 'La légende racontait que dans les fonds marins, une forêt de coraux et d''anémones colorées abritait poissons et mammifères marins, dont une troupe de dauphins. Parmi eux, il y avait Tchoky le dauphin. C''était un jeune mâle qui vivait très à l''écart de la troupe. On ne lui attribuait que peu d''attention car on disait, dans la troupe des dauphins, qu''il était trop peureux pour siéger au Conseil. Chaque jour, il traversait la forêt d''anémones et de coraux pour rendre visite à son amie Laya la tortue marine. C''était la seule à qui il pouvait réellement faire confiance. C''était une jeune femelle du même âge que lui, qui l''invitait souvent à goûter chez elle. Sa maman, une belle et grande tortue verte, préparait de délicieux sablés avec les ingrédients qu''elle trouvait dans la forêt marine.
+
+Très souvent, Tchoky et Laya allaient au parc Corailcolor. C''était un immense parc aquatique. Les jeux étaient faits avec les coraux et les anémones qui vivaient par ici. Ils adoraient ce parc. C''était leur terrain de jeux favoris, à part peut-être les coraux de la forêt.
+
+Quand ils n''y allaient pas, ils se promenaient dans la forêt. Tchoky n''était pas souvent au camp des dauphins. Ces derniers s''étaient installés dans un immense buisson de coraux et d''anémones. Un buisson multicolore.
+
+La salle du Conseil était installée sous les branches d''un grand corail orange qui formait une sorte de voûte au dessus de la table du conseil. On avait choisi cet endroit car les branches du corail stoppaient le bruit des autres dauphins à l''extérieur pendant les réunions du Conseil.
+
+Mais voila qu''un jour, Tchoky en eu assez. Entre les horribles remarques que lui faisaient les autres dauphins, les habitants de la forêt qui le narguaient à chaque fois qu''il passait, ces parents qui étaient trop occupés à chouchouter ses frères et sœurs, et Laya qui ne l''invitait même plus, s''en était trop. Il décida de partir, loin de cet ennui et de ces reproches que lui faisaient les habitants de la forêt. Il décida donc de prendre la fuite.
+
+En effet, par une nuit fraîche, il sortit doucement du corail bleu qui servait de maison à sa famille. Tout le monde était endormi. Il zigzagua entre les coraux et les anémones qui composaient le buisson et servaient de maison aux dauphins. Puis il sortit du buisson et se retrouva dans la forêt. Les chemins taillés dans les coraux et les anémones, faits pour pouvoir circuler, formaient un labyrinthe géant. Mais ce labyrinthe, Tchoky le connaissait. Comme tous les autres habitants de la forêt d''ailleurs.
+
+C''était calme. Tchoky circula dans les chemins en direction de la sortie de la forêt marine. Cette dernière était marquée d''un immense portail jaune entre deux grands coraux rouges. Il n''y avait de gardes, juste un portail. Pour les gardes, c''était le cas le jour, quatre requins montaient la garde de chaque côté du portail. Deux à l''extérieur et deux à l''intérieur. Mais la nuit ils n''étaient pas là. Ce qui arrangeait bien Tchoky. Car ces immenses poissons carnivores ne l''auraient sûrement pas autorisé à sortir. Donc il eut juste à pousser le portail pour sortir de la forêt.
+
+A chaque coup de nageoire, la chaine d''ennuis qui le retenait dans cette sorte de prison se brisait un peu plus. Il s''en allait, loin de tous les reproches que lui faisait la forêt. Il atteignait bientôt la mangrove puis, après l''avoir traversée sans dommage, il se retrouva aux abords de la Plaine Interdite. Elle s''appelait comme cela car c''était une plaine marine entourée de grands rochers sombres qui abritaient des requins et des murènes.
+
+Tchoky hésita. On lui racontait des histoires qui parlaient des accidents qu''avaient eu d''autres mammifères marins plus grands que lui en la traversant. Et puis, s''il s''engageait dans cette plaine maudite, il n''était pas certain d''en ressortir vivant après. Puis il pensa :
+
+« Si j''attends encore ici, je vais me retrouver entouré d''habitants de la forêt d''un côté et des requins et des murènes par milliers de l''autre. C''est décidé j''y vais ! »
+
+Et il s''engagea.
+
+Alors qu''il arrivait au premier tiers, il vit une immense ombre passer en ondulant.', true, true),
+  ('e494eb60-2ee6-470f-aab8-9dc4bf34c66a', 'e494eb60-2ee6-470f-aab8-9dc4bf34c66a', '9ff72d95-f664-4ddd-a370-a2ebce802703', 2, '882d0697-a4b9-453e-b5f5-d5896101605e', 'Quand soudain une autre dauphine était coincée. Tchoky alla l''aider.
+
+Et il dit « attends, arrête de bouger tu vas empirer les choses.
+
+Peu de temps après la Dauphine est libérée.
+
+Et ils font connaissance ! La dauphine s''appelle Ella. Elle est très jeune. Ils deviennent les meilleurs amis du monde.
+
+Ensemble ils ont fait du yoga, de la pâtisserie, de la gym, mais tout ça dans l''eau.
+', true, true),
+  ('d196b0cd-36f2-47ba-9f8b-636eb945c23e', 'd196b0cd-36f2-47ba-9f8b-636eb945c23e', '9ff72d95-f664-4ddd-a370-a2ebce802703', 3, '6507542d-0f94-44cc-b838-7fec446b76e7', '- Génial, ces pâtisseries avec du sable. En plus, comme il est mouillé, c''est plus facile.
+
+- Oui, je suis d''accord Tchoky. Mais dis-moi, où on est ?
+
+Soudain, pour la deuxième fois, une ombre passe en ondulant. Une immense ombre, tel un serpent. Tchoky s''écrit :
+
+- Ella, on est dans la Plaine Interdite !!!
+
+- La Plaine Interdite, c''est quoi ça ?
+
+- C''est l''endroit le plus hostile des océans. C''est une plaine maudite !
+
+- Oh, oh !!!
+
+Ella a bien raison de dire ça, car dans un horrible rugissement, une ombre charge.
+
+- Un grand requin blanc ! hurle Tchoky. Vite tirons nous !
+
+Le requin grogne et fonce sur Ella, qui n''a pas immédiatement réagit. Tchoky, lui, est aux prises avec une murène aux dents aussi tranchantes qu''un couteau. Seulement, Tchoky avait quelqu''un d''autre qui rendait la vie plus agréable dans la forêt. Maître Chung. C''était un dauphin très savant et qui lui avait appri à maîtriser le Kung-fu des mers, un sport de combat. Et Tchoky c''était montré doué, très doué pour ce sport.
+
+Aussi, après avoir ondulé pour éviter que la murène ne le morde, il lui asséna un coup de nageoire en pleine figure.
+
+Après l''avoir assommé, il fonça aider Ella, qui faisait ce qu''elle pouvait pour échapper aux immenses mâchoires du requin blanc. C''est alors qu''une idée germa dans son esprit. Il allait attirer l''attention du requin.
+
+- Eh Oh, le requin, viens m''attraper, s''exclama Tchoky.
+
+Le requin, après avoir pousser un grognement, chargea Tchoky. Mais le dauphin fit une pirouette en arrière pour l''éviter et le requin, qui n''eut pas le temps de freiner, fonça sur un rocher, s''assommant lui-même.
+
+- Et hop, un de moins, ricana Tchoky.
+
+Puis, le dauphin recula face à des adversaires de plus en plus nombreux. Ella, elle, poussa un gémissement.
+
+- Tchoky ! On peut s''en aller ??
+
+- Heu... d''accord ! Dit Tchoky d''une voix très mal assurée.
+
+Et les deux dauphins foncèrent. Soudain, Tchoky fût arrêté par des murènes qui ricanaient. Tchoky freina, hésita, puis il chargea. Il traversa le mur que formaient les murènes en envoyant voler deux ou trois de ces sales bestioles.
+
+Ella avait perdu des yeux Tchoky. Alors qu''elle tentait de le retrouver, elle aperçu un requin marteau face à elle. Soudain, sans prévenir, il fonça sur Ella. Elle poussa un cri, puis pensa : « Je suis une dauphine ! Je suis donc plus légère que cette immonde créature. » Et, elle décida de nager le plus vite possible pour essayer de semer le requin marteau.
+
+Une course poursuite s''engagea entre Ella et le requin. Elle était certes rapide, mais le requin gagnait du terrain. La seule pensée des dents acérées du requin la poussait à accélérer. Soudain, elle aperçut un petit rocher solitaire parfait pour assommer un requin. D''un coup de queue, Ella accéléra jusqu''au rocher, et, rassemblant toutes ses forces, le souleva. Elle attendit que le requin marteau soit assez près pour lui lancer le rocher dessus. Le requin fût aplati sous le choc. Ella avait triomphé.
+
+Tchoky parvint à semer les murènes et à se réfugier dans une grotte dont l''ouverture était trop étroite pour qu''un requin ou une murène passe. En fait, Tchoky était sûr que les carnivores de cette plaine ne connaissaient même pas l''existence de cette grotte. Soudain, il entendit une voix.
+
+- Tchoky, c''est toi ?
+
+- Ella !!!
+
+- Ouf ! Tchoky, ces murènes et ces requins, d''où ils viennent ?
+
+- Ils habitent ici, Ella.
+
+- Mince, on est coincé ?
+
+- Non, on va trouver une solution.
+
+Tchoky fit signe à Ella de s''approcher de la fente par laquelle ils étaient rentrés. Une véritable pagaille, Tchoky aperçut même le requin que Ella avait assommé grâce au rocher.
+
+- Dis Ella, comment ça se fait qu''il y ait un requin qui se prend pour un escargot ?
+
+- Non, non, il s''est juste prit une météorite sur le crâne, dit Ella, en pouffant.
+
+- C''est toi qui lui a fait ça ? demande Tchoky surprit.
+
+- Exactement ! Et toi, qu''est-ce que tu faisais pendant ce temps là ?
+
+- Moi, j''ai propulsé des murènes jusqu''à Pluton.
+
+Et les deux amis ricanèrent.
+
+- Bon alors maintenant, vérifions qu''il n''y ait aucun requin à la sortie de la Plaine. Dit Ella.
+
+- Personne ! lui répondit Tchoky, on peut y aller, mais en toute discrétion.
+
+Et c''est en se glissant à travers la faille qu''ils longèrent les rochers de la Plaine. Ils arrivèrent bientôt au bout du chemin.
+
+- Victoire ! On a traversé la Plaine Interdite ! L''aventure continue !', true, true),
+  ('42cdf200-d165-44d7-b4ea-3f899365cc14', '42cdf200-d165-44d7-b4ea-3f899365cc14', '9ff72d95-f664-4ddd-a370-a2ebce802703', 4, '882d0697-a4b9-453e-b5f5-d5896101605e', 'Tchoky et Ella continuent de nager sauf que là derrière eux il y avait un dauphin poursuivit par un requin qui avait très très faim.
+
+Donc Ella et Tchoky décidèrent d''aller l''aider et disent « chacun d''un côté ! »
+
+Dès que le dauphin est sauvé, ils font connaissance.
+
+Elle dit « Salut merci de m''avoir sauvé, je m''appelle Alicia et je suis née le 1er juin »
+
+Et vous ? 
+
+Tchoky dit “Moi c’est tchoky et elle, c''est Ella”', true, true),
+  ('bc7fd07e-ccb9-44a7-ae9f-b9e8138c5a00', 'bc7fd07e-ccb9-44a7-ae9f-b9e8138c5a00', '9ff72d95-f664-4ddd-a370-a2ebce802703', 5, '6507542d-0f94-44cc-b838-7fec446b76e7', '- Enchanté, dit Tchoky. Ces monstres sont loin à présent, et toutes ces émotions m''ont donné faim ! Nous n''avons rien mangé depuis notre départ. Qu''en penses-tu Ella, si on allait chercher de quoi manger ?
+
+- Je connais justement un camp remplis de poissons délicieux et bien juteux, propose Alicia. Ca vous tente ?
+
+- Mmmmh oui, qu''en penses-tu Ella, dit Tchoky ?
+
+- Pourquoi pas, après tout si c''est pour manger, je veux bien.
+
+- Trés bien, suivez moi, dit Alicia.
+
+- C''est loin ?
+
+- Heuuuu ça dépend, si vous êtes rapide ça peut ne pas l''être. Sinon ...
+
+- Bon, on y va ! s''exclama Tchoky.
+
+Pendant une ou deux heures, nos trois dauphins nagent, tout en faisant connaissance. Tchoky et Ella apprennent donc que Alicia a été chassée de chez elle par sa belle mère, une grande et méchante dauphine. Et qu''Alicia recherche donc un endroit où elle pourrait vivre tranquillement.
+
+- Je te conseillerais bien la grande barrière de corail, mais vu comment les dauphins sont là bas... c''est pas génial, dit Tchoky.
+
+- Et puis on ne va pas te faire traverser la plaine interdite non plus ! dit Ella.
+
+La jeune dauphine ralentit son allure et bailla :
+
+- Par contre, je vous le dis, dès qu''on a mangé, on se trouve vite un endroit abrité pour dormir. Il y en a assez de nager sans pouvoir se reposer deux minutes.
+
+Alicia apprit que Tchoky s''était enfuis de chez lui pour cause de vie moisie, et que Ella était orpheline sans demeure.
+
+- Taisez vous ! dit soudain Alicia. On approche.
+
+- Et ? demanda Ella, confuse.
+
+- Ces poissons ont beau être délicieux, ils sont dotés d''une très bonne ouïe et d''une extrême rapidité et d''agilité incomparable.
+
+- Ah... ça rend les choses moins faciles.
+
+- Ne t''inquiète pas, ils sont très nombreux.
+
+- Les filles ! murmura soudain Tchoky. Je vois des choses bouger dans le sable !
+
+- Ce sont eux ! Prêt ??? FONCEZ !!!
+
+Les trois dauphins dégringolèrent la petite pente qui les séparait du fond, et surgirent tels des diables. Cela provoqua la pagaille chez les poissons. Ils sortirent par millier du sable. Tchoky se lécha les babines, et fonça à l''aveuglette. Il goba trois ou quatre poissons d''un coup. Effectivement ils étaient très bons. Il en mangea douze, treize, quatorze... Au bout d''un moment il dû s''arrêter.
+
+- J''ai trop mangé ! dit il à Ella et Alicia.
+
+Nos trois amis sortirent du camps des poissons et trouvèrent à quelques mètres de là un grand corail vert qui tombait tel un saule pleureur. Ils se glissèrent sous les branches du corail et s''endormirent.
+
+', true, true),
+  ('e2a974de-7765-4083-ab41-3e152f0e1261', 'e2a974de-7765-4083-ab41-3e152f0e1261', '9ff72d95-f664-4ddd-a370-a2ebce802703', 6, '6507542d-0f94-44cc-b838-7fec446b76e7', 'Au petit matin, Tchoky se réveilla en sursaut. Une tortue verte à l''air familier se tenait devant lui, souriante.
+
+- Alors Tchoky, on prend la fuite ? demanda t''elle ?
+
+- Laya !!!', true, true),
+  ('5f970da8-8f7f-4b65-9c68-2b640282d0f4', '5f970da8-8f7f-4b65-9c68-2b640282d0f4', '9ff72d95-f664-4ddd-a370-a2ebce802703', 7, '6507542d-0f94-44cc-b838-7fec446b76e7', '- Je suis si content de te revoir ! Dit Tchoky
+
+- Moi aussi Tchoky, mais pourquoi es-tu parti ?
+
+Tchoky hésita. Il avait peur de blesser Laya en lui disant qu’il avait assez vécu dans la forêt marine. Puis, il essaya de s’expliquer.
+
+- Bon, ne le prends pas mal Laya, mais… Et bien, j’en avais un peu… assez… tu comprends ! Tu ne m’invitais plus. Mes parents chouchouttent depuis toujours mes frères et sœurs et dès qu’on me voyait passer, on me narguait là-bas.
+
+- Mais enfin Tchoky, tu sais pourquoi je ne t’invitais plus ?
+
+- Heu… Non ! Pourquoi ?
+
+- Ma mère allait mettre bas de mon petit frère.
+
+- Ah bon ?! Et bien, félicitations !
+
+- Merci Tchoky. Il s’appelle Romain.
+
+Tchoky trouvait le prénom Romain tout à fait charmant. Puis, le jeune dauphin présenta les deux dauphines qu’il avait rencontrées pendant sa fuite.
+
+- Je te présente Alicia que j’ai rencontrée après avoir traversé la Plaine Interdite…
+
+- Quoi ?! Tu as traversé la Plaine Interdite ?! Tu es maboule ou quoi !
+
+- Heu… Oui, répondit Tchoky un peu choqué par la réaction de son amie. Sinon, je te présente aussi Ella ma meilleure amie.
+
+Tchoky se rendit compte qu’il venait de faire une boulette. Sa véritable meilleure amie était Laya. Celle-ci le regarda d’un œil noir.
+
+- Enfin… ma deuxième meilleure amie, tu vois. La meilleure amie en dessous. Tu comprends ?
+
+- Oui, oui j’ai compris, ne t’inquiète pas, répondit Laya d’un air apaisé. Puis, celle-ci serra la nageoire de Ella et Alicia.
+
+Nos quatre amis continuèrent leur voyage. Ils n’eurent pas trop de soucis pendant un moment. Ils affrontèrent seulement La Marée des Méduses, une sorte de grand champ de méduses. Il devait y en avoir mille. Mais à leur grand soulagement, il n’y eu aucun accident. Et lorsqu’ils eurent traversé La Marée des Méduses, ils trouvèrent un grand cercle de sable entouré par des coraux verts, rouges et jaunes. Il y avait là une immense quantité de planctons. Les quatre compères s’en régalèrent. Puis, ils trouvèrent, creusé dans un rocher, un abri dans lequel ils s’abritèrent pour dormir.', true, true),
+  ('e2eeadf2-71b9-446a-9133-c53f08276917', 'e2eeadf2-71b9-446a-9133-c53f08276917', '9ff72d95-f664-4ddd-a370-a2ebce802703', 8, '6507542d-0f94-44cc-b838-7fec446b76e7', 'Au petit matin, quand Tchoky ouvrit les yeux, Ella, Alicia et Laya étaient déjà debout. Alicia tournait en rond dans l''abris, Ella chantonna l''air ahuri et Laya observait un coin du rocher l''air concentré.
+
+Tchoky se redressa, bâillât à s''en décrocher la mâchoire. Il s''approcha de sa meilleure amie et lui demanda :
+
+- Qu''est ce que tu regardes Laya ?
+
+Celle-ci lui répondit en marmonnant :
+
+- Regarde ça Tchoky.
+
+Laya observait un signe gravé dans la pierre. C''était un triangle avec 2 ronds croisés comme des alliances. Une étoile était gravée dans le fond du triangle.
+
+- C''est un signe bien étrange, murmura Laya. Appelle les filles, on va voir ce qu''elles en pensent.
+
+- Alicia, Ella, venez !
+
+Les deux dauphines s''avancèrent.
+
+- Regardez ce drôle de signe, dit Tchoky.
+
+Alicia s''exclama :
+
+- Vous saviez qu''il y a un très très vieux poulpe super savant qui habite près d''ici ? Enfin à deux heures d''ici...
+
+- C''est parfait ! s''écria Tchoky.
+
+Et avant que les dauphines aient pu répondre, le jeune mâle fonçait déjà chez le vieux poulpe.
+
+Après deux heures, ils arrivèrent dans un grand cercle d''anémones bleues et violettes.
+
+C''est alors qu''ils aperçurent enfin la grande silhouette du vieux poulpe savant.', true, true),
+  ('b20b3ccb-fe9b-4b4a-9b5e-ece47deba720', 'b20b3ccb-fe9b-4b4a-9b5e-ece47deba720', '9ff72d95-f664-4ddd-a370-a2ebce802703', 9, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Ella commença à le saluer :
+
+- Bonjour Monsieur Le Poulpe nous venons vous voir moi et mes amis ! Dit-elle en pointant du doigt Tchoky, Alicia et Laya.
+
+Le Poulpe leur répondit :
+
+- Bonjour mes amis, je m''appelle Gerardo !
+
+Alice lui répondit :
+
+- Enchantée monsieur, moi c''est Alicia.
+
+Gerardo leur répondit :
+
+- Pourquoi voulez vous me voir ?
+
+Tchoky lui répondit :
+
+- Bonjour Monsieur. C''est pour un triangle avec 2 ronds croisés comme des alliances. Une étoile est gravée dans le fond du triangle. Savez-vous à quoi cela correspond ?', true, true),
+  ('39e28f2e-ca0d-4ac8-939c-b5e46b3b315b', '39e28f2e-ca0d-4ac8-939c-b5e46b3b315b', '9ff72d95-f664-4ddd-a370-a2ebce802703', 10, '6507542d-0f94-44cc-b838-7fec446b76e7', '- Et bien.... Je ne sais pas, les enfants, je ne sais pas.
+
+Le vieux poulpe se gratta la tête avec l''une de ses immenses tentacules.
+
+- Suivez moi. Je dois bien avoir quelque chose là dessus.
+
+Il les emmena dans sa maison. Elle était faite dans un grand corail rose. Le poulpe prît un livre d''une étagère. Celui-ci était fait de velours rouge et son titre cousu au fil doré. Le livre était intitulé : « Mille et un signes aquatiques ».
+
+Il se mît à le feuilleter.
+
+Alicia bondissait partout dans la maison en criant : «  Alors, alors, vous l''avez trouvé ? Le signe, vous l''avez trouvé ? »
+
+Ella nageait autour d''un fauteuil en ne trouvant rien d''autre à dire que : « Quel signe étrange... je me demande ce que cela signifie »
+
+Laya, pour sa part, agitait ses deux nageoires arrières en trépignant.
+
+Tchoky, lui, observait le poulpe.
+
+Cela paraissait incroyable aux yeux du dauphin qu''un animal si grand soit inoffensif, qu''il ne fasse peur à personne. Ce dernier devait bien cacher quelque chose à Tchoky et ses amies. Un don, un pouvoir magique, un secret...
+
+Le jeune dauphin se promît d''enquêter là dessus et d''essayer de percer le mystère du poulpe savant.', true, true),
+  ('843b4c15-0bd3-4c78-b098-3f1a86b7a11d', '843b4c15-0bd3-4c78-b098-3f1a86b7a11d', '9ff72d95-f664-4ddd-a370-a2ebce802703', 11, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Laya voyait que Tchoky s''inquiétait sur le poulpe. Et elle lui dit :
+
+- T''inquiète p''tit TchoTcho, papy poulpe c''est un savant !!!!!!
+
+Gerardo leur dit :
+
+- Tatatata, je l''ai trouvé c''est un portail qui conduit à la marraine du roi des océans !!! Remettez les alliances dans l''ordre et vous accéderez à l''habitacle de la marraine du roi des océans !
+
+Ella dit :
+
+- C''est trop cool !! On y va, on y va, on y va, on y va !!!!!! Dit-elle toute contente', true, true),
+  ('ea67dc1e-e29c-49a7-9dbc-9e32cbe441cf', 'ea67dc1e-e29c-49a7-9dbc-9e32cbe441cf', '9ff72d95-f664-4ddd-a370-a2ebce802703', 12, '6507542d-0f94-44cc-b838-7fec446b76e7', '- Non ! trancha Laya d''un ton sec.
+
+C''était le soir. Les 4 amis avaient quitté la maison du poulpe et étaient parti s''installer à l''abri d''un corail qui ressemblait à un saule pleureur. Ils s''étaient réfugiés dessous et Ella avait allumé une sorte de feu mais sous l''eau. Il était turquoise et réchauffait très vite.
+
+Tchoky était allé chercher du poisson pour Alicia, Ella et lui (Laya mangeait des méduses). Alicia avait trouvé des morceaux de bois, et Laya était partie chercher des méduses.
+
+Ils avaient planté le tout sur des bâtons et étaient en train de les faire cuire grâce au feu.
+
+Alicia venait de supplier ses amis d''essayer de percer le mystère des alliances et d''aller chez la marraine du Roi des océans.
+
+- Pourquoi ? demande Alicia, surprise. Tu ne veux pas y aller ? Franchement Laya, la marraine du Roi des océans, ce n''est pas donné à tout le monde de la voir, quand même !
+
+- Non ! répéta Laya. Si ça se trouve, nous ne pourrons même pas revenir après.
+
+- Quelle importance, je n''ai pas de maison de toute façon !
+
+A ce moment, Laya vît rouge. Elle hurla :
+
+- Et bien moi si ! Arrête de ne penser qu''à toi ! Je dois retourner à la forêt marine ! ET TOI !!!
+
+Elle pointa de la nageoire Tchoky et s''écria :
+
+- Tu retournes avec moi à la maison, compris ? Tes parents se font un sang d''encre depuis que tu es parti !
+
+- Mais Laya, dit Tchoky, je ne peux pas retourner là bas. Tu sais très bien que je suis plus heureux ici, en liberté.
+
+- JE M''EN FICHE, tempêta t''elle. TU A FAIT PEUR A TOUT LE MONDE ! LE CHEF DE LA FORET A FAILLI ENVOYER DES ANIMAUX A TA RECHERCHE ! SI TA GRAND-MERE N''AVAIT PAS ARRÊTÉ LE CHEF, IL N''Y AURAIT QUASIMENT EU PLUS PERSONNE DANS LA FORET ! NOMBREUX ONT ETE CEUX QUI VOULAIENT PARTIR À TA RECHERCHE !
+
+Laya semblait sur le point d''exploser de rage.
+
+- Donc , reprit elle plus calmement, tu vas gentiment me suivre et nous allons retourner à la maison.
+
+Elle se retourna vers Alicia et hurla :
+
+- ET TOI ALICIA, SI TU VEUX PARTIR À LA RECHERCHE DE CETTE FAMEUSE MARRAINE, VAS Y ! DE TOUTE FACON JE NE TE SUIVRAIS PAS ET TCHOKY NON PLUS !
+
+Ella, qui jusque là, n''avait pas prononcé un mot, dit d''une toute petite voix :
+
+- Euh... Laya ? Est-ce que je peux savoir où est-ce que j''irai moi, si Alicia part à la recherche de la marraine et que toi et Tchoky vous rentrez chez vous ?
+
+- Et bien soit tu pars avec Alicia, soit tu viens avec nous. Tu préfères quoi?
+
+- Je veux bien aller chez vous mais par contre je veux quand même continuer à chercher des informations sur ce fameux triangle.
+
+- C''est d''accord, dit Laya en tendant la patte.
+
+Ella la serra puis bailla et se coucha.
+
+Tchoky et Laya terminèrent leur repas et imitèrent Ella. Alicia les observa, les yeux plissés, puis d''un coup de nageoire sortit du corail après avoir prit son bâton de poisson et l''avoir trempé dans le feu. Une flamme jaillissait à présent du bout du bâton. Elle fila à la caverne et se mît à observer attentivement le signe gravé à la lueur de la flamme.
+
+Soudain, les mots du poulpe lui revinrent en mémoire « Remettez les alliances dans le bon ordre et vous accéderez à l''habitacle de la marraine du Roi des Océans ».
+
+Elle prit un bâton et se mit à dessiner le signe dans le sable en changeant l''ordre des alliances.
+
+Le lendemain matin, Alicia n''avait pas réussi à changer l''ordre des alliances mais elle se promit de réessayer jusqu''à réussir.
+
+Tchoky, Laya et Ella étaient prêts à partir. Laya avait fait quelques étirements en sortant et rentrant dans sa carapace à plusieurs reprises. Tchoky et Ella avaient fait tourner leurs nageoires pour s''échauffer.
+
+Ils partirent rapidement et le jour suivant ils arrivèrent devant la Plaine Interdite.
+
+- Comment as-tu fait pour contourner la Plaine Interdite ? demanda Tchoky à Laya.
+
+- Venez par ici, dit celle-ci.
+
+Elle les emmena dans un passage creusé dans la falaise. Ils le traversèrent très rapidement. De temps à autres Tchoky entendait des mouvements prés du tunnel et en jugeait que les requins et les murènes circulaient dans la plaine. Bientôt ils arrivèrent à la sortie, puis devant la mangrove et après avoir traversé celle-ci, ils se retrouvèrent devant le portail de la Forêt Marine. Les grands requins inoffensifs surveillaient l''accès à celui-ci. Ella gémit mais Tchoky la rassura en lui disant que ces requins ne la toucheraient pas. Après avoir fouillé les trois amis, les carnivores ouvrirent le portail. Tchoky, Laya et Ella pénétrèrent dans la forêt.
+
+- Bienvenue chez toi Ella, dit Laya.
+
+- Tchoky ! La maman du jeune dauphin fonça sur son fils. “Ne refais plus jamais ça, tu m''entends ! Oh mon chéri.”
+
+- Maman, je te présente Ella, est-ce qu''elle peut vivre avec nous ?
+
+- Mais bien sûr, répondit la mère de Tchoky.
+
+Après ces heureuses retrouvailles, les 3 amis se séparèrent. Laya fonça voir sa famille, et Tchoky et Ella allèrent dans le camp des dauphins.
+
+Pendant ce temps là, Alicia étudiait toujours la signification du triangle. Soudain elle poussa un cri, elle avait trouvé la solution. Elle prit un gros galet et se mit à frapper le triangle gravé pour redessiner les deux alliances. Sauf que cette fois, elle les mit dans l''ordre. Lorsqu''elle eu terminé, les alliances n''étaient plus croisées et se frôlaient presque.
+
+Aussitôt, un halo de lumière apparut devant la grotte. Alicia n''hésita pas une seconde et fonça dedans. Elle se sentit soudain tournoyée dans de la lumière verte, bleue, rose et violette. Puis elle atterrit de nouveau et se fut le noir.', true, true),
+  ('6360e83f-e0ce-4ffc-87a6-4ab56dc17b73', '6360e83f-e0ce-4ffc-87a6-4ab56dc17b73', '4c87c82c-9f9b-480a-99a1-9531d4d06c53', 1, '9ee5c32d-c6f9-4b8e-843b-5a779492f36a', 'Nous allons vous raconter l''histoire d''un gentil petit garçon âgé de 11 ans qui s''appelle Sacha. Il a deux beaux yeux noirs et toujours le sourire aux lèvres.
+
+Il habite à Zadgad, un petit village perdu dans la steppe de Mongolie et a deux grands frères et une petite sœur.
+
+Lui et sa famille habitent une yourte, avec un intérieur joliment décoré par sa maman qui s''applique à rendre l''endroit agréable et chaleureux.
+
+Son papa s''occupe des yacks qui constituent l''essentiel de son bétail. Sacha aime aller avec son papa l''aider à traire les yacks et boit leur lait bien chaud.
+
+Il aime aussi monter à cheval. Son papa lui a appris quand il était plus jeune et un de ses plaisirs, c''est partir au galop dans la prairie quand le temps lui permet.
+
+A l''école du village, son maître est gentil mais reproche souvent à Sacha d''être dans la lune.
+
+C''est un peu vrai car le jeune garçon n''aime pas être enfermé dans la classe. Alors il regarde souvent, très souvent même, par la fenêtre ce qu''il se passe, les gens qui passent, les oiseaux qui volent, la forme des nuages.
+
+Son maître le rappelle à l''ordre, mais rien n''y fait. Sacha ne peut s''en empêcher.
+
+Peut-être qu''un jour, il fera comme les oiseaux et partir du village pour voir ce qu''il se passe ailleurs.
+
+Pour le moment il va essayer de se concentrer car il sait qu''à la sortie de l''école, il pourra recommencer à rêver sur le chemin du retour à la maison.', true, true),
+  ('8602d9ef-f2f0-4906-908a-f09a7fd9816a', '8602d9ef-f2f0-4906-908a-f09a7fd9816a', '4c87c82c-9f9b-480a-99a1-9531d4d06c53', 2, '6507542d-0f94-44cc-b838-7fec446b76e7', 'Dring ! La sonnerie annonce la fin des cours. Sacha met du temps à se rendre compte que tous les élèves se précipitent dans la cour. Certains pour attendre le bus scolaire, d''autres pour courir à la boulangerie chercher le goûter et d''autres encore pour rentrer faire leur devoir chez les copains. C''est alors que le maître de Sacha lui dit :
+
+- Sacha, les cours sont terminés.
+
+- Hein ?!
+
+- Oui, oui, les cours sont terminés.
+
+- Ah, et bien, heu... à lundi Monsieur.
+
+Sacha se hâte de sortir dans la cour. Des élèves surgissent des toilettes, tandis que d''autres, appuyés contre les arbres, bavardent, leur cartable sur l''épaule. Sacha, sans attendre, file au portail pour attendre le bus scolaire. Quand celui-ci arrive, Sacha qui était en train de rêver, sursaute au bruit de moteur que fait le bus. Il grimpe dedans, va s''asseoir et ferme les yeux, sans doute pour rêver encore. De quoi ? On ne le saura jamais. Le jeune garçon ouvre les yeux au moment où le bus s''engage dans l''allée qui mène chez lui. Le bus s''arrête devant la yourte de sa famille. Sacha saute du bus après avoir salué le chauffeur. Il s''avance vers sa yourte contemporaine. Sa mère l''accueille à la porte, portant un tablier autour de la taille et souriant à son fils.
+
+- Bonjour maman.
+
+- Bonjour mon chéri. La journée s''est bien passée ?
+
+- Oui, très bien.
+
+- Tu as beaucoup rêvé ?
+
+- Heu... Oui, enfin un peu.
+
+- Ah, très bien. Ton père est allé chercher Liria à la crèche.
+
+- Et, est-ce que Macéo est rentré du lycée ?
+
+- Oui, et Louis vient d''arriver du collège.
+
+- Super ! On peut aller jouer au foot dans le jardin ?
+
+- Bien sûr, mais, essayez de ne pas percher le ballon dans le Tilleul.
+
+- Promis ! Macéo !!! Louis !!! hurle Sacha. Vous venez jouer au foot ?
+
+- On arrive !!! s''exclame Macéo en descendant les escaliers dans la yourte.
+
+Louis, quant à lui, déboule de la cuisine une carotte à la main.
+
+- Gourmand, lui lance son aîné en envoyant son crayon sur le canapé depuis la quatrième marche. Il bondit et atterrit parterre devant son plus petit frère qui tient déjà son ballon, prêt à jouer.
+
+- Alors, vous venez ?!
+
+- Oui, c''est parti.
+
+Quand leur mère les appelle pour dîner, leur père vient d''arriver avec Liria.
+
+- « Sassa » ! « Makéo » ! « Zoui » ! zozote leur petite sœur.
+
+Pendant qu''ils dînent, sa petite sœur ne s''arrête pas de parler. Une vraie machine à parole.', true, true),
+  ('6a7aae40-1108-46c8-8c68-09af19ec7c0f', '6a7aae40-1108-46c8-8c68-09af19ec7c0f', '4c87c82c-9f9b-480a-99a1-9531d4d06c53', 3, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Au bout d''un moment Sacha dit :
+
+- Tu peux arrêter de parler.
+
+Liria lui répondit :
+
+- nan ze veux pas.
+
+Leur mère lui dit :
+
+- Liria ma chérie, peut-être que ton frère veut nous dire quelque chose d’important.
+
+- Oui justement, répondit Sacha, aujourd''hui à l''école j''ai eu un 20/20 sur les multiplications.
+
+- Ho félicitations mon chéri tu ne dois pas avoir beaucoup rêvé pour avoir eu cette excellente note !
+
+- Je te l''avais dis maman je n''ai pas beaucoup rêvé.
+
+Macéo lui dit : Demain Papa j''irai traire les yacks avec toi.
+
+- Je peux venir ? répondit Sacha.
+
+- Non Sacha Macéo ira avec moi demain tu a école. 
+
+Sacha essaya de négocier mais en vain.
+
+- Allez vous coucher les enfants, demain est une longue journée, dit leur mère.
+
+- Oui maman ! Répondent ils  mécontent.
+
+', true, true),
+  ('b868b010-c3b2-49f9-91e9-200df9ab567d', 'b868b010-c3b2-49f9-91e9-200df9ab567d', '4c87c82c-9f9b-480a-99a1-9531d4d06c53', 4, '9ee5c32d-c6f9-4b8e-843b-5a779492f36a', 'Le lendemain, Sacha se réveille, les cheveux en bataille, mais les yeux émerveillés.
+
+- Maman, j''ai fait un très beau rêve, je vais te le raconter.
+
+- Ce soir Sacha, répond Maman. Nous n''avons pas le temps maintenant, Tu vas être en retard à l''école.
+
+- Papa, j''ai fait un beau rêve et...
+
+Son Papa l''interrompt et lui fait la même réponse que Maman.
+
+Sacha se sent un fâché mais se dit :
+
+- Ce n''est pas grave, je vais le raconter à mes copains.
+
+Il arrive à l''école juste au moment où la sonnerie d''entrée en classe retentit.
+
+- Zut ! se dit-il, je n''ai rien pu leur dire. Je le ferai à la récréation.
+
+Le silence se fait dans la classe. Le cours de Mathématiques commence. Sacha n''aime pas les Maths. Ca ne le fait pas rêver les maths. C''est barbant et compliqué les Maths...
+
+Alors, Sacha repense à son rêve. Les copains vont être épatés quand il va leur raconter.
+
+En attendant, ses yeux se tournent vers la fenêtre pour admirer le ciel et les nuages. Sacha essaie de résister, de rester concentré sur le cours.
+
+- Je ne comprends rien à ce que dit le maître se dit-il. Pourtant, Papa et Maman aime quand j''ai une bonne note en Maths. Allez Sacha, lutte contre l''appel à la rêverie !
+
+Par bonheur arrive le moment où la sonnerie de la récréation résonne dans l''école.
+
+A peine dans la cour, Sacha retrouve ses bons copains.
+
+- Dites les gars, vous voulez que je vous raconte mon rêve de cette nuit ?
+
+- Ouais !! Bof !! Si tu veux mais fais vite parce que on veut jouer aux billes aussi ! répondent-ils en cœur.
+
+Sacha, tout heureux commence son récit :
+
+Dans mon rêve, j''ai volé sur un cheval ailé tout blanc et ensemble, nous avons survolé la terre entière, tous les pays, toutes les montages, tous les déserts, toutes les mers et les océans !!!!
+
+Ah ! Ah ! Ah ! Les copains éclatent de rire.
+
+- Tu rêves que tu voles toi ? Avec un cheval ailé en plus ? mais ça n''existe pas, ricane Igor
+
+- Je sais que ça n''existe pas mais c''est mon rêve rétorque Sacha.
+
+- - Ouais !! Tu as lu ça dans un livre et tu veux nous faire croire que toi, tu l''as rêvé. D''ailleurs, ma grande sœur m''a raconté une histoire, lu dans un livre de contes et qui ressemble à la tienne. Il y avait aussi un cheval ailé, et il s''appelait Pégase. Je n''ai pas rêvé mais je la connais ton histoire !!! Allez, on va jouer aux billes !!
+
+Sacha est très déçue et en colère que ses copains le prennent pour un menteur.
+
+Il se met dans un coin de la cour et se dit que ce soir, sa famille le croira et il leur expliquera tout ce qu''il a vu dans ce rêve. Et puis ça ne l''empêchera pas de faire d''autres beaux rêves qu''il aimera raconter.', true, true),
+  ('b7bb5a1b-79f4-4c9c-a42f-6fa79b8d3767', 'b7bb5a1b-79f4-4c9c-a42f-6fa79b8d3767', '4c87c82c-9f9b-480a-99a1-9531d4d06c53', 5, '6507542d-0f94-44cc-b838-7fec446b76e7', 'Malheureusement, quand il rentre chez lui son père n’est pas là. Liria et Louis manquent aussi à l’appel. L’odeur délicieuse des haricots verts prévus ce soir ne se pavanait pas dans la maison. Sa mère, assise sur le canapé affichait un air grave. Macéo ne dévala pas les escaliers comme à son habitude pour crier à son frère de les rejoindre, lui et Louis, pour une partie de football. On l’entendait seulement soupirer de temps en temps dans sa chambre.
+
+Sacha trouva que l’humeur monotone qui régnait chez lui n’était pas très normale. D’habitude, l’odeur de la cuisine éveillait les papilles, on distinguait le bruit de mastication que faisait Louis en mangeant ses carottes et Macéo grognait de plaisir en entendant la porte se refermer, puisque ça signifiait que son plus jeune frère était rentrer et qu’ils pourraient jouer au ballon.
+
+Non, cette fois ce n’était pas comme ça.
+
+Sacha demanda à sa mère :
+
+- Qu’est ce que c’est que cette ambiance pourrie ?
+
+- Ton père a dû partir en catastrophe pour la Corée du Sud.
+
+- Et Louis est parti pour le marché, mais… Dit Macéo.
+
+- Mais quoi ?
+
+- Et bien… le pays a découvert que des escrocs marocains avaient pénétré dans la steppe, reprit sa mère.
+
+- Mais ! Et Liria, où est elle ?
+
+- Et bien à la crèche, lui lança son frère, comme si cela était tout à fait normal.
+
+- Et personne n’est allé la chercher ?!
+
+- Pour des raisons qu’on ignore, mon chéri, on nous a interdit de pénétrer dans la crèche
+
+- Pourquoi ? demande Sacha
+
+- Voilà une très bonne question, mon chat. On en sait rien.
+
+- D’accord, mais pourquoi Louis est-il allé au marché si des escrocs étrangers ont pénétré en Mongolie ?
+
+- Ils se sont rapprochés de la place du marché et le gouvernement a donc demandé des personnes pour surveiller.
+
+- Mais pourquoi LOUIS ???
+
+- Parce que personne ne voulait. Alors ils ont commencé à obliger et à tirer au sort et Louis a été choisi avec six ou sept autres hommes.
+
+', true, true),
+  ('9b8db40d-e42c-48d5-ac3b-4ce079d13252', '9b8db40d-e42c-48d5-ac3b-4ce079d13252', '4c87c82c-9f9b-480a-99a1-9531d4d06c53', 6, '6507542d-0f94-44cc-b838-7fec446b76e7', 'Sacha est bouleversé. Bien que Liria soit une machine à parole, elle est adorable. Et Louis lui donne souvent un coup de mains pour ses devoirs. Quant à son père, Sacha adore aller traire les yacks avec lui et faire la course à cheval en sa  compagnie.', true, true),
+  ('c730179c-cdbf-478d-8938-96c3687e59e3', 'c730179c-cdbf-478d-8938-96c3687e59e3', '4c87c82c-9f9b-480a-99a1-9531d4d06c53', 7, '9ee5c32d-c6f9-4b8e-843b-5a779492f36a', 'Sacha n''a rien vu en sortant de l''école, pas de policiers, pas de militaires !
+
+Dans un village aussi tranquille, que cherchent ces terroristes ? Je n''y comprends rien se dit-il ?
+
+- Maman ? Je peux aller chez Igor s''il te plait ?
+
+- Non Sacha ! répond Maman. Tes devoirs d''abord !!
+
+- Mais Maman, Igor habite la maison d''à coté. Je peux même passer par le jardin .......
+
+- Bon d''accord ! Mais fais très attention ! cède Maman
+
+Sacha se faufile chez Igor, qu''il trouve en train de prendre son goûter très tranquillement.
+
+- Dis, tu es courant que des terroristes sont dans le village ? s''écrie Sacha
+
+Igor pouffe de rire, éclaboussant la table de son chocolat chaud.
+
+- Sacha, tu deviens fou. Tes rêves ramollissent ton cerveau !!!!
+
+- C''est Maman qui me l''a dit, même qu''on ne peut pas aller chercher ma petite soeur à la crèche ! s''exclame Sacha sentant une colère montée en lui, il n''aime pas qu''Igor se moque se ses rêves.
+
+- Psstt !!! Tes parents devront mieux s''informer. En fait, Monsieur le Maire a voulu des exercices d''évacuation d''urgence dans toutes les administrations. La crèche est bloquée pour éviter que des gens soient dans la rue durant ce temps-là.
+
+- Et pourquoi pas les écoles alors ? rétorque Sacha
+
+- Les écoles, c''est dans quatre jours, lui adresse Igor assez sec.
+
+Sacha est si décontenancé que ça fait rire Igor.
+
+- Allez mon copain, remets-toi. Ici, nous sommes dans un village tranquille, nous ne risquons rien.
+
+Sacha rentre chez lui, un peu déçu que l''aventure s''arrête là, mais rassuré que tout aille bien.
+
+A peine la porte de la yourte familiale refermée derrière lui, il dit :
+
+- Maman, tu n''as rien compris
+
+Et là, il lui explique tout ce que lui a dit Igor.
+
+Maman semble très détachée de ce lui dit son fils et s''énerve un peu contre lui.
+
+- Ecoute Sacha, tu n''écoutes pas quand je te parle. Tu es toujours dans la lune et à la moindre chose, tu montes tout un scénario et ça, tu le fais tout seul. Tu n''as besoin de personne.
+
+Sacha ne comprend plus rien....
+
+- Mais maman, tu m''as dit que tu ne pouvais pas aller la petite à la crèche à cause des terroristes !!
+
+- Ne sois pas ridicule Sacha, j''avais beaucoup de travail à la ferme. Maintenant que mon travail est fini, je peux aller chercher ta sœur. Tu m''inquiètes Sacha. Je vais parler de tout ça à papa à son retour.
+
+- Non maman s''il te plait, il va me fâcher !!!
+
+Pour cacher les larmes qui lui montent aux yeux, le garçonnet se réfugie dans sa chambre. Sacha réfléchit et se dit qu''il faudrait qu''il soit plus attentif à ce qu''on lui dit. Sa Maîtresse lui a dit aussi.
+
+- C''est bientôt Noël et je vais prendre une grande résolution pense-t-il. Je vais davantage écouter mes parents et ça m''évitera d''être ridicule devant Igor.
+
+Il se décide alors à retourner dans le salon pour aider son frère à décorer le sapin.
+
+Et puis Noël peut amener d''autres rêves ou d''autres aventures. Qui sait !', true, true),
+  ('5532a875-8b82-4c3d-a5a1-1f7049a412e2', '5532a875-8b82-4c3d-a5a1-1f7049a412e2', '4c87c82c-9f9b-480a-99a1-9531d4d06c53', 8, '9ee5c32d-c6f9-4b8e-843b-5a779492f36a', 'Aujourd''hui c''est dimanche, je vais pouvoir jouer avec mes copains se dit Sacha en se réveillant
+
+Il arrive dans la cuisine pour prendre son petit déjeuner et il est surpris de voir un étranger en train de boire un verre de lait de yack en compagnie de son papa.
+
+Ils semblent bien se connaitre, mais Sacha, lui, ne le connait pas.
+
+Il s''approcha doucement jusqu''à qu''il soit vu par les deux hommes.
+
+- Bonjour Sacha, bien dormi ? dit papa. Je te présente un de mes plus vieux amis, Alexeï. C''est un grand explorateur. Il a fait le tour du monde.
+
+- Bonjour Sacha dit Alexeï, comme tu as grandi, la dernière fois que je t''ai vu, tu étais encore tout petit ! Viens t''asseoir à coté de moi. Il parait que tu es un rêveur ?
+
+- Je ne sais pas vraiment mais j''aimerais beaucoup voyager plus tard, faire comme vous, aller explorer des endroits sauvages.
+
+- Je te comprends, je fais un métier enrichissant et je ne connais pas la routine. Mais tu as encore du temps devant toi, il faut d''abord continuer tes études.
+
+- Ah bon ! Pour être explorateur il faut faire beaucoup d''études ? Sacha fait la moue. Moi, j''aime pas l''école se dit-il !
+
+- Oui, il faut apprendre des tas de choses avant de partir explorer. C''est très important.
+
+- J''aimerais aller avec vous un jour, ose Sacha
+
+- Où aimerais-tu aller ? Quel pays t''attire le plus
+
+J''aimerais aller ........', true, true),
+  ('71a9e87f-1f61-445a-beb4-77d3328df060', '71a9e87f-1f61-445a-beb4-77d3328df060', '4c87c82c-9f9b-480a-99a1-9531d4d06c53', 9, '6507542d-0f94-44cc-b838-7fec446b76e7', '
+Sacha savait très bien où il voulait aller.
+
+- Au Vietnam. Acheva t''-il.
+
+Ce pays l''avait toujours attiré. Alexeï perdit son sourire.
+
+- Non, attendez ! s''écria Sacha. Je veux aller au pays des rêves !
+
+Oui, Sacha voulait aller au pays des rêves avec le cheval blanc aillé de son rêve.', true, true),
+  ('44d361c6-2146-4843-ac2e-f647627b2d7b', '44d361c6-2146-4843-ac2e-f647627b2d7b', '4c87c82c-9f9b-480a-99a1-9531d4d06c53', 10, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Alexei pouffa de rire et me dit :
+
+- Au pays des rêves !!! N''importe quoi je croyais que tu n''avais plus 3 ans !!!
+
+Sacha était très triste et s''en alla en sanglotant. Il se mit en boule dans sa chambre sur son lit et il pleura ! Alexeï entra dans sa chambre et lui dit :
+
+- Sacha, je suis désolé je ne savais pas que ça te vexerait !!! Je n''aurai pas du te dire ça !', true, true),
+  ('02f6177e-f431-4c0a-8657-2f1a05654e7b', '02f6177e-f431-4c0a-8657-2f1a05654e7b', '4c87c82c-9f9b-480a-99a1-9531d4d06c53', 11, '9ee5c32d-c6f9-4b8e-843b-5a779492f36a', 'Sacha regarda Alexeï et comprit qu''il était sincère. Alors il s''obligea à lui faire un sourire, même s''il n''en avait pas encore retrouvé l''envie.
+
+Il vit que l''ami de son papa était en train de réfléchir et il n''osa pas lui parler. Mais à quoi pensait-il, Sacha avait envie de sortir voir ses amis mais n''osait pas bouger.
+
+Et, après un moment qui sembla une éternité à Sacha, Alexeï lui dit :
+
+- En fait, tu aimerais voler, aller dans les airs ?
+
+Enfin il a compris pensa Sacha !
+
+- Oui c''est ça ! J''aimerais tellement voir la terre d''en haut comme dans mes rêves
+
+Alexeï : écoute Sacha, je reviens demain et nous verrons ensemble ce que nous pouvons faire. Fais moi confiance, je vais trouver quelque chose.
+
+L''homme partit laissant Sacha très septique.
+
+Le lendemain, Alexeï arriva tout sourire.
+
+- Prépare-toi Sacha ! J''ai une surprise pour toi !
+
+Le garçon était déjà quasiment prêt et ils partirent dans la voiture d''Alexeï.
+
+Après une bonne heure de route, ils arrivèrent dans un pré où étaient disposées deux ou trois grosses panières et de grands morceaux de tissus étalés par terre.
+
+- Qu''est-ce que c''est tout ça ?
+
+- Tu vas voir Sacha qu''on peut voler !
+
+Un bruit commença à se faire entendre et Sacha vu, les yeux émerveillés, s''élever une sorte de gros ballon multicolore accroché à la grosse panière.
+
+Alexeï le prit par la main et ils partirent en direction du gros ballon. Arrivés devant, Alexeï lui dit : Allez !! On monte dans la nacelle ! Vite !
+
+Un monsieur s''occupait de régler un gros réchaud qui envoyait de l''air chaud dans le ballon.
+
+Sacha était totalement médusé mais ne ressentait aucune peur.
+
+- Maintenant Sacha on va voler !
+
+La nacelle décolla du sol, l''énorme ballon au dessus de leur tête, et le voyage du garçon, dont le cœur battait très fort, commença.', true, true),
+  ('e0a907a6-821d-4767-8847-31bb8434444a', 'e0a907a6-821d-4767-8847-31bb8434444a', '4c87c82c-9f9b-480a-99a1-9531d4d06c53', 12, '9ee5c32d-c6f9-4b8e-843b-5a779492f36a', '
+Il vit s''éloigner le sol et se rapprocher des nuages et des oiseaux.
+
+C''était incroyable ! Il les voyait de si prés, quelle sensation !
+
+Puis, il passa très haut au-dessus de villages, de rivières, de prairies, et les montagnes lui paraissaient moins hautes mais trop loin pour les voir de beaucoup plus près.
+
+Il reconnut sa maison en passant, elle semblait bien petite. Il était émerveillé.
+
+Alexeï lui demanda s''il était content. Sacha opina de la tête, il n''arrivait pas à parler. Trop de joie et d''émotions bloquaient les mots au fond de sa gorge.
+
+Et puis, il fallut redescendre. Après un atterrissage tout en douceur, Sacha demanda à Alexeï si, un jour, il pourrait faire un autre vol. Alexeï lui répondit :
+
+- Bien sûr Sacha, nous survolerons d''autres paysages et quand tu seras plus grand, je t''emmerai avec moi pour voler au-dessus d''autres pays.
+
+A cet instant précis, le jeune garçon sut qu''un jour tous ses rêves deviendront une réalité.
+
+Il pouvait dorénavant dormir tranquille.', true, true),
+  ('1ce71fef-40f9-8046-8d35-e14c89708dd8', '1ce71fef-40f9-8046-8d35-e14c89708dd8', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 1, null, 'Ce livre est le tout premier créé selon le concept de Co-Aut par 5 jeunes filles, qui ont écrit ce livre durant leurs années de CE2, CM1 et CM2. Ce projet de livre a été le lancement du projet Co-Aut.
+
+Bonne lecture', true, true),
+  ('1ce71fef-40f9-80b1-9297-c5240564e398', '1ce71fef-40f9-80b1-9297-c5240564e398', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 2, null, 'Tome 1
+
+Il était une fois une petite fille, elle était très petite. Elle s’appelait Fibi. Elle adore chanter. Elle déteste avoir raison. Mais elle aime avoir un peu raison. Il se peut qu’elle ait une télé dans sa chambre. Elle a 18 ans. Une fois, elle a été accrochée au rideau. Elle avait 6 ans. Elle parle un peu Anglais. Elle n’aimait pas qu’on lui parle Anglais. Elle avait un chien. Elle a trouvé son chien sur la plage. Dans sa maison Fibi regarde son ordinateur. Elle entend un bruit, elle regarde dehors, c’est un pigeon. Puis elle va voir dehors dans le jardin, elle voit une famille de pigeons. Elle rentre.', true, true),
+  ('1ce71fef-40f9-8082-a5e5-d8ef35ff7803', '1ce71fef-40f9-8082-a5e5-d8ef35ff7803', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 3, null, 'Fibi rentre et voit une petite fille. Elle lui dit bonjour. Elle aussi lui dit bonjour. Elle avait 25 ans. Elle était très gentille. Elle s’appelle Ely. Dans le jardin elle donnait des bouts de pain aux pigeons.
+
+- Qu’est-ce que tu fais là ? dit Fibi.
+
+- Je volais en parachute et je suis tombée dans ton jardin. Fibi demande
+
+- Tu t’es fait mal ? demande Fibi.
+
+- A part au doigt.
+
+Elle a du sang. Mais ce n’est pas grave. Fibi dit
+
+- Viens, je vais te soigner.
+
+Ely rentre, se fait soigner et dit :
+
+- Tu as une grande maison.
+
+- Oui, elle était à ma grand-mère et à ma mère.
+
+Ely et Fibi deviennent les meilleures amies du monde. Son métier est vétérinaire.', true, true),
+  ('1ce71fef-40f9-80c7-bbad-ec1db2331a81', '1ce71fef-40f9-80c7-bbad-ec1db2331a81', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 4, null, 'Un mercredi après-midi, les filles entendent un aboiement dehors. Elles vont dans le jardin et découvrent une chienne, c’était un bulldog, elle avait 2 ans, elle était blanche avec des taches marron clair, elle s’appelait Louna. Elle avait du sang à la patte droite. Les filles ont pitié et elles emmènent Louna à l’intérieur, pour la soigner. Elles vont dans la salle de bains. Après être soignée, Louna et les filles vont dans la chambre de Fibi et elles jouent ensemble jusqu’au soir. Le lendemain, le chien de Fibi et Louna jouent beaucoup avec Fibi et Ely. Louna reste beaucoup avec Ely parce qu’elle a envie de se faire adopter par Ely. Comme Ely est très gentille et qu’elle aime les animaux, elle dit Oui. Ely lui met même un collier rouge avec des cœurs roses. Louna est très très contente ! Elle aboie « Ouaf, Ouaf !!! »', true, true),
+  ('1ce71fef-40f9-806e-be64-de885815afcf', '1ce71fef-40f9-806e-be64-de885815afcf', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 5, null, 'Fibi cherche Louna dans la chambre d’Ely. Elle la trouve sous le lit et elle entend toquer. C’était Ely qui avait un chat dans les bras, elle s’appelle Plume. 
+
+Tout à coup Louna saute sur Plume pour jouer avec elle : Plume miaule mais semble être contente. Ely et Fibi sont contentes que leurs animaux s’entendent si bien. Fibi et Ely partent jouer dans le jardin avec leurs animaux et passent un merveilleux moment.', true, true),
+  ('1ce71fef-40f9-80d2-87ce-eb876aafb641', '1ce71fef-40f9-80d2-87ce-eb876aafb641', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 6, null, 'Fibi et Ely jouaient dans le jardin avec Plume et Louna, quand tout à coup Louna s’échappa. Fibi crie « Louna revient ! » Elles vont mettre Plume dans la chambre, et partent à la recherche de la petite chienne. Elles vont sonner chez Mely la voisine.
+
+- Bonjour Mely ! As-tu vu notre chien passer ?
+
+- Ouaf, Ouaf ! » dit le chien.
+
+- Oui, il est chez moi, entrez.
+
+Les filles entrent et voient Louna sur le canapé. Ely aperçu Plume par la fenêtre, elle sortit tout de suite pour aller la chercher. Ils sont enfin tous ensemble chez Mely. Mely leur propose un goûter, et elles deviennent amies.', true, true),
+  ('1ce71fef-40f9-8095-a283-fc41098eaeb5', '1ce71fef-40f9-8095-a283-fc41098eaeb5', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 7, null, 'Fibi est trop contente d’avoir ses copines avec elle. Louna fait des léchouilles à toutes ses copines. Plume miaule parce qu’elle est contente. Ely crie de joie, Fibi crie avec Ely et Mely crie aussi ! Les filles pleurent de joie. Fibi dit « Vous êtes mes meilleures amies. » 
+
+Les filles vont chez Louna parce qu’elle leur tire la manche. Louna dit « Je vous aime les filles. » Quand elles rentrent dans la maison de Louna elles disent « Elle est trop belle ta maison ! » 
+
+Fibi et Ely sont dehors, elles se disputent. Louna, Plume et Mely entendent un bruit dehors, elles se demandent si c’est un voleur. Elles vont voir. Mais c’est Fibi et Ely. Elle dit « Je t’aime », elles se sont pardonnées.', true, true),
+  ('1ce71fef-40f9-8060-91b4-d76e11d9c5cd', '1ce71fef-40f9-8060-91b4-d76e11d9c5cd', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 8, null, 'Ely dit :
+
+- Est-ce que vous voulez qu’on aille faire du bateau demain ? On va en Nouvelle-Calédonie.
+
+- Oui !!! disent les filles en chœur.
+
+- On part demain à l’aube.
+
+La nuit passe. Elles se réveillent.
+
+- Réveillez-vous on part dans 15 minutes et 30 secondes. » dit Ely.
+
+En 5 minutes elles sont prêtes. Elles font le voyage. Mely dit :
+
+- J’ai faim, dit Mely.
+
+- Moi aussi » dit Fibi.
+
+- J’ai des Chips et des sandwichs et du melon parce que je sais que Fibi aime ça, et des boissons, dit Ely
+
+La nuit est là… elle passe. En route. Louna est une petite coquine, elle a pris le chapeau du capitaine. Puis Plume a peur de l’eau. Elles sont enfin arrivées. Le lendemain, Mely demande :
+
+- On peut aller faire de la plongée ?
+
+- 
+
+Ely touche un dauphin.
+
+- Venez voir, j’ai touché un dauphin. Je l’ai appelé Grisoille. Venez nager avec nous, il va nous montrer des endroits magnifiques.
+
+Fibi et Mely la rejoignent et elles vont très profond. Le dauphin les conduit à un endroit merveilleux. Les filles sont impressionnées. Soudain… une sirène leur dit
+
+- Bonjour, est-ce que ce chat et ce chien sont à vous ?
+
+- Oui, ils sont à nous ! Mais… vous êtes une sirène ?
+
+- Je m’appelle Emma et vous ?
+
+- Moi c’est Mely, elle c’est Fibi et elle c’est Ely.
+
+- Je peux vous transformer en sirènes si vous voulez ? dit Emma.
+
+Les filles crient « Oui !!! » Un tourbillon magique les transforme en sirènes.
+
+Elles se retrouvent en sirènes. Les filles disent « Que c’est impressionnant ! »', true, true),
+  ('1ce71fef-40f9-8069-8d5b-ee8cb220bfd6', '1ce71fef-40f9-8069-8d5b-ee8cb220bfd6', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 9, null, 'Petit à petit elles découvrent le monde des sirènes. Elles sont impressionnées ! Mais le temps passe vite. Fibi dit :
+
+- Oula ! Il faut qu’on rentre ! » Louna dit «
+
+- Oh non, pas déjà ! J’étais au parc aquatique Latréla! Pfff !!! dit Louna Mely commence à dire «
+
+- Eh oui, c’est comme ça ! dit Mely
+
+- Au revoir Emma, crient les filles en chœur !
+
+- Bisous les filles !
+
+Elles rentrent au bateau et continuent de découvrir la mer ! Dès qu’elles rentrent à leur maison, Ely propose un dîner chez elle. Les filles disent « Avec Plaisir ! » Elles prennent le dîner ensemble et mangent de la raclette ! « C’est bon !!! » dit Plume. Elles rient et s’amusent !', true, true),
+  ('1ce71fef-40f9-808a-bd1a-ff5a95fb3d81', '1ce71fef-40f9-808a-bd1a-ff5a95fb3d81', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 10, null, 'Tome 2
+
+Fibi dit :
+
+- Les filles j’ai eu la meilleure idée du monde ! On va partir à Tahiti. Vous êtes d’accord ?
+
+- Non tu blagues, dit Plume.
+
+- Bien sûr que Oui !
+
+Les autres meilleures amies disent : Oui !
+
+Fibi saute et crie de joie.
+
+- On part dans l’hôtel Oral Bache. Vous allez adorer, il y a une chambre magnifique avec un lit orange et deux lumières, aussi un balcon. Il y a des danseuses le soir et comme activités, il y a du canoë et des massages. Ça va être le paradis. Ah il y a une vue magnifique aussi et il y aussi de la plongée et une piscine pour amoureux. Il y a aussi un restaurant et des balades sur la plage, c’est trop beau !
+
+- « Oui !!! » dit Louna.
+
+Mely dit à Fibi
+
+- Tu es trop gentil. »
+
+Plume, Louna et Ely disent
+
+- Oui tu es la meilleure Fibi ! On t’adore trop, trop, trop !!! ».
+
+Ely dit
+
+- Fibi quand est-ce qu’on part ? »
+
+- Ah oui, je ne vous l’ai pas dit, on part dans deux jours, donc faites votre valise.
+
+- On part pour combien de jours ? demande Louna.
+
+- Une semaine, répond Fibi.
+
+- Bon moi je pars faire ma valise, dit Plume.
+
+- Moi aussi, dit Ely.
+
+- Moi je pars aussi, dit Louna.
+
+- Moi aussi je vais partir, d’accord ! dit Mely. Bisous, à demain les filles.', true, true),
+  ('1ce71fef-40f9-80b0-afb5-e67185f4676d', '1ce71fef-40f9-80b0-afb5-e67185f4676d', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 11, null, 'Le surlendemain :
+
+- Coucou Mely, on attend que toutes les filles soient là, dit Fibi, Ah salut Louna.
+
+- Coucou !
+
+Toc toc
+
+- Ah pour une fois quelqu’un toc, dit Fibi, c’est qui ? Ah Plume. Bon Ely est en retard.
+
+- Je suis là !!!
+
+- Tu es en retard Ely !
+
+- Oui mais il n’y avait pas d’heure.
+
+- Bah oui. Bon on y va ? J’ai pris deux taxis.
+
+- Trop top, merci tu es la meilleure, dit Plume
+
+- Arrête, je sais que tu ne le penses pas Plume.
+
+- Si si je le pense.
+
+- Bon on y va, ils attendent, alors Ely tu vas avec moi et Plume, et Mely tu vas avec Louna, d’accord ? Vous allez dans les voitures.
+
+- Bonjour, je m’appelle Alexe et vous ?
+
+- Moi c’est Plume, moi c’est Fibi, moi c’est Ely.
+
+- Bonjour, bonjour, bonjour, vous vous appelez comment ?
+
+- Je m’appelle Mely et moi c’est Louna.
+
+- Vous allez où ?
+
+- On va à Tahiti.
+
+Quelques heures plus tard.
+
+- Bon vous êtes arrivés à bon port !
+
+- Merci, merci, au revoir !
+
+- Salut !', true, true),
+  ('1ce71fef-40f9-8018-80ed-e0b5657ef3ab', '1ce71fef-40f9-8018-80ed-e0b5657ef3ab', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 12, null, 'Dans l’avion :
+
+- Vous avez fait un bon voyage ? Demande l’hôtesse de l’air.
+
+- Heu oui, vite. Faut y aller, venez !
+
+- Bonjour, bienvenue dans notre avion !
+
+- Je me mets à côté de Mely ! Dit Fibi.
+
+- D’accord Fibi, répond Mely.
+
+- Moi je me mets à coté de Plume, dit Louna.
+
+- Mais moi je me mets à côté de qui ? dit Ely.
+
+- A côté de lui là-bas, d’accord ?
+
+- Vous voulez mangez Mesdemoiselles ? demande l’hôtesse.
+
+- Oh Oui !
+
+- Il reste combien d’heures d’avion ?
+
+- Deux heures.
+
+- D’accord, merci.
+
+- Bon je vais dormir, bonne nuit Mely.
+
+L’hôtesse dit,
+
+- Bonjour Mesdames et Messieurs, nous allons atterrir, prenez toutes les précautions. Merci pour votre compréhension.
+
+Arrivée à l’aéroport, l’hôtesse dit,
+
+- La température est de 29°C et il est 8 h 14 du matin.
+
+Dans l’aéroport, une fille leur dit :
+
+- Salut, je m’appelle Lyli et vous vous appelez comment ?
+
+- Moi je m’appelle Mely.
+
+- Moi c’est Ely.
+
+- Moi Fibi et nos animaux sont Plume et Louna. Mais qui êtes-vous ?
+
+- Je suis une amie et une guide, c’est moi qui vais vous faire visiter la ville et tous les secrets que la ville nous rapporte. L’hôtel est à trente minutes à vélo.
+
+- On n’a pas de vélo, dit Mely, alors comment allons-nous faire ?
+
+- J’ai loué quatre vélos pour nous.
+
+- Oh trop bien ! Venez, on va s’installer dans l’hôtel Oral Bache.
+
+- Enfin installé, ce n’est pas trop tôt ! dit Fibi.
+
+- Bien, si vous voulez on va à la plage ou à la foire.
+
+Elles choisissent la plage.
+
+- Oh allez vite, enfilez vos maillots de bain, d’ac !
+
+Une heure plus tard, sur la plage des Caraïbes !
+
+- Venez, on va faire le plus gros château de sable, après on ira au restaurant. On regardera un film de Noël !
+
+- Chouette !!!
+
+- Mais ça sera sans moi, dit Ely, j’ai un devoir à faire et des mails. Désolée.
+
+Après avoir mangé au restaurant, les filles reviennent à l’hôtel. Les filles disent à Ely que c’était trop cool.
+
+Trente minutes après :
+
+Les filles disent toutes en chœur : C’est super !!!
+
+- Bonne nuit, dit Fibi.
+
+Le lendemain matin, Ely dit :
+
+- Allez les marmottes, on se réveille.
+
+- Oui je suis réveillée, c’est bon
+
+- Moi aussi je suis réveillée.
+
+- Aujourd’hui on va pêcher, dit Ely en enlevant la couette de Mely, ce soir on va faire barbecue sur la plage !
+
+- Youpi !!! s’écrit Mely en se relevant brutalement.', true, true),
+  ('1ce71fef-40f9-8093-a12b-c8f68e6a68b2', '1ce71fef-40f9-8093-a12b-c8f68e6a68b2', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 13, null, 'Arrivé à la plage avec des cannes à pêche, Plume interroge Ely :
+
+- Où est-ce qu’on va ?
+
+- Je l’ai dit Plume, on va à la pêche !
+
+- Je sais, je ne suis pas sourde, répliqua Plume, mais je voulais dire, où est-ce qu’on va pêcher ?
+
+- Aaaah ! D’accord !!! On va s’installer… tiens…. sur le ponton.
+
+- Mais il y a quelqu’un ! Regarde ! dit Louna en pointant une fille aux cheveux blonds qui est en train de pêcher.
+
+- Je vais lui demander, s’écria Mely, en s’élançant vers la fille.
+
+- Bonjour, est-ce qu’il y a assez de place pour mes copines et moi ?
+
+- Oui bien sûr ! Moi je m’appelle Fanie et vous ?
+
+- Moi c’est Mely, elle s’est Ely, elle s’est Fibi et elle s’est Lyli. La chienne s’appelle…
+
+- Moi je m’appelle Louna ! Et voici Plume !
+
+- Miaou !!!
+
+- Hihihi rigola Fibi, tu veux faire le barbeuc avec nous ?
+
+- Oh oui !!!', true, true),
+  ('1ce71fef-40f9-80bc-9def-dcba65109421', '1ce71fef-40f9-80bc-9def-dcba65109421', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 14, null, 'Après la pêche, les filles vont se baigner. Puis avec l’aide de Plume et Louna, elles font un château de sable mouillé, grand de 2 mètres de hauteur et 7 mètres de longueur. Ensuite, elles installent des transats à l’intérieur. ', true, true),
+  ('1ce71fef-40f9-80b6-9077-d4f74b4c5dac', '1ce71fef-40f9-80b6-9077-d4f74b4c5dac', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 15, null, 'En chemin, Mely explique à Fanie :
+
+- Lyli est notre guide, car nous, nous venons de Bordeaux.
+
+- Ah et bien maintenant vous avez deux guides !
+
+- Pourquoi ? questionne Mely.
+
+- Parce que je suis d’ici, je suis née ici à Tahiti !
+
+- Cool, dit Fibi qui, Mely en était sûre, avait entendu toute la conversation. Mais regardez où vous allez, vous foncez droit dans le château !!!
+
+Oups ! disent Fanie et Mely d’une seule voix.', true, true),
+  ('1ce71fef-40f9-801a-ac81-ca8fd13ed558', '1ce71fef-40f9-801a-ac81-ca8fd13ed558', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 16, null, 'En rentrant dans le château, elles découvrent qu’il manque Ely…
+
+- Salut, j’apporte des glaces !!! fait une voix derrière elles.
+
+Les filles se retournent d’un même mouvement et Ely était là avec 7 glaces.
+
+- Oh ! tu es trop gentille, s’écria Mely.
+
+Et elles mangent les glaces.
+
+- Heureusement que Fibi a mis du tissu accroché aux 4 tours du château, dit Louna, sinon les glaces fondraient.
+
+Après cinq minutes, les glaces sont dans leur ventre.
+
+Les filles décident de faire une sieste, mais au bout d’une heure, le château est fait maintenant de sable sec… et s’écroule !!!
+
+Les filles poussent des cris à en percer les tympans !! Elles sortent du château… avec plein de sable sur elles. Fibi prend au vol le tissu qui servait de toit.', true, true),
+  ('1ce71fef-40f9-8070-8c04-caed3ee7b164', '1ce71fef-40f9-8070-8c04-caed3ee7b164', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 17, null, 'En fin de soirée, après le barbeuc, Fanie est devenue l’amie des filles.
+Elles rentrent à l’hôtel.
+
+- Bonne nuit, disent les filles d’une seule voix.', true, true),
+  ('1ce71fef-40f9-80c4-821d-c23402bc629f', '1ce71fef-40f9-80c4-821d-c23402bc629f', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 18, null, 'Pendant ce temps, Plume ;
+
+- J’ai envie d’être un humain comme Mely, Ely, Fibi car Louna et moi on s’ennuie.
+
+Elle demande à Fibi :
+
+- Est-ce qu’avec Louna on peut aller chez une voyante avec toi pour devenir humain, car avec Louna on s’ennuie ?
+
+- Oui, mais il faut voir avec les autres si elles sont d’accord.
+
+- Ce n’est pas la peine de devenir humain, car vous êtes nos animaux domestiques préférés.
+
+- Tu as raison, dit Louna. Elles se font un câlin et s’endorment.
+
+Le lendemain matin, elles demandent à Lily de leur faire faire un tour sur la plage. Lily leur propose de faire du surf. Elles répondent Oui en chœur. Elles commencent à s’habiller en surfeuse. Dès qu’elles sont prêtes, Lily leur donne des planches de surf.
+
+- Mais on ne sait pas faire de surf, dit Fibi.
+
+- Je vais vous faire un petit cours vite fait, dit Lily en faisant un clin d’œil.
+
+Sur la plage, elles ne sont pas toutes seules, mais elles voient des garçons hyper beaux qui font du surf ! Ely les regarde attentivement… Lily leur met des couronnes et des colliers de fleurs.
+
+- « Gloups » ça a l’air compliqué, bafouille Louna.
+
+- Mais non, il faut juste rester en équilibre et écarter les bras, dit Lily.
+
+- Il y a des grosses vagues quand même, dit Plume.
+
+- Non, il fait beau, ne vous découragez pas les filles, dit Mely. Bon c’est parti !
+
+Elles se mettent sur les planches et surfent.
+
+- On se débrouille bien, dit Ely.
+
+Dès la première vague, elles tombent toutes. Elles rient toutes ensemble.
+
+Elles surfent pendant 1 ou 2 heures. Quand elles retournent sur la plage, elles revoient les garçons et papotent avec eux. Les garçons sont cinq. Ils se présentent.
+
+- Moi, c’est Jacques, lui c’est Pierre, lui c’est Jean et lui c’est Luc et voici Tom.
+
+Fibi demande d’où ils viennent.
+
+- Nous venons de Bordeaux, dit Jacques.
+
+- Ça alors, nous aussi, dit Louna.
+
+- Nous sommes un chien, un chat et 3 humains, dit Tom.
+
+Tom est un chat, Luc un chien, et les autres des humains.', true, true),
+  ('1ce71fef-40f9-8035-8ecc-d9d1432e84e1', '1ce71fef-40f9-8035-8ecc-d9d1432e84e1', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 19, null, 'Elles passent 2 mois à Tahiti. Après 2 mois de bonheur, elles quittent Tahiti.
+
+« Salut » disent les filles en chœur. Maintenant, Fibi, Mely, Ely, Louna et Plume rejoignent Bordeaux. Louna dit que c’est bon de retrouver sa ville.
+
+Bye, Bye Tahiti.
+
+Arrivées à Bordeaux, Fibi dit : Venez les filles, on va chez moi ?
+
+Chez Fibi ; « Oh mais je me suis fait cambrioler. »
+
+Mely dit à Fibi ; « Ce n’est pas grave, on va t’aider à tout réparer.
+
+- Oh merci, tu es la meilleure, dit Fibi.
+
+Fibi demande à Plume, Louna et Ely si elles vont l’aider. Elles lui répondent Oui !
+
+- Merci, merci les filles, vous êtes les meilleures.
+
+Au bout de deux semaines, les filles vont avoir une surprise !
+
+- Je vous remercie vraiment, je vous adore, j’ai une surprise, on va faire du shopping.
+
+Louna, Mely, Ely et Plume demandent pourquoi du shopping ?
+
+- Parce que je veux vous remercier pour tout.
+
+- Ohhh !!! disent les filles en chœur.
+
+- Je pourrai avoir ça Fibi, demande Louna.
+
+- T’as dépensé combien pour nous tous, demande Mely et Louna.
+
+- J’ai dépensé 1000 €.
+
+- Hein ? T’as dépensé 1000 € ?
+
+- Non, c’est une blague, j’ai dépensé 5000 €
+
+- Quoi ? Ça aussi c’est une blague, s’écrie Mely.
+
+- Non, ce n’est pas une blague, répond Fibi.
+
+2 semaines plus tard, Mely, Louna, Plume et Ely veulent offrir un cadeau à Fibi.
+
+- On va lui offrir un jacuzzi. Fibi est plus que choquée, elle dit, non les filles, c’est trop cher.
+
+- Si tu ne le veux pas, moi je te le prends, dit Ely.
+
+- Non, je l’adore trop, il est trop beau, ça a coûté combien ?
+
+- 1000 € répond Mely
+
+- Quoi ? C’est trop cher, s’écrie Fibi
+
+- C’est une blague, rigole Mely, ça a coûté 4500 €
+
+- C’est cher, dit Fibi.
+
+- Moins que ce que tu nous as offert Fibi, mais que de 500 €.
+
+- C’est rien 500 €, dit Fibi
+
+Les filles disent, si 500 € c’est cher.
+
+Fibi pleure presque.
+
+- Je ne partirai pas avant deux mois, dit Fibi.
+
+- Pourquoi ? demandent Ely et Plume.
+
+- Parce que on a payé plus de 9000 €, répondit-elle, je vous aime les filles, continua Fibi.
+
+- Ouaf, dit Louna pour dire, « Je t’aime moi aussi »', true, true),
+  ('1ce71fef-40f9-80b3-a876-c70aff1cf366', '1ce71fef-40f9-80b3-a876-c70aff1cf366', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 20, null, 'Les filles sont tellement amies, qu’une histoire va se passer. Un mois plus tard, on fête l’anniversaire de Fibi. Mely lui offre une montre, Louna un sac à main, Ely des boucles d’oreilles et Plume des colliers. On est le 1er juillet. Fibi est née le 1er juillet.
+
+- Mely est née quand, demandent Louna et Plume.
+
+- Surprise, dit Mely, je vous le dirai plus tard, mais là, c’est l’anniversaire de Fibi, on lui dit la nouvelle.
+
+Mely, Louna, Plume et Ely disent Ok !
+
+- Fibi, on a contacté ton père.
+
+- Mais, mais pourquoi vous avez fait ça ?
+
+- Tu n’es pas contente ? dit Plume.
+
+- Non, je haie mon père, il est trop bête de nous avoir abandonnés, je le déteste. C’est très gentil, mais je ne veux pas savoir ce qu’il a dit.
+
+- Tu devrais écouter ce qu’il a dit « Qu’il t’aimait beaucoup, il m’a demandé quel âge avais-tu, je lui ai dit que tu avais 30 ans. Il m’a dit que tu étais jeune. Il m’a aussi demandé si ta mère allait bien. Je lui ai dit que Elza allait très bien.
+
+- Vous êtes les meilleures, dit Fibi. Tout ce que vous faites sera toujours parfait. Merci pour tout, les filles, je vous adore. Allez, on va faire un apéro.
+
+- Ok, disent Louna et Plume.
+
+- Moi aussi je t’adore Fibi, dit Mely
+
+- Ok, dit Ely.
+
+- Tu es la meilleure, merci, dit Louna.
+
+Autour de l’apéro :
+
+- Bonjour, on va prendre des tomates cerise, du raisin, des cacahuètes et des concombres.
+
+- Et comme boissons ? demande le serveur.
+
+- On veut deux sirops à la fraise et 3 Coca.
+
+- Ok.
+
+10 minutes plus tard :
+
+- Tiens Mely ton sirop à la fraise, tiens Fibi ton sirop à la fraise, tiens Plume ton coca, tiens Louna ton coca, et tiens…oh heu… Ely ton coca, désolé !
+
+- Au revoir !
+
+- Au revoir !
+
+- On prend l’apéro, ok.
+
+- On a enfin notre apéro, les concombres, ils sont trop bons.
+
+- Venez, on y va, on rentre. Bisous Plume, dit Fibi et Mely et Louna et Ely.
+
+- Bisous Louna, disent les filles.
+
+- Bisous, disent les filles à Mely.
+
+- Bisous, disent les filles à Fibi.
+
+- Bisous, disent les filles à Ely.
+
+Le lendemain, Fibi demande à Ely et Mely quand on va au Pyla ?
+
+- On va pas au Pyla !
+
+- OK, OK, tu as raison, faut rester raisonnable.', true, true),
+  ('1ce71fef-40f9-8037-ac68-f3c56d54a9ef', '1ce71fef-40f9-8037-ac68-f3c56d54a9ef', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 21, null, 'Alors, pour rester raisonnable, Mely décide de faire une soirée pyjama ! Top, dit Fibi. J’adore, dit Ely. Mely prépare la liste.
+
+1 pyjama combi,
+1 pull,
+1 lampe de torche,
+3 jeux de société,
+4 paquets de bonbons,
+2 boissons.
+
+Et la superbe idée on va s’échanger des cadeaux !
+
+Fibi arrive en combi-chien. Mely arrive en combi chat et Ely en lapin. Fibi emmène des nounours et du jus de pomme. Mely prend bouteilles et Coca. Il me reste des schtroumpfs et des Happy Life et de l’Oasis.
+
+A la soirée :
+
+Les filles sonnent, on s’installe. Pendant ce temps, elles se racontent des histoires d’horreur ! Ouh !!! Elles mangent les bonbons et les boissons. Elles se disent : « Vive les BFF ! »
+Fibi dit, on pourrait créer une nouvelle chanson !
+
+« En allant vers le parc
+
+S’amuser pour jouer
+
+Vivre vivante en
+
+Jouant
+
+Allons vers le futur
+
+Ne reculons pas
+
+Vers le passé
+
+Soyez positives
+
+Dans la vie il
+
+Y a des bas
+
+Et des hauts
+
+Des souvenirs
+
+Et des bobos. »', true, true),
+  ('1ce71fef-40f9-8029-9e53-ec4ac13f911f', '1ce71fef-40f9-8029-9e53-ec4ac13f911f', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 22, null, 'Ouhah ! Trop beau, dit Mely. J’espère que Louna et Plume sont contentes. Miaou ! Super dit Plume !
+
+A 23h30 :
+
+- Bonne nuit !
+
+Le lendemain matin :
+
+Louna et Plume nous lèchent pour dire réveillez-vous. Alors Mely se réveille ;
+
+- Dis, laissez-nous dormir encore. Il est que 9h !
+
+Elle se réveille une heure plus tard ! Ely dit : je vais faire des chocolats au lait.
+
+- D’accord, dit Mely
+
+- Ouaf, Ouaf, aboie Louna. Ce qui réveille Fibi, mais pas Plume, elle s’est rendormie.
+
+- Qu’est-ce qu’il y a Louna ? l’interroge Mely.
+
+- J’essaie de réveiller Plume, mais je n’y arrive pas, dit Louna.
+
+- Normal, c’est une marmotte, rigole Mely.
+
+- C’est pas vrai, dit la voix fatiguée de Plume
+
+Quelques minutes plus tard, tout le monde est dans la cuisine. Soudain Mely s’écrie :
+
+- Et si on allait à Paris ?
+
+- Oh oui !!!
+
+- Nous allons faire nos bagages, disent Louna et Plume.
+
+Mely, Fibi et Ely montent les marches quatre à quatre. Au bout de deux minutes, elles sont toutes en bas.
+
+Elles prennent la voiture de Fibi, c’est ….
+
+- Une Ferrari !!! crie Louna.
+
+- Hé oui, dit Fibi.
+
+Les autres sont bouche bée. Après s’être installées, Fibi démarre la voiture qui fait un bruit sourd. Arrivées à l’aéroport, elles prennent l’avion de 23h30. Le voyage dure 1h30. Regardez en bas, s’écrie Louna qui est appuyée contre le rebord de la fenêtre.
+
+- Louna, arrête de remuer la queue, râle Mely, tu me fouettes le visage !
+
+- De toute façon, on est arrivé, dit Louna en retombant sur le fauteuil.
+
+- Heureusement qu’on a amené deux cages pour Louna et Plume.
+
+- Qu’on déteste d’ailleurs ! dit Plume
+
+- Oui, je sais, mais c’est obligatoire, réplique Ely. Allez, rentre dedans Plume !
+
+- Non !
+
+Plus loin, Mely aussi se bat, mais elle, c’est avec Louna. Fibi regarde les deux spectacles en riant. Finalement, elles cèdent.
+
+- Vous êtes vraiment adorables Louna et Plume !
+
+En sortant de l’avion, Ely s’écrie :
+
+- Regardez, il y a la tour Eiffel et là, Notre-Dame de Paris !
+
+Louna grogne.
+
+- Je ne vois rien avec cette satanée cage !
+
+- Bon, allons trouver l’hôtel, dit Fibi.
+
+- Comment s’appelle l’hôtel où on va ? questionne Ely.
+
+- Il s’appelle « De la Seine », dit Mely en montrant un vieux bâtiment en pierre. Elles entrent par une grande porte en bois qui grince.
+
+Devant elles, se tient un escalier en or avec un tapis rouge.
+
+- Whaou !!!
+
+Plume s’écrit :
+
+- Pourquoi de l’intérieur c’est beau et de l’extérieur c’est plus que moche ?
+
+- Ah, ah, ah ! s’écrient les filles. « C’est comme ça » dit Fibi.
+
+Maintenant qu’elles sont installées, un monsieur les appelle.
+
+- Venez mesdames, dit l’hôte.
+
+- Ah, c’est à nous, dit Mely
+
+- Vous êtes combien ? Vous avez réservé ? Une seule chambre pour 5 ? demande l’hôte.
+
+- Pardonnez-moi monsieur, mais je ne peux pas répondre à toutes ces questions en même temps ! dit Louna.
+
+- Moi j’ai compris, dit Ely, nous sommes 5, nous avons réservé au nom de Mely et une seule chambre pour 5 s’il vous plaît.
+
+- Compris, vous êtes dans la chambre 32, je vous accompagne.
+
+En arrivant dans la chambre, l’hôte leur transmet un message :
+
+- Il y a de nombreuses disparitions, donc faites attention à vos affaires en attendant que l’on trouve un groupe d’inspecteurs.
+
+- Oh…. Disent les filles en chœur.
+
+Dans la chambre, Louna regarde Ely, Plume regarde Mely et Mely regarde Fibi. Le silence le plus long du monde. Puis Plume s’écrit :
+
+- Nous allons résoudre l’enquête !!
+
+- Je suis partante, dit Ely
+
+- Moi aussi, dit Fibi
+
+- Nous aussi, disent Louna et Mely
+
+Elles courent voir l’hôte et disent :
+
+- On veut résoudre l’enquête !
+
+- Justement, je suis très content car je n’arrive pas à trouver d’inspecteur.
+
+- On va d’abord se reposer, disent les filles.
+
+En entrant dans la chambre, Louna aperçoit que ses croquettes préférées avaient été volées ! Elle pousse un aboiement très fort ! Ely aussi s’aperçoit qu’on lui a volé… son tee-shirt préféré !
+
+- C’est l’heure de passer à l’enquête ! dit Fibi
+
+Elles vont ainsi demander aux personnes de l’hôtel si elles ont vu quelque chose entre 16h et 16h20. Il y a 3 personnes dans l’hôtel au moment du vol.', true, true),
+  ('1ce71fef-40f9-80c2-bd1b-d21f3a54d8b7', '1ce71fef-40f9-80c2-bd1b-d21f3a54d8b7', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 23, null, 'Les témoignages :
+
+Lina : Femme de ménage :
+
+- Je nettoyais la chambre n°33 quand j’ai entendu : « Je vais voler ça ! » Il était entre 16h et 16h15 je crois.
+
+John : Client :
+
+- Je jouais au poker en bas à 16h. Je suis remonté car j’avais perdu à 16h15. Mais je n’ai pas entendu de bruit.
+
+Maxence : Hôte
+
+- Je servais des cafés au restaurant. J’ai vu un client, John jouer au poker. Je suis monté à 16h30 pour m’occuper du 2ème.
+
+- Nous avons beaucoup de pistes, dit Fibi.
+
+- Moi j’ai ma petite idée, dit Mely. Ce n’est forcement pas Maxence, car il est remonté à 16h30 et que le vol a eu lieu entre 16h et 16h20.
+
+- C’est forcément entre Lina et John, dit Ely
+
+- Moi je pense que c’est John, dit Louna
+
+Elles réfléchissent…
+
+- Je sais ! s’exprime Mely, allons voir la chambre 33 pour voir si elle est bien rangée. Si jamais c’était Lina, elle n’aurait pas pu finir de nettoyer la chambre.
+
+- Intelligent ! dit Plume.
+
+Elles courent en direction de la chambre n°33.
+
+- Oh, la porte est déjà ouverte… dit Louna.
+
+Elle pousse la porte de la chambre n°33 et… « Elle est parfaitement bien rangée !!! »
+
+- C’est John ! dit Fibi
+
+- J’en étais sûre ! Je l’avais dit ! dit Louna.
+
+- Allons voir ce John ! dit Ely.
+
+Elles courent en direction de l’accueil.
+
+- Dans quelle chambre se trouve John ? crient les filles.
+
+- Il se trouve dans la chambre n°30.
+
+- Ah, ah, tout proche de notre chambre comme par hasard ! dit Fibi.
+
+Elles courent vers la chambre n°30. Elles arrivent essoufflées et Ely dit :
+
+- C’est vous ! C’est vous qui volez toutes les choses !
+
+- Niark, Niark, oui c’est moi, vous m’avez démasqué ! Bravo ! dit John, mais vous ne m’attraperez pas aussi facilement !
+
+Il lança une boule sur le sol et disparut. La chambre était pleine de fumée rose.
+
+« Nous devons le retrouver !! »', true, true),
+  ('1ce71fef-40f9-80e4-9f46-d1e93517d589', '1ce71fef-40f9-80e4-9f46-d1e93517d589', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 24, null, 'Fibi et Mely disent :
+
+- Ouvrez les fenêtres, Plume s’étouffe, elle va mourir.
+
+Ely se précipite pour ouvrir la fenêtre.
+
+- On doit l’emmener à l’hôpital, dit Louna.
+
+- Non, on ne doit pas abandonner l’enquête, on y est presque, dit Mely.
+
+- On fait des groupes, dit Fibi. Moi, Ely et Plume, on va à l’hôpital. Mely et Louna, vous finissez l’enquête.
+
+- Ok
+
+Louna et Mely courent le plus vite possible pour le retrouver. À la chambre n°28, Louna voit la porte ouverte. Elle rentre avec Mely dans la chambre, elle voit que John a laissé tomber un papier. Il y avait écrit « Je vais aller à la chambre n°28 pour prendre mon fusil, puis après je vais aller à la chambre n°41 »
+
+Mely dit :
+
+- La chambre 41 n’existe pas, hein Louna, elle n’existe pas ?
+
+- Elle a été détruite en 2021, répond Louna.
+
+- Mais il va y faire quoi ? Il n’y a que des détritus.
+
+- Il n’y a que Fibi qui peut savoir ce qu’il va faire là-bas.
+
+Mely appelle Fibi qui décroche :
+
+- Est-ce que Plume va bien ?
+
+- On est encore dans la voiture, Mely.
+
+- John est allé dans la chambre 41, on ne sait pas ce qu’il va y faire, tu peux nous le dire.
+
+- C’est devenu un rangement pour les femmes de ménage.
+
+- Mais qu’est-ce qu’il va faire là-bas ?
+
+- Il a dû cacher un coffre ou un truc comme ça pour y cacher des choses, une arme peut-être ou de l’argent.
+
+- Merci, on y va.
+
+- Soyez prudentes, disent Fibi et Ely.
+
+Mely dit à Louna :
+
+- On y va tout de suite.', true, true),
+  ('1ce71fef-40f9-8032-a1a2-df5a26e48805', '1ce71fef-40f9-8032-a1a2-df5a26e48805', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 25, null, 'Pendant ce temps, dans la voiture :
+
+- Nous sommes arrivés, dit Ely.
+
+Plume s’est évanouie ! Ely la tient dans ses mains. L’infirmière emmène les filles dans une salle. Dix minutes après, l’infirmière dit que Plume va s’en sortir.
+
+Les filles sont dans le parking et elles voient les garçons qui étaient au surf avec elles. Il n’y en avait que trois, Tom, Jacques, Pierre.
+
+Ils étaient surpris de les voir.
+
+- Salut ! Vous faites quoi ici ?
+
+- On est venu pour Plume, dit Ely.
+
+- On est venu pour Tom, répondent les garçons, il s’est évanoui.
+
+- Comme Plume. Vous allez où ? demande Fibi.
+
+- On ne sait pas, répondent les garçons.', true, true),
+  ('1ce71fef-40f9-80ef-93a5-c94e05012f8e', '1ce71fef-40f9-80ef-93a5-c94e05012f8e', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 26, null, 'Pendant ce temps, à l’hôtel, Mely et Louna sont devant la porte de la chambre 41, elles rentrent… Il y a John et Lina. John pointe son arme devant la tête de Lina.
+
+Lina pleure.
+
+- Ne me tuez pas s’il vous plaît !
+
+- Lâchez votre arme, dit Mely
+
+Pendant ce temps, Louna appelle la police.
+
+- Elle n’a pas voulu m’écouter, elle doit mourir, dit John
+
+- La police est là, John.
+
+- Je vais te retrouver, dit John.
+
+Louna ne comprend pas, elle cherche des informations sur John et trouve ça : John a perdu sa mère pendant une balade, elle s’était enfuie. John a tenté de tuer Lina parce qu’elle avait vu sa mère, il y a un mois. Elle ne devait rien dire, parce que c’était confidentiel, donc il a tenté de la tuer.
+
+John finit en prison.', true, true),
+  ('1ce71fef-40f9-8095-84ca-c2623b540621', '1ce71fef-40f9-8095-84ca-c2623b540621', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 27, null, 'Lina remercie 100 fois Louna et Mely.
+
+A ce moment, Fibi, Ely et Plume arrivent avec les trois garçons.
+
+Ils disent « bonjour » à Louna et Mely. Puis ont pris un taxi et sont partis.
+
+Les filles rentrent chez elles.
+
+- C’est bien de retourner chez soi, dit Mely.
+
+Au même moment :
+
+- Et si on habitait toutes ensemble, propose Fibi, entre amies ?
+
+- Oui ! crient les filles.
+
+- C’est la meilleure idée que tu aies eue, dit Mely.
+
+- On commence à déménager dès demain !
+
+- Oui !
+
+- Allez faire vos cartons, dit alors Fibi.', true, true),
+  ('1ce71fef-40f9-8028-8758-fd2870b7b140', '1ce71fef-40f9-8028-8758-fd2870b7b140', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 28, null, 'Alors, dans les cartons elles mettent : ordinateur, téléphone, lampe, cahier, feuille, draps, trousse de toilette, etc.
+
+- Ça suffit, allez Hop on s’installe.
+
+Ely dit : on va le fêter à Aqualand !
+
+- Ouais, c’est la 2ème meilleure idée.
+
+- On part demain à 7h30 ! Fibi dit ; c’est trop tôt !
+
+- Mais arrête.
+
+Le lendemain, il est 6h45, DING DONG.
+
+- On y va en voiture ? en train ? en bus ? en car ?
+
+- Bus, dit Mely
+
+- Car, dit Ely
+
+- Voiture, dit Fibi
+
+- Bus, dit Louna
+
+- Train, dit Plume
+
+- 1 train, 2 bus, 1 voiture, 1 car. Bon on y va en bus.
+
+1 heure plus tard :
+
+- Enfin arrivées ! dit Fibi.
+
+- Oh non, il y a la queue ! dit Louna.
+
+- La queue est à sa fin, Yes !
+
+- Dans le parc on commence par quoi ? Un facile, moyen ou difficile ?
+
+- Facile, moi je dis facile.
+
+- Ok, dit Plume.
+
+- Vous avez le choix, la rivière, le spa, les vagues…
+
+- Le spa, dit Mely.
+
+- Après, dit Fibi, on fait un difficile… mmmh…oh…le tornado ! S’il te plaît Mely, oh !', true, true),
+  ('1ce71fef-40f9-80b6-93b2-f7e56a1296e0', '1ce71fef-40f9-80b6-93b2-f7e56a1296e0', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 29, null, 'A la fin de la première attraction :
+
+- Ouah, trop cool ! J’ai faim, dit Mely, et si on allait manger ? S’il vous plaît ?
+
+- Ok ! Vous voulez manger quoi ?
+
+- Oh je sais, des frites nuggets pour Ely et pour toi et moi, pizza et oasis, s’il vous plaît.
+
+- Après on va au spa et aux vagues ! dit Mely.
+
+- Ok, ok dit Fibi.
+
+- Moi je veux de l’eau et de la pâtée, dit Plume.
+
+Après avoir mangé :
+
+- Le spa ! le spa ! le spa !
+
+- Ok, on y va, par contre après on fait la grande bouée.
+
+- Oui, oui dit Mely
+
+- Moi je voudrais faire le crocodile, dit Ely.
+
+- Mais ça fait peur, dit Louna
+
+- Ne t’inquiète pas, on sera là avec toi, dit Mely.
+
+Après ces attractions :
+
+- Vous voulez pas qu’on se pose ? Pouf ! dit Fibi toute fatiguée.
+
+- Non, non, je veux aller aux jeux d’eau, dit Plume.
+
+- Bon d’accord, mais tu fais attention, ô et puis zut, je vais venir avec toi, réplique Fibi.
+
+- Tu n’étais pas obligé de venir, dit Plume.
+
+- Et si on y allait tous ensemble, s’écrie Louna.
+
+- Oh oui ! s’écrient Ely et Mely.
+
+Mais quand elles arrivent à l’entrée des jeux d’eau, c’est fermé.
+
+- Oh non, dit Plume, on est arrivé trop tard.
+
+Ce n’est pas grave, la console Mely, on ira après manger.', true, true),
+  ('1ce71fef-40f9-808a-b87d-f944e5e38461', '1ce71fef-40f9-808a-b87d-f944e5e38461', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 30, null, 'Les filles vont au petit restaurant. Une jeune fille leur demande :
+
+- C’est pour quoi ?
+
+- Le goûter, lui répond Fibi
+
+- D’accord, pour combien ?
+
+- Cinq s’il vous plaît et deux chaises bébé, si vous avez ?
+
+La serveuse les regarde de travers. Elles sont que trois et un chien et un chat qu’elles promènent en laisse, pense la serveuse. Mais elle n’insiste pas. La serveuse montre une table sous un pin, à l’ombre, un peu à l’écart. La jeune femme revient avec deux chaises bébé et attend qu’elles installent leurs animaux sur les chaises bébé pour demander :
+
+- Je vous écoute ?
+
+- Alors, dit Ely, je prendrai un Tiramisu.
+
+- Moi aussi, dit Fibi
+
+- Moi j’aimerais une crêpe au sucre, dit Mely.
+
+- C’est noté, dit la serveuse, et heu… pour vos animaux ?
+
+- Si vous avez, du poisson, du lait en gamelle bien sûr et heu… on va prendre aussi, pour Louna, une gamelle d’eau et on s’occupe des croquettes.
+
+- D’accord, dit la serveuse en partant.
+
+Elle revint cinq minutes plus tard avec leur commande. Chacun prend son repas, la serveuse part et elles commencent à manger.', true, true),
+  ('1ce71fef-40f9-80ea-bb02-ee2a0250a6da', '1ce71fef-40f9-80ea-bb02-ee2a0250a6da', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 31, null, 'Au bout d’une minute, Ely devient pâle, puis vert, encore pâle et encore vert ! Mely et Plume, lui demandent ce qui ne va pas et elle répond :
+
+- Je ne me sens pas bien. Pas bien du tout.
+
+Et au même moment où Mely et Fibi se lèvent, Ely, qui était devenue vert kaki, vomit. Là, tout se passe en un instant. Mely, qui s’y connaissait un peu en médecine, car elle était très intelligente, se précipite sur Ely. Fibi court chercher la serveuse, Louna reste figée sur place, la bouche grande ouverte et Plume, a tellement peur, qu’elle saute sur la branche du pin la plus proche. Quand Fibi revient avec la serveuse, Ely est redevenue normale. Plume redescend de l’arbre et Louna ferme la bouche puis se frotte contre les jambes d’Ely. Quand la serveuse voit qu’on l’avait appelée pour rien, elle se met très en colère et elle repart les poings sur les hanches et en tapant des pieds. Fibi se jette sur Ely et lui fait un énorme câlin. Quand les filles et les animaux ont fini de manger, elles vont aux jeux d’eau.
+
+Vers 18h, les jeunes amies quittent le parc et rentrent chacune chez elles.', true, true),
+  ('1ce71fef-40f9-8089-8827-d41b1fe59628', '1ce71fef-40f9-8089-8827-d41b1fe59628', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 32, null, 'Le lendemain matin, elles se réunissent chez Mely pour commencer les cartons.
+
+- Alors, dit cette dernière, chacun sait ce qu’il a à faire : on met dans un carton toutes les petites affaires personnelles, les vêtements dans une valise et après vous revenez ici et on les mettra dans ma voiture.
+
+Et chacun repartit chez lui.', true, true),
+  ('1ce71fef-40f9-80d4-bd0e-e9de132eb20c', '1ce71fef-40f9-80d4-bd0e-e9de132eb20c', 'b1f5a390-299d-4959-8434-a6c65f9007f9', 33, null, 'Plume et Fibi retournèrent chez Fibi et Ely et Louna rentrèrent ensemble comme d’habitude.
+
+Mely rentre toujours seule. Mais Mely se stoppa net : elle avait complètement oublié son téléphone ! Elle court à Aqualand le chercher. Mais Aqualand était déjà fermé et Mely commence à paniquer. Mely va voir ses amies pour qu’elles l’aident. Ely a une idée.
+
+- Je connais la serveuse ! On peut aller la voir !
+
+- Bonne idée, dit Louna, allons-y !
+
+D’un bond, elles sortent de la maison de Fibi - toujours aussi belle sa maison. En arrivant chez la serveuse, Plume dit :
+
+- S’il vous plaît, donnez-nous les clés du parc !
+
+- Oh là ! dit la serveuse, tenez ! Mais pourquoi ?
+
+- J’ai oublié mon téléphone là-bas, di Mely
+
+- 
+
+Elles courent aussi vite que l’éclair. En arrivant, Mely se jette sur son téléphone. Ely demande :
+
+- Et si on en profitait pour tester les attractions qu’on n’a pas eu le temps de faire ? S’il vous plaît !
+
+- C’est d’accord, mais pas longtemps dit Fibi.
+
+Elles se dépêchent et dès qu’elles ont fini, elles se rendent compte qu’il est 20h08 !
+
+- Il faut vite rentrer !
+
+Elles vérifient qu’elles sont toutes là et enfin elles rentrent. Elles vont rendre les clés à la serveuse.
+
+Mely remercie 100.000 fois ses amies, car :
+
+« Quand on est ami, on est toujours là l’un pour l’autre ! »', true, true),
+  ('824c67a4-108e-4f76-8acf-5c9aa6fff79b', '824c67a4-108e-4f76-8acf-5c9aa6fff79b', 'c405ff4b-e39b-4580-a190-275e31949a4c', 1, 'd5fd8ed5-d926-4b60-8ac2-8c594323a558', 'Aujourd''hui nous avons fait une aventure et au bout d''un moment, nous avons vu une chose bizarre. Une lumière éblouit toute la pièce. Il ne reste plus que nous…', true, true),
+  ('ca47e797-723d-4e6f-9d59-73aaf9fc48c5', 'ca47e797-723d-4e6f-9d59-73aaf9fc48c5', 'c405ff4b-e39b-4580-a190-275e31949a4c', 2, 'd5f96569-59b5-44e9-bf0c-4a25d61bb5dc', 'Mais une lumière éclaire le sol... que va t''il se passer ?
+
+', true, true),
+  ('fb78d8ec-6898-494b-953f-7578abb320e9', 'fb78d8ec-6898-494b-953f-7578abb320e9', 'c405ff4b-e39b-4580-a190-275e31949a4c', 3, 'd5f96569-59b5-44e9-bf0c-4a25d61bb5dc', 'Ça nous montre le chemin ... ', true, true),
+  ('dd85077a-1ddf-47e9-999f-22bd54a928f3', 'dd85077a-1ddf-47e9-999f-22bd54a928f3', 'c405ff4b-e39b-4580-a190-275e31949a4c', 4, 'd5f96569-59b5-44e9-bf0c-4a25d61bb5dc', 'Nous suivons la lumière, nous arrivons devant une bête terrifiante.
+
+Nous retournons sur nos pas. Nous trouvons un coffre, dedans il y a, deux épées, deux armures, deux casques.', true, true),
+  ('7d8b2de0-7681-4a28-bc51-64658001fa77', '7d8b2de0-7681-4a28-bc51-64658001fa77', 'c405ff4b-e39b-4580-a190-275e31949a4c', 5, 'd5fd8ed5-d926-4b60-8ac2-8c594323a558', 'Nous nous équipons de cette armure pour vaincre le démon et trouver le trésor qui est perdu depuis très longtemps. C''est le trésor de la maison, celui qui le trouve gagne le pouvoir absolu.', true, true),
+  ('00ffe26a-2510-470e-b3af-d65e23cc30b8', '00ffe26a-2510-470e-b3af-d65e23cc30b8', 'c405ff4b-e39b-4580-a190-275e31949a4c', 6, 'd5f96569-59b5-44e9-bf0c-4a25d61bb5dc', 'Nous arrivons dans la maison magique. Il y a deux rayons au sol. Nous nous mettons dessus et rien. J''essaie de faire un kamé hamé ha sur une pierre, et là une boule de feu sort de mes mains.
+
+Clémentine fait voler un énorme rocher et des martiens nous appellent. Nous nous préparons à faire des trucs chelou et nous détruisons le gros vaisseau des martiens. Nous retournons sur Terre.', true, true),
+  ('c857ea57-4a72-44b3-a65f-932bb3617565', 'c857ea57-4a72-44b3-a65f-932bb3617565', '33314ceb-e3a6-465c-91f1-e4679cbae041', 1, '23e58c00-a6ea-4334-a747-d0d971f666f1', 'Je m''appelle Leo et j''ai 8 ans, je vis avec ma mère dans une petite chaumière dans une foret. Nous sommes pauvres depuis la mort de mon père. En ce moment, je coupe des orties pour le médicament de maman, puisque peu après la mort de papa elle est tombée gravement malade. Je veille sur elle à peu près toutes les nuits. Je sursaute soudain, quand je vois un petit lapin blanc. Vite, je me dépêche de rentrer. A même pas deux mètres de la chaumière, j''entends un toussotement, je cours vers le lit de ma mère et je lui tends le bol où j''avais écrasé les orties.
+
+- Merci mon chéri, murmure ma mère.
+
+Des larmes me montent aux yeux quand je la vois affaiblie comme elle l''est.', true, true),
+  ('60cd8c7d-fb39-4279-a9d4-c2927cd17228', '60cd8c7d-fb39-4279-a9d4-c2927cd17228', '33314ceb-e3a6-465c-91f1-e4679cbae041', 2, 'cab4b3ca-1338-4682-946a-349281215674', 'J''ai l''impression que le sort s''acharne sur notre famille !
+
+La mort de mon père a été très difficile pour maman et moi, avant nous nous rendions chaque jour à sa tombe jusqu''au jour où maman tomba malade.
+
+Ce soir, dans ma chambre, je me rappelle le jour où mes parents m''ont annoncé qu''ils avaient trouvé du travail : papa serait bûcheron et maman irait tous les jours à l''hôpital pour soigner les malades.
+
+Mon père devait aller au travail tous les jours parce qu''il rapportait plus d''argent que ma mère.
+
+Malheureusement, mon père tomba gravement malade. Maman faisait de son mieux pour essayer de le sauver et continuait de travailler en même temps, mais il mourut peu de temps après.
+
+Soudain, j''entends un petit gémissement qui vient de la chambre de ma mère.
+
+Je dévale les escaliers en courant quand j''arrive je la vois toute blanche.
+
+Je devine qu''elle a vomi, j''ai peur qu''elle meure elle aussi.
+
+J''ai très peur de me retrouver seul à la maison, d''avoir perdu mes parents.
+
+Quand je pense que Noël est dans 1 mois, je sens le stress monter.
+
+En plus, chez nous, Noël ... c''est ... très ... sacré.
+
+Quand je tends à ma mère la fin de son bouillon elle me murmure : « merci mon chéri »', true, true),
+  ('e510d432-8cd0-4f19-a199-a032a35e8789', 'e510d432-8cd0-4f19-a199-a032a35e8789', '33314ceb-e3a6-465c-91f1-e4679cbae041', 3, '23e58c00-a6ea-4334-a747-d0d971f666f1', 'Je lui souris, et elle me rend mon sourire. Puis, rassuré qu''elle est prit son médicament, je ressors, cette fois pour prendre du houx et couper un beau sapin. Dehors, il fait froid, même en dessous de mon gros manteau en fourrure d''ours je sens le froid qui me pique tous mes membres. Je cherche pendant des heures pour trouver un sapin, même un peu maigrichon, en vain, la seule ville à côté a déjà tout pris.
+
+Quand soudain, au beau milieu d''une prairie juste devant la chaumière, un sapin est planté là. Il est si beau que je décide de le laisser là, mais de le décorer quand même. Je prends du houx pour l''intérieur de la chaumière. 
+
+Maman m''attendait, à moitié assise sur son lit et surtout inquiète de mon retour tardif. Elle se recouche, soulagée de me voir. Puis j''installe le houx que j''avais récolté. Je ressors avec les décorations achetées par mon père il y a des années quand nous vivions en ville. Dehors, le sapin n''a pas bougé, une fois décoré, il brille de mille feux. Je rentre dans la maison et demande à ma mère : 
+
+- Maman viens voir dehors ! 
+
+Je l''aide à se lever, et nous sortons main dans la main, elle, les yeux fermés et moi le sourire jusqu''aux oreilles, nous avançons et quand nous sommes devant le grand sapin je lui dis d''ouvrir les yeux, elle le regarde émerveillée et demande dans un murmure : 
+
+- oh Léo, c''est toi qui as fait ça ?
+
+- Oui, lui répondis-je, il est si beau, je ne voulais pas le couper.
+
+Elle hoche la tête, montrant qu''elle est d''accord avec moi.
+
+Nous regardons encore quelques minutes le sapin, comme pour l''inscrire dans notre mémoire. Puis nous rentrons le sourire aux lèvres.', true, true),
+  ('b0b369b9-8aad-479f-8fc9-193762e7b559', 'b0b369b9-8aad-479f-8fc9-193762e7b559', '33314ceb-e3a6-465c-91f1-e4679cbae041', 4, 'cab4b3ca-1338-4682-946a-349281215674', 'Une fois de retour à la maison, j''aide ma mère à se coucher et j''éteins la lumière.
+
+Je me suis presque endormi quand un petit bruit me réveille ! J''enfile mes pantoufles et je regarde par la fenêtre, il y a de la lumière dans la rue et une personne... j''ouvre doucement la porte et je descends prudemment les escaliers sans allumer la lumière pour ne pas que la personne me voie.
+
+Quand j''arrive dans le hall d''entrée je retiens mon souffle, ensuite je m''approche doucement de la porte pour pouvoir regarder la personne de plus près et je suis choqué de ce que je viens de voir !
+
+Une fois retourné dans mon lit, je repense à ce que je viens de voir : un homme qui menaçait une petite fille de la fouetter si elle ne volait pas les décorations de la maison la plus décorée de la ville ! On les connaît bien ces gens, il ne font que se moquer des autres maisons qui ne sont pas décorées !
+
+Finalement je réussis à m''endormir en me disant que j''en parlerai demain à maman.', true, true),
+  ('d861306e-e5a4-46fe-a082-657ce990a3a4', 'd861306e-e5a4-46fe-a082-657ce990a3a4', '33314ceb-e3a6-465c-91f1-e4679cbae041', 5, '23e58c00-a6ea-4334-a747-d0d971f666f1', 'La cloche de la ville voisine me réveilla, comme maman dormait toujours je sortis pour aller cueillir des fraises et des framboises pour le petit déjeuner. Dehors il faisait de plus en plus frisquet, mais grâce à mon manteau en fourrure je ne le sentais pas beaucoup. Je marchais pendant 30 minutes quand soudain, juste devant les grands bosquets de fraises et de framboises, j''entendis un craquement. Je m''arrêta et me cacha derrière un gros rocher. Apparue, resplendissante dans sa robe rouge à la romaine, une jeune fille de mon âge que je ne reconnus pas tout de suite comme étant la fille du roi Gaius et Decima : Gaia, elle était aussi belle qu''une fleur dans la prairie. Elle avait de jolis yeux verts et de beaux cheveux bruns, longs et un peu ondulés qui volaient dans le vent. Mon cœur fit qu''un seul tour quand je la vis. Elle se mit à cueillir des fraises, tout en soupirant :
+
+- Mes parents sont tellement durs avec moi et les autres, tout comme les villageois. Comme j''aimerais partir loin d''ici, en plus je vais être mariée à un homme de vingt ans dans deux semaines, contre mon gré, alors que je n''ai que huit ans.
+
+Alors qu''elle continuait à se lamenter sur le fait que ses parents la maltraitaient, surgit de nulle part une vipère qui la mordit à la cheville. Je reconnus cette vipère qu''on appelle avec ma mère la " vipère vampire ", car elle se nourrit du sang de ses victimes. 
+
+Gaia hurla de toutes ses forces, tandis que la vipère léchait, un étrange sourire aux lèvres, le sol imbibé du sang de la princesse qui coulait en abondance, comme les pluies torrentielles pendant les mois pluvieux. 
+
+Je pris un grand et gros bâton à côté de moi et sortis de ma cachette d''un bond, la jeune fille à la robe rouge eu un hoquet de surprise quand elle m''aperçut, mais elle était trop occupée à essayer de retenir le liquide rouge qui coulait sur sa cheville aussi blanche que la neige sur mon beau sapin. Je commence à menacer la vipère qui grâce à ma taille, avec le bâton au dessus de ma tête, s''enfuit. La princesse me regarde gentiment, alors que, grâce à des feuilles fines, longues et plates je bande sa cheville. Quand je me relève, on se regarde et nous nous mettons, ensemble, à cueillir main dans la main, des fraises.
+
+Une histoire était née, une drôle d''histoire pas comme les autres !', true, true),
+  ('467a4286-12a4-4cf5-8f1e-9c78d61cc88e', '467a4286-12a4-4cf5-8f1e-9c78d61cc88e', '33314ceb-e3a6-465c-91f1-e4679cbae041', 6, 'cab4b3ca-1338-4682-946a-349281215674', 'Dès que nous avons fini, je lui demande :
+
+- Ça va tu n''as pas trop mal ?
+
+- Non, me répond elle. Mais comment se fait-il que tu étais derrière le gros rocher ?
+
+- En fait, je t''ai entendu arriver et je me suis caché. J''ai mis du temps à te reconnaître et quand j''ai vu la vipère qui était derrière toi je me suis dit qu''il fallait que je prenne un petit truc pour lui faire peur et que je puisse te soigner et quand elle t''a mordu le mollet j''ai cru que tu allais mourir alors j''ai eu le temps de sauter sur la vipère qui n''arrêtait pas de faire entrer le venin dans ta jambe.
+
+- Après tu m''as soigné et sans toi je serais morte à l''heure qu''il est !
+
+Je rougis, je me dis qu''elle est très belle cette jeune fille.', true, true),
+  ('f7863f20-bed0-4948-b022-03b5a06be718', 'f7863f20-bed0-4948-b022-03b5a06be718', '33314ceb-e3a6-465c-91f1-e4679cbae041', 7, '23e58c00-a6ea-4334-a747-d0d971f666f1', '- Je suis désolée, mais je dois partir, mon père le roi ne me laisserait pas traîner avec d''autres enfants, en plus je vais être mariée contre mon propre gré à un homme de 20 ans, je ne veux pas, il est moche avec des boutons plein la face et en plus il est gros.
+
+Je ris de la façon dont cette princesse parlait.
+
+- Au fait, dis je, je m''appelle Léo.
+
+- Léo, mais tu ne serais pas le garçon avec sa mère qui vivent dans la chaumière dans la prairie par là bas ? me répond t''elle en pointant du doigt la direction de mon chez moi. Et, continue la princesse, enfin ton père il a quitté son monde pour rejoindre celui des esprits ?
+
+- Euh, oui, c''est ça, peut on éviter de parler de lui et de ma mère, s''il te plait, car mon papa est mort depuis longtemps et ma mère est gravement malade...
+
+Je ne pus finir ma phrase car Gaia s''effondra en hurlant, en se tenant sa cheville ensanglantée.
+
+Elle tomba inconsciente à cause de la douleur et du venin du serpent. Je la pris dans mes bras, sa longue chevelure tombant sur le sol, elle était légère come une plume. Je la ramenais chez moi, et je l''allongeais sur mon lit, puis je nettoyais sa cheville, puis j''attrapais une crème de soulagement de douleur et mis sur sa cheville un bandage.', true, true),
+  ('5989d393-a505-4ae7-a176-6621c168e18b', '5989d393-a505-4ae7-a176-6621c168e18b', '33314ceb-e3a6-465c-91f1-e4679cbae041', 8, 'cab4b3ca-1338-4682-946a-349281215674', 'Je reste à côté d''elle encore quelques minutes puis j''ouvre doucement la porte et m''apprête à partir quand j''entends une petite voix qui m''interpelle :
+
+- Léo c''est toi ?
+
+Je lui réponds :
+
+- Oui, c''est moi, tu vas bien ?
+
+- Oui, me dit-elle, j''ai un peu mal à la cheville mais bon...
+
+- Je m''apprêtais à partir te chercher quelque chose à manger.
+
+Sérieusement, je crois que je l''aime beaucoup cette fille :
+
+sa chevelure brune qui tombe sur ses épaules en petites bouclettes, son visage ; ses beaux yeux bleu marine…
+
+- Léo ? me dit-elle .
+
+- Oui ?
+
+- Peux-tu m''emmener dans la cuisine j''aimerai bien faire la connaissance de ta mère ?
+
+- D''accord, mais elle est en haut dans sa chambre.
+
+Je la prends dans mes bras et je l''emmène dans la cuisine, je la pose sur une chaise et je lui dit :
+
+- Tu restes là pendant que je monte la chercher.
+
+- D''accord, me dit-elle en me souriant tendrement.
+
+Je cours chercher ma mère et je toque à sa porte en disant :
+
+- Maman ?
+
+- Oui mon chéri ?
+
+- J''aimerai te présenter quelqu''un.', true, true),
+  ('655e3468-b4bd-4ee1-abd7-5effe3c92bf9', '655e3468-b4bd-4ee1-abd7-5effe3c92bf9', '33314ceb-e3a6-465c-91f1-e4679cbae041', 9, '23e58c00-a6ea-4334-a747-d0d971f666f1', '- D''accord, me répond ma mère tendrement, qui est-ce ?
+
+- Tu verras !
+
+Je l''aidais à se lever et nous descendions ensemble et prudemment les marches de l''escalier. Gaia m''attendait dans la cuisine en examinant attentivement la pièce et les objets qui s''y trouvaient.
+
+- Majesté ! s''exclama ma mère, surprise, que faites vous là ?
+
+- J''ai étais mordus par un serpent, lors d''une cueillette de framboises et de fraises. Votre fils m''a gentiment ramenée dans votre magnifique maisonnette et m''a soignée ou tout du moins, commencé.
+
+Ma mère me regarda avec surprise et fierté. Je baissais les yeux avec modestie. Mais cela ne dura pas longtemps car ma mère commençait à fatiguer, alors je l''a raccompagnais dans sa chambre avec Gaia derrière moi, puis elle me suivit dans le jardin enneigé et je lui montrais le sapin que je j''avais décoré.
+
+- Oh, s''exclama la princesse, émerveillée, il est ... il est magnifique !
+
+- Merci, je voulais le laisser dehors car même sans décorations il est aussi beau. Et vous, Majesté, avez vous un sapin ?
+
+- Il y en a un dans la cour, mais mon père n''a pas voulu que j''en ai un dans ma chambre, en fait il ne veut jamais rien, comme tu l''as sans doute remarqué, il est comme ça pas seulement avec moi, mais avec les servantes, les paysans, les bourgeois et même la reine, ma mère !
+
+- Ah bon, mais quand tu seras plus grande, tu prendras le trône ?
+
+- Oui, et avec cet grenouille de mari avec qui je vais me marier dans une semaine.
+
+- Tu ne le veux pas comme mari ?
+
+- NON, NON et NON, il est moche, des boutons plein la face et en plus, comme si cela ne suffisait pas, il est gros ! Non, vraiment je ne le veux pas comme mari et encore moins comme roi, je préfère encore me marier avec un porc ! Mais bon, reprit la futur mariée, c''est le fils du premier ministre de mon père, le roi, alors je ne peux rien faire. A part, peut-être m''enfuir !
+
+- Quoi !?
+
+- Ben, oui, m''enfuir et venir ici, enfin si je peux bien sûr.
+
+- Euh... Oui, oui, si vous voulez, mais vos parents ne s''inquiéteront ils pas ?
+
+- Pff, de toute façon je m''en fiche de mes parents et eux aussi.
+
+- Alors il va falloir que je vous prépares un lit, non, vous prendrez le mien et moi je dormirai sur de la paillasse, j''ai l''habitude, ce n''est pas le grand luxe mais la maison est quand même vivable
+
+- Tu rigoles, ta maison est incroyable, magnifique, comme ton sapin !
+
+- C''est pas du tout comme le palais du roi !
+
+- Bien sûr, c''est encore mieux : pas de servantes maltraitées par mon père, pas d''innombrables miroirs et murs blancs, de tapis rose bonbon, la couleur préférée de ma mère, ici, tout est en bois, en pierre, en argile etc. Il n''y a pas de tapis rose bonbon, pas de murs blancs et des milliers de miroirs. En plus l''air est pure et frais pas comme au château où il est confiné et étouffant. C''est beaucoup mieux ici !
+
+- Euh, bah merci, c''est moi qui ai tout construit quand mon père est ... enfin bref.
+
+- Non, vraiment, mais t''es plus fort que les architectes du château, tu as fait ça en combien de temps ?
+
+- En un mois.
+
+- Ouah , et ben dis donc ! Tu es hyper fort !
+
+- Euh, ben, merci.
+
+Nous nous regardons un moment, puis je brisais le silence en disant que j''allais préparer sa chambre, elle me répondit qu''elle allait m''aider. Nous allâmes dans le petit atelier derrière la maison pour prendre des planches et de quoi clouer. Puis, dans ce qui sera notre chambre, je construit un mur qui partagerait le lit de Gaia et ma paillasse. L'' après midi passa et le mur qui était tout moche avant, devint un beau mur avec un coucher de soleil et la mer. La princesse s''émerveilla devant mon talent de peintre, puis elle et moi cousîmes un beau tapis bleu canard et des rideaux assortis que nous installâmes dans notre chambre.', true, true),
+  ('5f8ac0c5-237e-4757-a395-a556e4b2381b', '5f8ac0c5-237e-4757-a395-a556e4b2381b', '33314ceb-e3a6-465c-91f1-e4679cbae041', 10, 'cab4b3ca-1338-4682-946a-349281215674', 'Je commençais à me fatiguer alors je dis :
+
+- Je vais me coucher.
+
+- Moi aussi, me répond-t-elle.
+
+Nous partons nous coucher et la nuit je fais des affreux cauchemars :
+
+Le père de Gaia nous arrêtait parce que la princesse était chez nous. Quand je me réveille je la vois en train de m''éponger le front, et elle fait une mauvaise tête. Alors je lui demande :
+
+- Qu''est-ce qu''il m''arrive ?
+
+Elle me répond avec un étrange soulagement dans la voix :
+
+- Cette nuit tu parlais dans ton sommeil tu disais : << Non je vous en supplie ne me tuez pas >>
+
+Donc j''ai appelé ta mère et elle t’a pris la température et tu avais de la fièvre. Je suis restée à ton chevet tout le reste de la nuit et je suis tellement contente que tu te sois réveillé !', true, true),
+  ('2eb09111-32b3-4a02-b761-d41a3371efef', '2eb09111-32b3-4a02-b761-d41a3371efef', '33314ceb-e3a6-465c-91f1-e4679cbae041', 11, '23e58c00-a6ea-4334-a747-d0d971f666f1', 'Je me demandais pourquoi avais-je été malade, mais en fait j''avais la réponse sous les yeux, Gaia. Depuis le temps que je rêvais de la voir ! Je me redressais sur ma paillasse pour constater que j''allais beaucoup mieux, et je décidais de ne pas faire part de mon cauchemar à la princesse, de peur de la terrifier. Aussi, quand je fus debout et habillé, nous descendons pour prendre le petit déjeuner. Dehors, il fait de plus en plus froid, il neige beaucoup et mon sapin fut vite enseveli sous la neige. Quand nous avons fini de manger, je prends deux pelles et en donne une à la princesse. Trempés jusqu''au os, nous dégageons un chemin vers le sapin et autour du tronc de celui-ci un cercle. Quand nous entendons une trompette, au loin. Un jeune homme, essoufflé, courait sur le petit chemin de gravier qui était coupé perpendiculairement à la route principale de la région qui menait jusqu''au château. Gaia comprit plus rapidement que moi qui il était, et elle sauta dans la sapin, ce qui fit tomber de la neige. Tandis que moi, je me demandais qui était ce jeune homme et surtout que venait t''il faire ici ?!', true, true),
+  ('0bcac3f9-2d77-4346-906d-3f9a6df1195a', '0bcac3f9-2d77-4346-906d-3f9a6df1195a', '33314ceb-e3a6-465c-91f1-e4679cbae041', 12, 'cab4b3ca-1338-4682-946a-349281215674', 'Il me demanda tout essoufflé :
+
+- Cher paysan, avez-vous vu la princesse ?!! On sentait un étrange tremblement dans sa voix. "Elle a disparu et nous devons nous marier ce week-end !!".
+
+Là, je compris immédiatement pourquoi Gaïa s''était cachée dans le sapin.
+
+- Non, je suis terriblement désolé messire.
+
+- Messire de la Fontaine ! Prince plus exactement.
+
+Ils reprirent leur route.
+Je pousse un petit cri pour que Gaïa sorte.
+
+- Yes !! C''est bon, tu peux sortir.
+
+Mais personne ne répond... étrange. Alors je fouille le sapin mais PERSONNE !! Je me fais un sang d''encre. Et si Gaïa s''était faîte enlever ?!! Je cours voir maman, j''entre... et je vois Gaïa en pleurs sur une chaise à côté de ma mère qui essayait de la réconforter.
+Le sol sous la chaise de Gaïa était trempé. Je devine que ça faisait longtemps que Gaïa était rentrée.', true, true),
+  ('4d87dc32-d501-46f4-a92c-2358fb323898', '4d87dc32-d501-46f4-a92c-2358fb323898', '33314ceb-e3a6-465c-91f1-e4679cbae041', 13, '23e58c00-a6ea-4334-a747-d0d971f666f1', '- Gaïa, mais qu''est-ce qu’il se passe ? Dis-je.
+
+- L''homme, me répond-elle, c''était celui avec lequel je dois me marier ! Oh mon dieu, il faut que je parte, je vous cause trop d''ennuis !
+
+- Mais non ma chérie, s''exclama ma mère.
+
+Quand soudain, des coups de feu retentirent dehors. Maman se précipita à la fenêtre, puis me fit un signe de tête, et je courus fermer tous les rideaux de la maison, tandis que ma mère rangeait les deux trois trucs qui traînaient. Puis, je pris la main de Gaïa, pour aller dans notre chambre, je pris quelques vêtements, une lampe frontale, une gourde d''eau, de la nourriture, une corde, une hache, un stylo et un ciseau, je mis tout dans un grand sac à dos. La princesse fit de même. Ma mère nous attendait déjà en bas, un sac sur le dos et une tente dans la main. Elle nous emmène dans le salon, je soulevai un grand tapis, pour révéler... Une trappe !', true, true),
+  ('71d5f926-9857-4370-80af-94d1bde12094', '71d5f926-9857-4370-80af-94d1bde12094', '33314ceb-e3a6-465c-91f1-e4679cbae041', 14, 'cab4b3ca-1338-4682-946a-349281215674', 'Je fis signe à Gaïa de me rejoindre, très intriguée celle-ci accourut. Je lui dis :
+
+- Je vais passer en premier puis tu me suivras, ensuite maman fermera la marche.
+
+- D''accord, me dit-elle, mais comment on ressort et surtout où ?
+
+- Tu verras, lui répond ma mère, en route il ne faut pas perdre de temps !
+
+Nous nous mettons à descendre l''un après l''autre puis nous rebouchons le trous avec une espèce de métal pour que personne ne puisse entrer... Bon enfin bref. Nous venons juste de faire une petite centaine de mètres quand nous entendons un brusque claquement de porte. Nous paniquons et s’ils nous trouvent, ils vont nous mettre en prison et Gaïa se mariera, nous serons dans de beaux draps ! Alors nous nous mettons à courir le plus vite possible et le plus silencieusement car s’ils nous entendent nous serons cuit. De loin j''aperçois la sortie et je suis soulagé mais en arrivant nous entendons des voix qui se parlent. Je murmure :
+
+- Attendons qu''ils partent puis nous sortirons nous cacher dans la grotte pour la nuit.
+
+- OK mais il faut qu''ils se dépêchent !', true, true),
+  ('7fb3d065-d68e-4606-9067-1a2232c88cda', '7fb3d065-d68e-4606-9067-1a2232c88cda', '33314ceb-e3a6-465c-91f1-e4679cbae041', 15, '23e58c00-a6ea-4334-a747-d0d971f666f1', 'Nous attendons encore un bon quart d''heure, jusqu''à qu''il n''y ait plus un bruit dans la maison. Au moment où nous remîmes en marche, maman se mit à s''inquiéter de l''état de la maison et voulu repartir, mais je lui pris la main et lui dit :
+
+- Maman, il ne faut surtout pas revenir en arrière, il y a peut-être d''autres gardes !
+
+Elle me regarda, puis se résigna. Quand nous sortîmes enfin du passage secret, nous crûmes que nous avions vraiment échappé aux gardes, mais, soudain une dizaine d''entre eux nous sautèrent dessus, à peine sortis. Ils nous attrapèrent et commencèrent à nous menotter quand des flammes tombèrent du ciel, gardes et prisonniers levèrent la tête d''un même mouvement pour voir un grand oiseau enflammé, voler en cercle de plus en plus bas, au-dessus de nous, un gros bonhomme vert le chevauchait. Les gardes détalèrent en hurlant, et nous les regardâmes courir à travers bois, mais quand nous relevions la tête, la créature magique et son cavalier n''étaient plus là.
+
+', true, true),
+  ('52c1ebbf-95f0-433e-965b-67cdb2d221ad', '52c1ebbf-95f0-433e-965b-67cdb2d221ad', '33314ceb-e3a6-465c-91f1-e4679cbae041', 16, 'cab4b3ca-1338-4682-946a-349281215674', 'Gaïa elle n''était plus là. << A l''aide aaaaaahhhhhhhhh !!!!!!! >> Mon sang ne fit qu''un tour, Gaïa elle s''est faite enlever ! Il n''y avait plus de temps à perdre, il fallait agir ! Je dis à ma mère :
+
+- Reste là je reviens tout de suite.
+
+- Non, me dit ma mère, c''est fini tu ne peux plus rien y faire, en plus tu est menotté.
+
+Ma mère avait raison je suis un petit garçon face au roi...
+
+Peu de temps après des gardes viennent nous chercher.', true, true),
+  ('864d0c7a-67ee-452c-a3b9-56e530d9aad2', '864d0c7a-67ee-452c-a3b9-56e530d9aad2', '33314ceb-e3a6-465c-91f1-e4679cbae041', 17, '23e58c00-a6ea-4334-a747-d0d971f666f1', 'Sur le chemin qui mène vers le palais, je dis à ma mère :
+
+- Je suis vraiment désolé maman, je pensais que ça allait marcher.
+
+Comme elle ne me répondait pas, je me retournais vers elle et vis qu''elle avait les yeux fermés et se tenait les côtes ! Au même moment, un éclair zébra le ciel, et le même oiseau de feu chevauché par le même gros bonhomme rouge, apparut. Les gardes, affolés à la vue de cette bête qui avait tué nombre des leurs, nous lâchèrent. Profitant de l''affolement des gardes, je pris le bras de ma mère et courus vers la forêt. Quand une ombre gigantesque apparut et que son propriétaire se posa devant nous, je m''arrêtais. Mais quand le Père Noël (car c''était bien lui) tendit les bras vers nous, une onde de confiance et de courage me fit avancer et grimper sur l''oiseau, entre le bonhomme rouge et ma mère, que j''avais posée derrière moi. Les gardes coururent vers nous, lances à la main, mais l''oiseau avait déjà pris son envol et nous étions déjà loin.
+
+Ma mère mourut de fatigue pendant la nuit, je l''enterrais au pied d''un grand chêne.', true, true),
+  ('11071fef-40f9-808e-88b9-f23e726bd4e4', '11071fef-40f9-808e-88b9-f23e726bd4e4', '33314ceb-e3a6-465c-91f1-e4679cbae041', 18, 'cab4b3ca-1338-4682-946a-349281215674', 'Je ne voulais pas pleurer devant le père Noël mais j''avais beaucoup de chagrin. Ma mère venait de mourir le jour de noël. Mais le père Noël me console en me disant :
+
+- Je suis sûr que tu peux encore sauver Gaïa !
+
+Il avait raison : je pouvais encore sauver Gaïa. Mais comment faire, je ne pouvais pas me démenotter tout seul ! Alors, j''eus une idée : il fallait les clefs du garde que le père Noël a assommé. Donc je me glisse jusqu''au garde et j'' essaye d''attraper le trousseau de clefs. Après quelques essais, j''arrive enfin à me débarrasser des menottes. Alors je cours vers le château, là j''entends des cris avec de la musique, sûrement pour accueillir Gaïa. Pour le passage, cela va être compliqué : une vingtaine de gardes font la ronde. Entre deux gardes j''arrive à m''incruster, puis je me glisse à l''intérieur du château. J''arrive dans la salle du trône. Le roi était là assis. Quand il me vit, il devint bizarre, un peu blanc. Alors je crie :
+
+« Au secours qu''on amène un verre d''eau le roi va mourir !
+
+Ce qui fut fait aussitôt. Alors que la servante court aux cuisines, j''en profite pour sortir dans la cour. Là, Gaïa et son boutonneux saluaient tout le monde. Dès que Gaïa me vit, elle comprit ce que je faisais là. Puis je la vis partir, j''entendis que, apparemment, son père l''avais appelée. Son amoureux resta sur place pour saluer les gens qui l''acclamaient puis fit un discours très long : ce que Gaïa attendait pour sortir par la porte de derrière en m''appelant :
+
+- Pssst pssst, Léo ...
+
+- Oui.
+
+- Je vais sortir par le ponton en faisant croire que je suis un voyageur. Toi sors par la petite porte de derrière puis tu descendras vers les douves, là, il y aura un radeau avec une rame tu monteras sur le radeau et tu rameras silencieusement (et sans que personne ne te voie) puis tu cours jusqu''au petit bois et là tu me retrouveras.
+
+- D''accord.
+
+J''avais compris le principe du plan mais après comment compte elle ne pas se faire apercevoir ? Je lui demanderai plus tard, là je dois sortir du château. Tout de suite, je remarque la fameuse porte dont Gaïa m''avais parlée. Je réussis à me débrouiller pour arriver jusqu''à la porte, en l''ouvrant je découvris une petite pente qui menait à la douve. En descendant j''aperçois le radeau un peu à l''écart. À pas de loup, je monte sur le radeau et je rame jusqu''à la rive, j''accoste sans faire de bruit. Je remonte la côte et je vois à la lisière de la forêt une petite ombre à capuchon qui rentre dans le bois. Pour ne pas me faire voir je rampe dans les herbes hautes, quand je suis assez éloigné du château je me relève et je cours en direction de Gaïa. En arrivant à proximité du bois, j''appelle Gaïa :
+
+- Gaïa, Gaïa ...
+
+Mais personne ne répondit. Je ne savais pas où était Gaïa, je m''enfonce un peu plus et, soudain, j''entends des cris ! Se sont ceux de Gaïa, je suis terrorisé : et si Gaïa était tombée dans un énorme trou. Je cours de toutes mes forces vers les cris et là je vois Gaïa en train de hurler à cause d''un chien. Je me mets à rire. Puis je vais aider Gaïa. Nous réussissons à nous débarrasser du petit chien. Vite vite vite, nous rentrons à la maison pour que Gaïa puisse se changer et se coiffer pour que personne ne puisse la reconnaître. Je saute dans les bras de Gaïa, je la regarde et je me dis que je ne peux pas la laisser seule dans la maison alors je lui dis que je vais voir un ami et qu''elle m''accompagne. Je retourne dans la clairière et je ne retrouve pas le Père Noël. Je ne comprends plus rien du tout à ce qu''il s''est passé.
+
+- Pourquoi tu ne me dis rien alors que je suis ton amie ? Tu sais que tu peux tout me dire. Me dit Gaïa
+
+Alors, je raconte tout à Gaïa, le Père Noël, ma mère et je fonds en larmes. Gaïa me réconforte et me dit : « Ce n''est pas grave rentrons et commençons à installer le sapin. »
+
+Nous passâmes un merveilleux Noël.', true, true),
+  ('ce7e6cbe-087d-47c5-88cc-4b1f189027db', 'ce7e6cbe-087d-47c5-88cc-4b1f189027db', 'ab6f83bd-edd5-4c0d-a5d3-921e19443d7a', 1, 'c69c78fa-cc1d-4ab0-88ae-6798b9a66d9f', 'Aussi loin qu''il s''en souvient, Jack avait toujours rêvé de visiter les catacombes de Paris.
+
+Le côté mystérieux, terrifiant, les crânes, et, qui sait, peut être des indices enfouis concernant un trésor des templiers ?
+
+C''est pourquoi lorsque ses parents lui ont annoncé que toute la famille allait passer une semaine à la capitale pour des raisons de travail, il était bien décidé à s''organiser une virée dans les énigmatiques tunnels de l''ancien ossuaire multi-centenaire.
+
+Mais pas par les circuits normaux, non, non, très peu pour lui ces trucs de touristes. Il voulait voir l''envers du décor !
+
+Après quelques recherches dans des méandres peu fréquentables de l''internet, il avait convenu d''un rendez-vous avec un guide officieux, spécialiste des catacombes : un certain "Jo", dont le surnom sur la toile était "le Cardinal".
+
+"Le Cardinal" lui avait dit de le retrouver au bar "Le Tonnerre", dans le 14eme arrondissement, demain soir.
+
+Jack avait prévu son équipement, et était bien décidé à se rendre à ce rendez-vous avec le mystérieux Cardinal ...', true, true),
+  ('97bcc14b-553b-4735-89ea-555ca2459f11', '97bcc14b-553b-4735-89ea-555ca2459f11', 'ab6f83bd-edd5-4c0d-a5d3-921e19443d7a', 2, 'd5f96569-59b5-44e9-bf0c-4a25d61bb5dc', '- A te voilà, dit le Cardinal. Ils burent un verre.
+
+Tous les deux allèrent aux catacombes.
+
+Soudain ,"patatra" ; un trou s''était créé. Ils virent des squelettes et des zombies !!!
+
+Le guide s''enfuit en courant. Un des squelettes, alerté, vint voir Jack.
+
+- Tu aimes le chou-fleur ?
+
+- Pas du tout, répondit Jack en faisant la grimace. Mais qui es tu ?
+
+- Je suis un squelette, dit-il en grignotant un haricot rouge. Si tu veux je peux t''emmener voir notre chef "Anubis" ?
+
+- Anubis ? dit-il à voix basse.', true, true),
+  ('1ef5377d-0efe-442a-a76a-6e1af20bc475', '1ef5377d-0efe-442a-a76a-6e1af20bc475', 'ab6f83bd-edd5-4c0d-a5d3-921e19443d7a', 3, 'c69c78fa-cc1d-4ab0-88ae-6798b9a66d9f', '"Anubis" ... Le Dieu Egyptien des morts ... Effectivement, cela avait un certain sens venant d''un squelette.
+
+Ce qui n''avait aucun sens, en revanche, c''est un squelette qui parle.
+
+Ou un squelette végétarien qui aime le chou-fleur et les haricots rouges.
+
+Ou juste ... un squelette ?!
+
+Jack examinait ses options.
+
+Fuir ? Essayer de rattraper le Cardinal ? Pour aller où ... Il était perdu, dans une section sans doute inconnue des catacombes déjà réputées pour être un labyrinthe, et son fameux guide qui avait pris ses jambes à son cou ? Heureusement qu''il ne l''avait pas payé d''avance, tiens.
+
+Suivre le squelette ? Le simple fait de formuler cette idée lui fit parcourir un éclair de frissons le long de sa colonne vertébrale.
+
+Mais la curiosité le tenaillait. Anubis ? A Paris, au 21ème siècle ? Cela pouvait être la plus grande découverte de l''histoire moderne !
+
+Et puis après tout, un squelette végétarien ne pouvait pas être complètement un mauvais squelette ...', true, true),
+  ('cea35ea1-0ba6-44df-8f67-d362837b017b', 'cea35ea1-0ba6-44df-8f67-d362837b017b', 'ab6f83bd-edd5-4c0d-a5d3-921e19443d7a', 4, 'd5f96569-59b5-44e9-bf0c-4a25d61bb5dc', 'Sans qu''il s''en soit vraiment rendu compte, Jack est sur les talons de ce sac d''os.
+
+Et qui sait ? Peut-être pourraient-ils même devenir copains ... un squelette ne peut pas être si méchant !
+
+Trois minutes plus tard, voilà qu''ils s''engouffrent dans un vrai tunnel de bric à brac.
+
+Et soudain, ils découvrent un papier mathématique qu''ils risquent d''avoir quelques difficultés à décoder :
+
+ 453654345323456543234567654323456787654345677654345677654345676543456776543455432264*******$$$$$$$$$$$$$$$$$$$$$$$__0))$_°090°_°0987654567890°£%%%%£__°8535687763**£%%++//.====////+//++/....//.%££*¨¨_°°0876678998765434566432345665456787654323456457354758564326=678967453456764454675636543465375646545643454323456787654345678987654345678987654345678876543567859764238647659675677543542326473.
+
+
+
+- Qu''est-ce que c''est que ça ?', true, true),
+  ('251d8571-be9a-4855-b463-c0cb0bba5284', '251d8571-be9a-4855-b463-c0cb0bba5284', 'ab6f83bd-edd5-4c0d-a5d3-921e19443d7a', 5, 'c69c78fa-cc1d-4ab0-88ae-6798b9a66d9f', 'Intrigué par l''énigmatique document, Jack faisait mentalement le point sur la situation.
+
+"Bon, trois minutes de zig zags, et ce squelette ne m''a toujours pas dévoré le cerveau. C''est une bonne chose. Voila qu''il me regarde d''un air intrigué maintenant. Qu''est-ce qu''il attend de moi ? Que je déchiffre son charabia là ? Mais ça n''a aucun sens, c''est comme si quelqu''un avait marché sur un clavier et ..."
+
+Presque au moment où il s''apprête à jeter le papier par terre, il stoppe net son geste. Deux des séries de caractères viennent d''attirer son attention : certains des symboles mathématiques et monétaires, et certains des symboles de ponctuation.
+
+Car en effet, ces deux groupes de symboles ont la particularité d''être regroupés sur les touches d''un clavier d''ordinateur !
+
+Et si la personne qui a écrit ce message l''avait fait en s''appuyant maladroitement sur le clavier ....
+
+Voyons, si j''enlève complètement ces groupes de symboles, que reste-t-il ?
+
+Jack sort un stylo de sa poche, et recopie le résultat de sa réflexion plus bas.
+
+C''est la chaine "+2496543234" qui se répète encore et encore ... Qu''est-ce que ça peut être ?
+
++249 ... Cette chaîne rappelle quelque chose à Jack, mais quoi ? Ah oui, l''indicatif international du Soudan, où habite son correspondant Omer. Mais quel est le rapport ? Attends, attends ..
+
+Le Soudan, il y a très longtemps, c''était la Haute Egypte ! Le voila le lien avec Anubis !', true, true),
+  ('ebfbe68e-1d22-4d14-bd82-a45c844e4963', 'ebfbe68e-1d22-4d14-bd82-a45c844e4963', 'ab6f83bd-edd5-4c0d-a5d3-921e19443d7a', 6, 'd5f96569-59b5-44e9-bf0c-4a25d61bb5dc', 'Jack demande très rapidement au squelette la direction d''Anubis.
+
+- C''est à droite, lui répond-il.
+
+Jack le remercie et va à droite, puis à gauche, et re à droite ; il court pendant une heure.
+
+Beaucoup plus loin, il découvre un morceau de carte.
+
+Jack ne comprend pas.
+
+Il lit à voix haute.
+
+“Attention ! Alerte, sous tes pieds !”
+
+Soudain, le sol rond se dérobe sous ses pieds !
+
+Aaaaaaaaaaaaaaaaaaaaaaa ! hurle Jack apeuré.', true, true),
+  ('491098a7-ccbe-45a5-aafb-aa37eee246df', '491098a7-ccbe-45a5-aafb-aa37eee246df', 'ab6f83bd-edd5-4c0d-a5d3-921e19443d7a', 7, 'c69c78fa-cc1d-4ab0-88ae-6798b9a66d9f', 'Il sent son estomac remonter dans sa gorge. L''espace d''une seconde, il ressent le vertige de la chute libre.
+
+"Oh la la, pourvu que je ne tombe pas de trop haut !" se dit-il en serrant les dents.
+
+Bizarrement, il sent qu''il chute mais ... pas complètement vers le bas. Plutôt en diagonale ?
+
+Il comprend qu''il dévale une sorte de toboggan, qui se redresse progressivement avant de le catapulter la tête en avant sur le sol.
+
+Heureusement, c''est du sable !
+
+"Peuh, peuh", fait-il en recrachant les grains de sable qui se sont mis dans sa bouche, et en se frottant les yeux pour se libérer des poussières.
+
+Il s''aperçoit néanmoins que ses yeux ne vont pas lui être d''un grand secours : il est dans le noir le plus complet ...', true, true),
+  ('84d44fef-372e-4e76-8b08-bbca626312b1', '84d44fef-372e-4e76-8b08-bbca626312b1', 'ab6f83bd-edd5-4c0d-a5d3-921e19443d7a', 8, 'd5f96569-59b5-44e9-bf0c-4a25d61bb5dc', 'Blouarck, qui a éteint la lumière ? Lumière ? Dit Jack inquiet.
+
+Il croit voir une lumière.
+
+Soudain, Jack se sent espionné. Tremblant, Jack sort un canif de sa poche et dit : "J''... j''ai un cou...couteau, sortez !"
+
+Et là, il voit Michaël discuter avec Anubis !', true, true),
+  ('bb7a6574-bc70-46da-aaea-6bf6b4fd3187', 'bb7a6574-bc70-46da-aaea-6bf6b4fd3187', 'ab6f83bd-edd5-4c0d-a5d3-921e19443d7a', 9, 'c69c78fa-cc1d-4ab0-88ae-6798b9a66d9f', 'Michaël, c''est le squelette. Jack a décidé que c''était plus facile de lui donner un petit nom que de l''appeler "le squelette", parce que déjà, il en avait vu plusieurs.
+
+Quant à son interlocuteur, pas trop de doute possible : museau de chacal, longues oreilles, pelage noir, yeux profonds ... Jack était en présence du Dieu Egyptien des morts.
+
+Il range rapidement son canif, se disant que quoi qu''il arrive ça ne serait pas très utile face à un Dieu, et que ça pouvait faire mauvais genre.
+
+"Euh ... bonjour ?" Se hasarda Jack pour briser la glace ...', true, true),
+  ('d4960b2b-a7be-43b2-aca0-68db99a1bf3b', 'd4960b2b-a7be-43b2-aca0-68db99a1bf3b', 'ab6f83bd-edd5-4c0d-a5d3-921e19443d7a', 10, 'd5f96569-59b5-44e9-bf0c-4a25d61bb5dc', 'Salut dit Anubis. 
+
+"Si tu réussis cette énigme je disparaîtrai, sinon... Bon, je lance l''énigme, et au bout de 50 secondes, si tu as la solution c''est bon, sinon ..." dis le dieu des morts.
+
+“Le matin, j''ai quatre pattes ;
+
+L''après-midi, j''ai deux pattes ;
+
+Et le soir, j''ai trois pattes.
+
+Qui suis-je ? “ 
+
+1,2,3,4,5,6,7,8,9,10...
+
+- Ha, mais compte dans ta tête !
+
+40,41,43,44,45,46,47,48,49...
+
+- L''homme ! C''est l''homme !
+
+Vlouspe, crac !
+
+Bon ben, le mystère a été résolu...
+
+
+à suivre dans le tome 2', true, true),
+  ('53bf1e0b-1ba5-4c90-a5a3-fd56dc4164c2', '53bf1e0b-1ba5-4c90-a5a3-fd56dc4164c2', '9cd17e98-9b6e-4b55-8902-0f158b20d882', 1, '2adccf21-2b08-4366-9c56-5ac67fdfe3c4', 'Tome 1
+
+Il était une fois un chevalier qui se nommait Antoine. Il adorait combattre les dragons.
+
+Un jour, je me suis dis que je devrais aller chasser un peu. Mais je me suis rappelé que tous les jours je dois aller chasser les dragons. Aujourd''hui, je ne voulais pas. Du coup, mon père m''avait dit oui pour que je ne chasse pas les dragons. Mais je suis allé quand même voir les dragons et avec mon armure et ma tenue de chevalier et mon épée, sur le dos de mon cheval, je suis allé voir les dragons.
+
+Quand je suis arrivé, dans la caverne des dragons, un dragon adolescent surgit de sa cachette. Il était très menaçant, mais je me suis rappelé comment mon ancêtre chassait les dragons. Du coup, je me suis mis en garde. Le dragon a eu peur, il recula et me laissa rentrer.', true, true),
+  ('fe3a1353-aa11-4c57-8c3b-4752d34735e7', 'fe3a1353-aa11-4c57-8c3b-4752d34735e7', '9cd17e98-9b6e-4b55-8902-0f158b20d882', 2, '23e58c00-a6ea-4334-a747-d0d971f666f1', 'A l''intérieur, il y avait un grand couloir sombre, mais comme Antoine était très courageux, il s''avança. Après 1km, plusieurs grottes apparurent sur les côtés, il y avait des dragons de toutes les couleurs qui ronflaient. Au bout du couloir, il y avait une porte, quand le petit chevalier voulu l''ouvrir, un grondement terrible gronda derrière lui. Il se retourna son épée à la main, quand il se retrouva nez à nez avec un dragon. Celui-ci était énorme, 5 fois plus grand et plus gros que Titanaro, un dragon énorme qui était une légende de son royaume.', true, true),
+  ('48cce405-1f3a-43ac-b5cb-2354f79d25d8', '48cce405-1f3a-43ac-b5cb-2354f79d25d8', '9cd17e98-9b6e-4b55-8902-0f158b20d882', 3, '2adccf21-2b08-4366-9c56-5ac67fdfe3c4', 'Je lui ai demandé où était le chef. Il me dit que le chef était derrière la porte derrière moi. Je me retourna et je toqua à la porte.
+
+Le dragon ouvrit la porte et surpris, demanda :
+
+- Qui es tu petit chevalier et que fais-tu dans la caverne des dragons, c''est trop dangereux ici.
+
+- Je suis Antoine, le plus courageux des chevaliers et je viens pour vous rendre visite. Et toi, comment t''appelles tu ?
+
+- Destrictore ! d''une voix grave. Le dragon salua.
+
+Antoine dit :
+
+- Est-ce que tu veux être ami avec moi ?
+
+Destrictore dit : « oui, j''adore les chevaliers »
+
+Antoine couru a son château et prit un jeu de carte. Et son père le roi le vit s''enfuir du château. Mais son père le prit par la manche juste avant qu''il s''enfuie et lui dit :
+
+- Qu''est ce que tu fais avec ce jeu de carte.
+
+- J''ai rencontré une princesse, mentit Antoine.
+
+Il détacha la main de son père qui était accroché à sa manche et monta sur le dos de son cheval et il lui dit rapidement : « Galope très très vite Tempête !!! »
+
+Tempête galopa très très vite, c''était une Pure-Sang.
+
+Il arriva en deux minutes dans la caverne des dragons retrouver Destrictore. Mais surprise, quand il arriva chez Destrictore, il ne le trouva pas. Il cria « Destrictore !!! Destrictore !!! Où es tu ? ». Les autres dragons avaient vu Antoine arriver dans la caverne. Un de ces dragons avait vu Destrictore partir. Il me dit :
+
+- Destrictore est parti dans la cuisine pour jouer à cache-cache.
+
+- Mais c''est où la cuisine ? dit Antoine au dragon.
+
+- C''est derrière toi, tu tournes à droite puis tu tournes à gauche et c''est devant toi.
+
+Antoine prit la direction que lui avait donné le dragon. Il trouva Destrictore qui était caché derrière la poubelle. Antoine lui dit :
+
+- Mais Destrictore, qu''est-ce que tu fais dans la cuisine derrière la poubelle, tu n''as rien à faire ici ? On va jouer au jeu de cartes, tu viens ?
+
+Destrictore se leva et le suivit. Ils jouèrent et rigolèrent pendant plusieurs heures.
+
+Ils étaient devenus meilleurs amis.
+
+Ses parents étaient très inquiets, ils se disaient : « Qu''est-ce qu''il fait Antoine ? »', true, true),
+  ('215d4a04-2a97-4cd8-8bac-b939df41d31d', '215d4a04-2a97-4cd8-8bac-b939df41d31d', '9cd17e98-9b6e-4b55-8902-0f158b20d882', 4, '23e58c00-a6ea-4334-a747-d0d971f666f1', 'Le roi envoya des chevaliers le chercher dans tout le royaume.
+
+En attendant, dans la grotte de Destrictore, lui et Antoine jouait à la bataille.
+
+Ils s''amusaient beaucoup, mais au coucher du soleil, Antoine s''exclama : par la barbe de Merlin, il est l''heure que je rentre, mon père va me tuer !
+
+C''est ainsi que les deux amis se séparèrent.', true, true),
+  ('1a6bc497-c6ca-4f89-80af-ff405cab26f1', '1a6bc497-c6ca-4f89-80af-ff405cab26f1', '9cd17e98-9b6e-4b55-8902-0f158b20d882', 5, '2adccf21-2b08-4366-9c56-5ac67fdfe3c4', 'Tome 2
+
+Les chevaliers étaient proches de la caverne des dragons.
+
+Les dragons s''étaient cachés et Antoine se cacha derrière les rochers de la caverne et il détacha son cheval Tempête et il lui demanda encore "Galope très très vite Tempête !"
+
+Tempête galopa très très vite.
+
+Ils arrivèrent encore en deux minutes au château.
+
+Les chevaliers rentrèrent dans la caverne des dragons. Soudain tous les dragons arrivèrent mais les chevaliers n''étaient pas plus courageux qu''Antoine.
+
+Les dragons crachèrent des flammes sur les chevaliers. Alors qu''Antoine était dans le château, le Roi et la Reine ne le virent même pas. Il n''y avait même pas les gardes. Du coup, Antoine se réfugia dans sa chambre parce que le roi approchait accompagné de la reine, des chevaliers et des gardes. Il se dépécha et il se coucha. Pendant 5 mois il allait tous les jours voir Destrictor dans sa caverne pour jouer avec un petit sourire, ils jouèrent tous les jours, en bonne santé. Le Roi comprit qu''il avait fait une blague et qu''il était devenu meilleur ami avec un dragon et ses amis. Du coup son père, le Roi, dit oui pour qu''il fasse partie des deux familles, celle des dragons et celle du Roi et de la Reine.
+
+Fin de l''histoire', true, true),
+  ('2268395e-98c8-4f73-b5a0-7d390524733c', '2268395e-98c8-4f73-b5a0-7d390524733c', '048b179c-3474-457f-8426-a9df5ca80068', 1, 'd61dc894-7bb2-4694-b6f0-7638b4e55923', '
+Chapitre 1
+
+
+À 4 heures du matin, il y a eu un vol à Marseille dans une bijouterie.
+
+Ont été volés un collier de perles d''une grande valeur, une alliance en argent et un bracelet en or.
+
+Ce vol a été commis par 3 personnes.
+
+La première avait 72 ans et mesurait 1m90, la deuxième avait 46 ans et mesurait 1 m70 et la troisième, la plus jeune, avait 20 ans et mesurait 1m78.
+
+Deux jours plus tard, la police s''est lancée à leur recherche, mais le policier qui a été désigné est un débutant, il s''appelle Bertrand, et il a beaucoup de mal à les trouver.
+
+Pendant ce temps, nos voleurs sont en train d''admirer leur trésor...
+
+
+Chapitre 2
+
+
+Un mois plus tard Bertrand se prenait pour un héros parce qu''il avait enfin retrouvé la trace des voleurs !
+
+Il les trouva dans un magasin avec une vieille dame, leur grand-mère, qui ne savait rien de leur vol.
+
+Bertrand entra dans le magasin et dit :
+
+- C''est vous qui avez volé le collier, la bague et le bracelet !
+Les voleurs répondirent : 
+
+- Oui ! Et si vous le dites on vous tire dessus !
+
+- Je vais le dire ! Dit Bertrand.
+
+Et les trois voleurs sortirent leurs pistolets.
+
+Et Bertrand aussi sortit son pistolet, mais la mamie des voleurs dit à Bertrand :
+
+- Ne touchez pas à mes Lapinous ! 
+
+Bertrand répondit :
+
+- Laissez-moi faire, je connais mon métier.
+
+Et pile au moment où Bertrand allait tirer, les voleurs coururent chez eux et claquèrent la porte au nez de Bertrand.
+
+À ce moment là, le patron de Bertrand appela et demanda à Bertrand si tout allait bien.
+
+Bertrand dit : 
+
+- Oui, oui, tout baigne, Patron !', true, true),
+  ('51906ccb-3683-48a2-8f40-3cbe66af4623', '51906ccb-3683-48a2-8f40-3cbe66af4623', '048b179c-3474-457f-8426-a9df5ca80068', 2, '6507542d-0f94-44cc-b838-7fec446b76e7', 'Le soir, dépité, Bertrand rentre au poste. Il n''a pas réussi à attraper les voleurs. Son patron va être furieux contre lui ! Bertrand décide donc de mentir à son chef.
+
+Pendant ce temps, les trois bandits discutent dans leur maison.
+
+- Nous ne pouvons pas rester ici, dit le plus jeune, c''est beaucoup trop dangereux !
+
+- Mais alors où aller ? demande le plus vieux.
+
+- On peut prendre le souterrain ? propose le second.
+
+C''est ainsi que les trois complices se lèvent et descendent dans la cave. Arrivé en bas, le plus vieux s''approche du mur, se penche vers une fissure et appuie sur une pierre juste à côté. Celle-ci s''enfonça, et, dans un claquement sec, le mur s''ouvrit en deux pour dévoiler un passage.
+
+Le second voleur allume une torche et s''enfonce dans le tunnel, les deux autres à sa suite.', true, true),
+  ('5a3b2646-b32a-423f-8cfc-a1894228a39e', '5a3b2646-b32a-423f-8cfc-a1894228a39e', '048b179c-3474-457f-8426-a9df5ca80068', 3, 'd61dc894-7bb2-4694-b6f0-7638b4e55923', 'Et soudain ils ouvrirent une trappe et se retrouvèrent dans le bureau du patron de Bertrand.
+
+Les voleurs n''avaient pas peur car ils avaient des pistolets.
+
+Ils sortirent par la trappe brusquement et crièrent : "Hauts les mains tout le monde !"
+
+Bertrand dit à son patron :
+
+- Ce sont eux ! Ce sont les voleurs !
+
+Et les voleurs s''enfuirent.
+
+Bertrand et son patron se mirent à leur poursuite et trois heures plus tard ils les attrapèrent et les ramenèrent au poste de police pour les interroger.', true, true),
+  ('2863cd09-df6c-470f-96fb-bbc715bb783e', '2863cd09-df6c-470f-96fb-bbc715bb783e', '048b179c-3474-457f-8426-a9df5ca80068', 4, '6507542d-0f94-44cc-b838-7fec446b76e7', '- Nous allons les interroger plus tard. Décide le chef.
+
+Les voleurs sont mis en prison mais 1 heure plus tard... BOUM !!!
+
+- Bon sang ! crie le chef quand Bertrand arrive dans la salle des cellules, les voleurs se sont échappés !
+
+Aussitôt, pendant que le chef et 2 autres policiers réparent le trou, Bertrand et 4 de ses collègues filent à la poursuite des voleurs.', true, true),
+  ('7a6ff8ed-5185-473d-adc8-44281d3c445d', '7a6ff8ed-5185-473d-adc8-44281d3c445d', '048b179c-3474-457f-8426-a9df5ca80068', 5, 'd61dc894-7bb2-4694-b6f0-7638b4e55923', 'Et à un moment ils attrapèrent les trois hommes et la grand-mère et les emmenèrent à nouveau au poste de police. Ils furent cette fois surveillés par 46 policiers. Ils ne purent pas s''enfuir.
+
+Deux mois plus tard, ils furent jugés et condamnés à 20 ans de prison ferme.
+
+Quand ils sortirent de prison, ils durent trouver un métier.
+
+Le premier avait fait des études de médecine et réussit à se faire embaucher dans un cabinet médical privé.
+
+Le deuxième était musicien, il savait très bien jouer de la guitare et trouva un poste de professeur dans un conservatoire.
+
+Le troisième avait étudié le droit en prison et devint avocat.
+
+La grand-mère qui avait maintenant 102 ans se fit embaucher comme stagiaire auprès d''une couturière.
+
+Mais huit ans plus tard, la grand-mère décéda.', true, true),
+  ('1ead39f4-85d7-4ece-a176-dff68f1e1c8c', '1ead39f4-85d7-4ece-a176-dff68f1e1c8c', 'f1456e5d-c073-46db-a650-ecf7d6f33275', 1, '23e58c00-a6ea-4334-a747-d0d971f666f1', '- Il y a qu''une seule façon de le savoir, dit Ron.
+
+- Rassure-moi, s''exclama Hermione, tu ne comptes pas y aller ?
+
+- Bah, pourquoi pas répondit Ron.
+
+- Mais nos parents, dit-je
+
+- Harry a raison, dit Hermione, nos parents vont s''inquiéter de notre disparition. Mais pourquoi pas, c''est vrai que j''aimerais bien savoir ce qu’il y a derrière.
+
+Harry hocha la tête, montrant son accord. Ils se donnèrent la main et franchirent le vortex.
+
+Quand Harry ouvrit les yeux, ils étaient en bas d''une montagne, à côté d''une forêt luxuriante. Ses amis commençaient à peine à ouvrir les yeux, quand un hurlement déchira la forêt, les faisant sursauter.', true, true),
+  ('6452f8d9-bf15-45fd-8f55-4b47bc98a5f7', '6452f8d9-bf15-45fd-8f55-4b47bc98a5f7', 'f1456e5d-c073-46db-a650-ecf7d6f33275', 2, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', '- C''est un dragon ! s''écria Hermione.
+
+Ron dit :
+
+- Faisons demi-tour !!!!!
+
+On courut vers la sortie mais le vortex se referma aussitôt.
+
+Je leur dis :
+
+- On est piégé !
+
+Hermione nous dit :
+
+- Vite, trouvons un abri ! C''est un Boutefeu Chinois, un dragon démoniaque !!!!!!!!!!
+
+Je leur dis :
+
+- Là bas une grotte vite !!!!!
+
+Ron et Hermione me disent :
+
+- On fonce !!!!!!
+
+A ce moment là, on entra dans la grotte non habité (heureusement)…', true, true),
+  ('f4224633-274c-4294-830a-b3aaf427daae', 'f4224633-274c-4294-830a-b3aaf427daae', 'f1456e5d-c073-46db-a650-ecf7d6f33275', 3, '23e58c00-a6ea-4334-a747-d0d971f666f1', 'La grotte n''était pas très haute mais très profonde. Ron regarda autour de lui, et se précipita vers un tas de bois, en prit une bonne poigné et les disposa en forme de cabane. Puis, Hermione comprenant ce qu''il faisait, alla vers une montagne de pierres, et les disposa en rond autour de la cabane, puis elle prit sa baguette pour allumer le feu... 
+
+Quand un grondement gronda, les faisant tous sursauter. Hermione se releva et s''exclama : “Incendio !” Une grande flamme s''éleva du tas de bois. 
+
+Je me releva à mon tour et m''assis auprès du feu, pendant qu''Hermione jetait des sortilèges de protection à l''entrée.
+
+Je regardais Hermione, ébahi de voir toute cette magie et dit : comment fait tu ça ?
+
+- Tu en feras de même bientôt, Ron aura la gentillesse de te faire une baguette.
+
+- Quoi, dis-je, en me retournant vers lui (avec les évènement précédent, je l''avais complétement oublié).
+
+- Je suis un fabricant de baguettes, répondit Ron assit en tailleur derrière moi.
+
+- Tu pourrais m''en faire une, maintenant ?
+
+- Non, me répondit Ron, d''un ton sec.
+
+- Pourquoi, demandais-je du même ton.
+
+- Il me faut ton tour de taille, répondit Ron, plus doucement, ta taille, celle de tes bras et selon tout ça, un supplément comme : du crin de licorne, du houx, du ventricule de dragon ou des plumes de phénix et le plus important un certain bois.
+
+- Pff, je fais 1m60 et est-ce que tu as un mètre ?
+
+- Toujours, me répondit Ron en sortant un petit carnet où il nota ma taille et un mètre, viens là que je mesure ton tour de taille et tes bras.
+
+Il m''enroula d''un espèce de ruban avec des graduations, c''était tellement froid que j''éclata de rire, Hermione nous regardait en silence, le sourire aux lèvres. Puis, le fabricant de baguettes, enroula son ruban et commença des calculs sur son petit carnet. 
+
+Pendant ce temps Hermione prépara de la soupe avec des champignons, puis elle fit frire le mélange, à l''aide de bâtons plantés dans le sol. 
+
+Je regardais mes deux amis faire en silence, en pensant que nous nous étions rencontrés il y a même pas une journée.', true, true),
+  ('2c2d0338-8926-4fda-b48b-3e56a21ca9ea', '2c2d0338-8926-4fda-b48b-3e56a21ca9ea', 'f1456e5d-c073-46db-a650-ecf7d6f33275', 4, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Hermione dit :
+
+- A table !!!!!!!!!!
+
+On se mit à table tous sauf Ron qui continuait ces petits calculs d''un air très concentrés.
+
+Au milieu du dîner Ron dit :
+
+- J''ai fini, Harry, il te faut du bois d''Houx et pour le cœur des plumes de Phoenix !!!!!
+
+Hermione dit :
+
+- Le bois d''Houx mais c''est très rare ! Comment vas-tu faire pour en trouver ?
+
+Ron lui répondit :
+
+- J''ai toujours toute sorte de bois sur moi !
+
+Il sortit de sa poche une petite besace, il regarda attentivement et pris le bois d''Houx.
+
+Ron dit aussitôt :
+
+- Je l''ai !! Hermione tu aurais le matériel pour construire la baguette d''Harry ?
+
+Hermione répondit calmement et sagement :
+
+- Oui, en effet mon cher Ron, il me manque juste un seul ingrédient : le sang de licorne ! mais pas de panique, j''ai vu une licorne morte dehors ensanglantée !
+
+Ron dit :
+
+- Hermione et Harry allez-y il faut que je garde la grotte, mais Hermione s''il te plait passe moi le matériel !
+
+Hermione passa le nécessaire à Ron puis partit avec Harry pour chercher le sang de licorne.', true, true),
+  ('d046261c-3bae-49b4-89b7-41e364ae5d18', 'd046261c-3bae-49b4-89b7-41e364ae5d18', 'f1456e5d-c073-46db-a650-ecf7d6f33275', 5, '23e58c00-a6ea-4334-a747-d0d971f666f1', 'Quand nous arrivons sur place, Hermione me tira à l''abri d''un bosquet et m''intima le silence, une créature capuchonnée venait de surgir et s''approchait de la licorne, elle se baissa et se mit à sucer le sang de la licorne qui coulait sur sa peau blanche. Puis, elle repartit ne nous laissant aucune goutte de sang de licorne. 
+
+Derrière moi, Hermione était pétrifiée par ce qu''elle venait de voir. Elle peina à me chuchoter : 
+
+- C''est un buveur, il boit le sang de, heureusement, que les animaux, le sang des licornes leurs permet de rester en vie plus longtemps.
+
+- Veux tu repartir voir Ron, lui dis-je, ou bien continuer à chercher une autre licorne ?
+
+- Re...
+
+Elle ne finit pas sa phrase, car un hurlement inhumain déchira les cieux. Nous nous mirent à courir de toute la force que nos jambes avaient après le spectacle que nous venions de voir. Une tête énorme dépassait des arbres, une tête comme celle du dragon qu''on avait vu quand nous venions d''atterrir dans ce monde, rempli de danger.', true, true),
+  ('b8e7f122-83b9-47ab-98da-675a02c10be0', 'b8e7f122-83b9-47ab-98da-675a02c10be0', 'f1456e5d-c073-46db-a650-ecf7d6f33275', 6, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'C''est alors qu''on pénétra dans la grotte et là, on vit un buveur en train de sucer le sang d''une licorne ! Ron était caché avec son matériel plus loin. C''est alors que le buveur partit en laissant la licorne par terre toute sèche ! C''est alors que Ron nous dit :
+
+- Venez voir !
+
+On le suivit on s''approcha et à notre grande surprise on vit une licorne morte toute ensanglanté ! Hermione dit :
+
+- Super, le buveur ne l''a pas trouvé celle là ! Mais je suis quand même paralysée par ce que je viens de voir ! Mais, attends Ron les buveurs normalement il n''y en à qu''à Poudlard non ?
+
+Ron lui répondit aussitôt :
+
+- Regarde !
+
+Soudain Hermione regarda et vit le château de Poudlard elle eu un petit sourire en coin !', true, true),
+  ('d8c8fc62-39ff-4123-a506-5fe8981d3d49', 'd8c8fc62-39ff-4123-a506-5fe8981d3d49', 'f1456e5d-c073-46db-a650-ecf7d6f33275', 7, '23e58c00-a6ea-4334-a747-d0d971f666f1', '- Voilà l''explication à notre interrogation, s''exclama Hermione, mais il y a quelque chose qui cloche !
+
+- Qu''est ce qui cloche ? demandai-je
+
+- Eh bien, il a l''air détruit !
+
+- Quoi, mais ce n''est pas possible ! cria Ron
+
+- Allons voir, dis-je.
+
+- C''est possible, car j''ai fini ta baguette, mais le voyage risque d''être long, dit Ron en regardant au loin.
+
+- Tant pis, dis-je en prenant ma baguette.
+
+Aussitôt une lumière dorée m''enveloppa et me souleva dans les airs, une sensation de liberté m''envahit tandis que je fermais les yeux, quand je les rouvris, j''étais allongé par terre, mes amis me regardant avec des yeux ronds.
+
+- Tu ne nous avais pas dit que tu étais un transformeur, dit Hermione.
+
+- Un quoi !
+
+- Un transformeur est quelqu''un qui peut se transformer en n''importe quel animal.
+
+- Mais comment je pourrais par exemple me transformer en... en pégase, à peine ai-je dit ces mots qu''un éclair rouge passa devant mes yeux et je grandis, ma peau devint bleutée, mes mains et mes pieds devinrent sabots et des ailes me poussèrent à droite et à gauche de mon corps. 
+
+Mes amis me regardaient d''en bas, l''air terrifié.
+
+- Comment je fais pour redevenir moi même, dis-je de ma voix légère.
+
+- Pense bien fort à toi, me répondit Hermione, et tu verras tu redeviendras comme avant, normalement… ajouta t''elle en chuchotant.', true, true),
+  ('f4c7c4f3-7d3f-4470-9a0b-070fcec20ed0', 'f4c7c4f3-7d3f-4470-9a0b-070fcec20ed0', 'f1456e5d-c073-46db-a650-ecf7d6f33275', 8, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Je fis ce qu''Hermione me dit et je redevins sous mon aspect humain.
+
+- Bon, maintenant qu''Harry est redevenu normal allons voir Poudlard ! Mais Ron, si Hagrid nous voit il va en faire une tête !!!
+
+Ron me répondit :
+
+- C''est vrai ! Mais il nous aidera à résoudre le mystère de Poudlard !
+Je leur dis :
+
+- Ça va être très loin ! N''y aurait-il pas un moyen plus rapide d''y aller ?
+
+Hermione et Ron eurent un petit sourire en coin et ils me disent :
+
+- Le Poudlard Express sera fermé ! Mais on peut y aller si tu te transformes en dragon !!
+
+- En dragon ? m''écriai-je !', true, true),
+  ('a3cefb0b-f3f6-4920-9497-e6bafe6289d1', 'a3cefb0b-f3f6-4920-9497-e6bafe6289d1', 'f1456e5d-c073-46db-a650-ecf7d6f33275', 9, '23e58c00-a6ea-4334-a747-d0d971f666f1', 'A peine ai-je dit ces mots que je grandis, grandis, jusqu''à devenir un dragon bleu et argenté, mes amis me regardaient d''en bas, les yeux écarquillés et la bouche grande ouverte. Puis, repensant à moi tout à l''heure, je redevins moi même.
+
+Hermione dit :
+
+- Bon du coup, tu te transformes en dragon, on va jusqu''à Poudlard et on regarde ce qui ne va pas ; si, oui ou non le château est en ruine !
+
+- Ah oui c''est vrai, dit Ron, je ne me souvenais plus la raison pour laquelle on voulait tellement aller à Poudlard.
+
+Hermione leva les yeux au ciel en soupirant. Nous sortons ensemble mains dans la main et je redevins un magnifique dragon. Mes amis escaladèrent ma grosse carcasse, quand ils furent bien accrochés je déploya mes ailes immenses et décolla. Derrière moi, mes meilleurs amis criaient de peur mélangée à de la joie. Quand je fus très haut dans le ciel, je décidai de m''amuser un peu, et je donnai un grand battements d''ailes et traversai les nuages, mes amis hurlèrent. Au dessus, la mer des nuages s''étendait sur des milliers de kilomètres, nous étions tous ébahi par ce spectacle éclatant, mais nous devions nous presser car qui sait il était peut-être arrivé quelque chose à Poudlard. Je retraversai les nuages mais dans le sens inverse et Hermione me cria :
+
+- Poudlard en vue !
+
+J''atterris lourdement et mes amis furent projetés loin de moi. Je redevins moi-même et me précipitai vers eux, Ron me dit :
+
+- La prochaine fois, tu pourras y aller plus doucement.
+
+- T''inquiètes pas !
+
+Hermione pouffa en se relevant péniblement et arrêta soudainement de rire en regardant derrière moi. Ron et moi nous retournons d’un seul et même mouvement, pour voir un spectacle horrifiant.', true, true),
+  ('90006ba4-0fb3-4df5-abe4-27eaeee8fc6d', '90006ba4-0fb3-4df5-abe4-27eaeee8fc6d', 'f1456e5d-c073-46db-a650-ecf7d6f33275', 10, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Poudlard était détruit, il ne restait que des ruines. Hermione était horrifiée elle dit :
+
+- Que s''est il passé ? C''est affreux ! Je sais pas vous, mais, moi, je commence à avoir très très peur ! Ron, tu penses que (elle lui souffla à l''oreille) Voldemort est ici ?
+
+Ron se mit à trembler, il lui dit à l''oreille :
+
+- Oui, et il peut arriver d''un moment à l''autre ! Faut pas rester là !
+
+Je les vis tout pâle, je leur dis :
+
+- Quelque chose ne va pas ? Vous êtes tout pâle !
+
+Hermione et Ron disent :
+
+- Harry faut pas rester là ! (Re)transforme toi en dragon, maintenant !!!!!!
+
+Harry essaya sans poser de question. Mais, c''est comme s’il ne pouvait plus le faire !
+
+Harry dit alors :
+
+- Je peux pas ! Je n''y arrive plus !
+
+Soudain une ombre s''approcha très près d''eux et leur souffla dessus. Pas de doute, c''était Voldemort !', true, true),
+  ('cbb8e08b-c9e4-46d0-964a-cc4ff8e03437', 'cbb8e08b-c9e4-46d0-964a-cc4ff8e03437', '91e88f57-f9dc-4bd3-bde8-1f1f6264830f', 1, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Alicia eut tout d''un coup très peur, elle essaya de repasser dans le portail, mais celui-ci était fermé. Elle se dit qu''il faudrait continuer à avancer pour voir la marraine des Océans. Elle se balada dans le nouveau petit village, mais à sa grande surprise il n''y eut personne ! Elle s''apprêtait à repartir quand soudain des requins, des murènes, des orques et même des crabes sanguinaires se mirent à l''encercler !
+
+- Je ne veux pas vous déranger, alors je vais m''en aller ! dit Alicia toute tremblotante.
+
+Les animaux se mirent à foncer vers elle et un requin (le chef) se mit devant elle et dit aux animaux qui s''apprêtaient à la dévorer :
+
+- Stop ! Tout d''un coup les animaux s''arrêtèrent. Merci beaucoup jeune dauphine mais nous apprécions ta présence, tu préfères être servie en Entrée ou en Plat de résistance ?
+
+- Gloups ! dit Alicia toute tremblotante.
+
+Les requins s''apprêtèrent à la dévorer et à la dernière seconde une main puissante la sauva de l''eau, elle eu juste un tout petit point de sang.
+
+- Ça va ? dit la voix qui lui a sauvée la vie.
+
+- Oui merci ! Comment vous appelez-vous ?
+
+- Je m''appelle Kathie ! Et je suis dans le camp des gentils. 
+
+- Tu souhaites aller voir la marraine des Océans n''est-ce pas ?
+
+Alicia répondit aussitôt :
+
+- Comment le savez-vous ?', true, true),
+  ('5ad4a5b6-5e6f-448d-94fa-ecc6f034f3a1', '5ad4a5b6-5e6f-448d-94fa-ecc6f034f3a1', '91e88f57-f9dc-4bd3-bde8-1f1f6264830f', 2, '6507542d-0f94-44cc-b838-7fec446b76e7', '- Je le sais, c''est tout. Répondit Katie.
+
+Alicia, qui n''avait pas eut le courage de regarder sa sauveuse, se retourna pour voir son visage.
+
+Elle eut une surprise. Katie n''était ni un poisson ni un mammifère marin. C''était une sirène aux longs cheveux blonds et à la queue et le haut rouge orangé.', true, true),
+  ('c3553f1f-21f2-406b-8e8c-21056a7d9cb6', 'c3553f1f-21f2-406b-8e8c-21056a7d9cb6', '91e88f57-f9dc-4bd3-bde8-1f1f6264830f', 3, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Alicia demanda alors à Katie :
+
+- On va où ?
+
+Katie lui dit alors :
+
+- Voir la Marraine du Roi des Océans ! Et toi comment t''appelles tu ?
+
+Alicia lui dit :
+
+- Je m''appelle Alicia ! Je suis une dauphine !
+
+Katie lui dit alors :
+
+- Où habites-tu ? Tu es toute seule dans l''océan ?
+
+Alicia lui répondit :
+
+- Oui je suis toute seule ! J''ai remis les alliances dans le bon ordre et je suis rentrée ici ! Mes amis n''ont pas voulus me suivre !
+
+Katie répondit effrayée :
+
+- Tu...Tu... as... as...rem...remis... les alli...alliances... da...dans...le...le...bo...bon...ord...ordre ?
+
+Alicia lui répondit aussitôt :
+
+- Bah oui ! Fallait pas ? T''inquiète p''tite Katie, Alicia c''est une p''tite génie ! Et puis, mamie Katie va trouver une solution ! Hein, hein !
+
+Katie étonnée qu''on lui parle comme ça dit :', true, true),
+  ('3ea5b98c-ddef-4ad2-9e47-84b9e4a841e9', '3ea5b98c-ddef-4ad2-9e47-84b9e4a841e9', '91e88f57-f9dc-4bd3-bde8-1f1f6264830f', 4, '6507542d-0f94-44cc-b838-7fec446b76e7', '- Bon. Tu veux voir la marraine du Roi des océans. Ce n''est pas une mince affaire, tu peux me croire.
+
+- Pourquoi ? questionne Alicia
+
+- Elle n''accorde son temps qu''à très peu de personnes.
+
+- T''inquiète, j''ai une idée.
+
+- Dis la moi, s''il te-plait.
+
+- Voilà, explique Alicia. On va devant chez elle, tu distrais les gardes, et, pendant ce temps, je rentre, je trouve la marraine, elle nous accueille et...
+
+- Surtout pas ! Tu vas pas bien ! Tromper la Marraine du Roi des Océans comme ça ! Une honte!
+
+Un scandale ! Une traîtrise !
+
+Sur ces mots, Katie tourne le dos et s''en va.
+
+Alicia l''appelle :
+
+- KATIE !', true, true),
+  ('ae9d3c1d-4026-4d17-bddb-a374cb5f1447', 'ae9d3c1d-4026-4d17-bddb-a374cb5f1447', '91e88f57-f9dc-4bd3-bde8-1f1f6264830f', 5, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Au bout de 65 appels de Alicia, Katie revient à contrecœur.
+
+- Qu’est-ce que tu veux ? dit elle très en colère.
+
+Alicia répondit :
+
+- Faut pas partir comme ça !!! Tranquille !!!
+
+Katie répondit encore plus en colère qu''avant :
+
+- NE ME PARLE PAS COMME CA !!!!! JE NE SUIS PAS TA COPINE !!! JE TE MONTRE JUSTE LA MARRAINE DU ROI DES OCEANS ET ON FAIT COMME SI ON C''ETAIT JAMAIS CONNUE !!!', true, true),
+  ('a4562641-690b-46d2-8a9b-716186fde518', 'a4562641-690b-46d2-8a9b-716186fde518', '91e88f57-f9dc-4bd3-bde8-1f1f6264830f', 6, '6507542d-0f94-44cc-b838-7fec446b76e7', '- OK, OK ! s''exclame Alicia en levant les nageoires en signe de reddition. On se calme ! Y a pas de soucis ! Relax, zen, faut pas s''énerver !
+
+Paroles qui ne firent qu''aggraver la colère de Katie. Celle-ci hurla :
+
+- NON ! NON ! Y A PAS DE " RELAX " NI DE " ZEN " NI DE...RRAAAAHHHhhhh !!!!!!!!!!!!!!!!
+
+Katie était en proie à une véritable crise de folie. Elle secoua la tête avec une telle force que Alicia sursauta. La sirène avait les yeux exorbités. Des sueurs froides couvraient son front. Ses cheveux lui tombaient sur le visage, lui donnant l''air d''un zombie avec une queue de poisson. Sa voix était chevrotante, rauque, étrange.
+
+Katie chuta soudainement. Alicia se précipita sur elle. La respiration de Katie était haletante, saccadée. Alicia prit peur.
+
+Elle ne savait que faire. Elle décida de partir à la recherche de la Marraine du Roi des Océans. Sans doute pourrait elle faire quelque chose. Alicia partit donc à sa recherche. Elle arrive dans une grande rue et se retrouve nez à nez avec un poisson chat.
+
+- Que fais-tu là ? lui demande-t''il.
+
+- Euh, bonjour monsieur. Je cherche la marraine du...
+
+- Du Roi des Océans ? termine le poisson chat.
+
+- Oui ! C''est elle que je cherche.
+
+- C''est pas compliqué. lui répond t''il. C''est la plus belle demeure du coin.
+
+Après quelques minutes, Alicia arrive devant la demeure. Elle l’explore. Soudain, elle entend une voix. Elle ouvre une porte et découvre une raie argentée qui lui tournait le dos. Elle semble sentir Alicia et se retourne.
+
+- Oui ?
+
+Alicia lui explique le problème et bientôt, elles sont près de Katie.
+
+- Il va falloir la mettre au lit pour que je puisse la soigner. Au fait, je suis la Marraine du Roi des Océans, je m''appelle Christalina', true, true),
+  ('8230fab5-b4c5-4b99-9d27-0ed79818fc66', '8230fab5-b4c5-4b99-9d27-0ed79818fc66', '91e88f57-f9dc-4bd3-bde8-1f1f6264830f', 7, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Alicia dit toute bégayante :
+
+- Vou...Vous...êt...êtes...l''...l''...la...mar...marraine...d''...du...Ro...Roi...dé...des...Océ...Océans !?
+
+Christalina lui répondit :
+
+- Oui, oui c''est bien cela ! Il va bientôt faire nuit et toutes les maisons sont complètes ! Je crois...
+
+Christalina n''eut pas le temps de finir sa phrase que Alicia lui dit en rigolant :
+
+- Que je vais devoir dormir ici ! C''est comment le palace ? Tu as des gardes pour toi ? C''est luxueux ? T''as des amis ?
+
+A peine Alicia eut dit le mot : Ami, que Christalina tomba dans les pommes !', true, true),
+  ('e2c6919d-1065-45cc-852d-c59dbb5bbf47', 'e2c6919d-1065-45cc-852d-c59dbb5bbf47', '91e88f57-f9dc-4bd3-bde8-1f1f6264830f', 8, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Alicia eu un coup de frayeur et cria très fort :
+
+- Un chirurgien vite ! Le meilleur, celui du roi !!!
+
+Celui-ci accourut et soigna Christalina et à peine réveillée elle se mit à sangloter et dit :
+
+- Non, bouhouuuuuuuuuuu, je n''ai pas de, bouhouuuuuuuuuuuu, amis !!!!
+
+Alicia lui dit :
+
+- Ho ! Faut pas pleurer ma vieille !!! Bois un p''tit coup, ça va te requinquer !!!
+
+Christalina but et sécha ses larmes et dit à Alicia :
+
+- Excusez-moi Mlle mais pourquoi étiez vous venue déjà ?
+
+Alicia lui répondit :
+
+- Bah pour la p''tite sirène, là, Katie, elle est tombée dans les pommes !!! Et votre choc vous a affaibli la mémoire c''est pas rassurant ça ma vieille !!!', true, true),
+  ('d6a1a0db-88ec-4306-a4be-2ebd1e99c2f0', 'd6a1a0db-88ec-4306-a4be-2ebd1e99c2f0', '91e88f57-f9dc-4bd3-bde8-1f1f6264830f', 9, '6507542d-0f94-44cc-b838-7fec446b76e7', '- Bon. Ce n''est pas tout mais il faut que je trouve un moyen pour repartir. Au fait, tu peux me dire où on est s''il te plaît.
+
+- Ah oui tu ne sais peut-être pas où nous sommes, répondit la Marraine du Roi des Océans. Nous sommes au beau milieu de l''océan Atlantique.
+
+- L''océan Atlantique ! Mais je suis super loin de chez moi.
+
+- Pourquoi ? Tu habites où ?
+
+- Dans l''océan indien, près de l''Australie.
+
+- Ah oui quand même c''est très loin. Bon viens, on va soigner Katie.
+
+- Euh, excuse-moi. Tu vas soigner Katie, pas moi !
+
+- Oui bien sûr, j''avais oublié. En attendant tu peux, par exemple, essayer de trouver une carte dans ma bibliothèque, pour savoir où se trouve l''océan Atlantique. Pour aller dans ma bibliothèque c''est simple tu rentres, tu continues tout droit pendant environ 30 mètres, tu montes l''escalier principal, tu t''arrêtes au deuxième étage, tu prends la troisième porte à droite, tu prends le couloir jusqu''à ce que tu arrives au bout et là c''est la porte qui est à gauche. Tu trouveras dans ma bibliothèque un bureau, des plumes et des morceaux de parchemin. Si tu veux me voir, fait tinter la petite clochette au-dessus de l''étagère près de la porte. J''arriverai entre deux et trois minutes. 
+
+Alicia essaie de suivre les conseils de Cristallina, mais ce n''est pas facile. Le palais est un vrai labyrinthe ; impossible de s''y retrouver. 
+
+Alicia parvient au deuxième étage puis s''arrête. Elle ne se souvient plus quelle porte il faut prendre. Elle tente la première à gauche. Ce sont les cuisines, une bonne odeur s''élève dans le couloir. Elle essaie alors la seconde porte à gauche. Il s''agit d''une très grande pièce occupée par une grande piste de danse. Contre le mur, de grandes tables sont recouverte de belles nappes rouges et dorées. Décidément aucune pièce n''allait. Elle ouvrit alors la troisième porte. Enfin, elle l''ouvrit... ce sont de grands mots, tout simplement parce que la porte refusait de s''ouvrir. La quatrième porte semblait plus promettante. Malheureusement, cette porte ne s''ouvrait pas non plus. Soudain, Alicia ouvrit la première porte de droite et tomba sur une des pièces les plus extraordinaires qu''elle n''eût jamais vue. La pièce était grande. Le sol était recouvert d''un épais tapis argenté et bleu. Au milieu du tapis, il y avait une petite table en bois clair et recouverte d''une nappe en dentelle. Sur les étagères environnantes était posé des boules de cristal, des livres, des flacons, et des bocaux. Sur la table, était posé une des boules de cristal, des fauteuils confortables entourés la table.
+
+Il ne valait mieux ne pas s''attarder ici. Si quelqu''un voyait Alicia dans cette pièce, elle pouvait être sûre d''être virée de la demeure de Christalina sur le champ. Elle referma doucement la porte et testa la deuxième porte à droite. Il s''agissait d''un escalier en colimaçon qui montait très haut dans les étages. Non, Christalina n''avait certainement pas parlé d''un escalier en colimaçon. Alicia sortie de la pièce et regarda les deux dernières portes. Laquelle serait celle qu''elle cherchait ? Alors qu''elle testait la dernière à droite , celle-ci ne s''ouvrit pas. Alicia ouvrit donc la troisième porte à droite et tomba sur un couloir. Mais oui, un couloir, Christalina avait parlé d’un couloir. C''était ça ! Alicia donna donc un grand coup de nageoire et accéléra. Elle voyait les portes défiler sans pouvoir s''arrêter. Enfin, elle freina et ouvrit la porte qui était à sa gauche. C''était bien la bibliothèque, Alicia s''engouffra à l''intérieur et se mit à chercher sur les étagères un livre de géographie lorsqu''elle le trouva, elle le saisit maladroitement avec sa nageoire. C''était un magnifique livre en velours rouge avec le titre écrit en belle lettre doré. Alicia alla s''asseoir sur un tabouret et saisie une plume, un parchemin et une sorte de fiole contenant de l''encre. Elle se mit à le feuilleter jusqu''à trouver la page qu''elle cherchait. Sur la page de gauche, un texte était écrit. Tandis que sur celle de droite, une carte était représentée. Alicia était une Dauphine, elle ne savait pas ce qu’était ces drôles de forme vertes avec des contours bleu. Elle lut donc le texte.
+
+" Le village Aquaria se révèle être une cité engloutie. Il y a plusieurs centaines d''années c''était une magnifique cité posée sur une île verdoyante. Mais un grand cataclysme a déclenché la fureur des océans. La cité a été engloutie jusqu''à être complètement immergée dans l''eau. Aujourd''hui il ne reste plus rien à la surface de cette ville ancienne. La Marraine du Roi des Océans, une magnifique raie argentée nommée Christalina vit dans la plus belle demeure de tout l''océan Atlantique. La cité engloutie Aquaria se trouve au beau milieu de l''océan Atlantique. Mais aujourd''hui aussi, un grand danger court sur les océans, un danger que seul quelques animaux marins sont capables d''arrêter. Selon la prophétie il s''agirait de trois jeunes dauphins et une tortue aussi jeune que les dauphins. Ils s''appelleraient Tchoky, Laya, Ella et Alicia.” 
+
+Alicia et ses amis étaient ils réellement les animaux de la prophétie ? Comment feraient les enfants pour empêcher ce nouveau cataclysme ? Et quel était donc le secret de Aquaria, la cité engloutie ? Ce nouveau cataclysme allait-il ravager tous les océans ? Et comment Alicia allait-elle faire pour rentrer chez elle et prévenir ses amis ?', true, true),
+  ('06de0ad5-681d-4a10-aa38-346e84a7df36', '06de0ad5-681d-4a10-aa38-346e84a7df36', '91e88f57-f9dc-4bd3-bde8-1f1f6264830f', 10, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Christalina, viens vite grouilleeeeeeeeeeeeeeeeeeee !!!!!!
+
+Christalina accourra et elle lui dit :
+
+- Que se passe t-il ma chère ???
+
+Alicia lui répondit aussitôt :
+
+- Il y a un moyen pour rentrer chez moi ????
+
+Christalina avait vu la carte et marmonna :
+
+- Tu n''as pas le choix, on dirait !!!!
+
+Bon, écoute, c''est très simple, tu vas au 3ème étage tu prends l''escalier de gauche tu vas au fond du couloir pièce de droite là, il y a trois portes tu prends celle du milieu tu vas au sud et là, normalement, tu devrais trouver un vortex qui t''amène chez toi !!!! Pour revenir le vortex sera au pied d''une pierre et tu dis :
+
+“Selon la prophétie je dois me rendre au royaume de Christalina !!!”', true, true),
+  ('4f8e3f19-f703-4fec-9576-922d7c171223', '4f8e3f19-f703-4fec-9576-922d7c171223', '91e88f57-f9dc-4bd3-bde8-1f1f6264830f', 11, '6507542d-0f94-44cc-b838-7fec446b76e7', 'Alicia se précipita vers la direction indiquée par Christalina. Elle arrive dans la salle du vortex. Elle n''attend pas et fonce dans le vortex. Elle est aussitôt aspirée dans un tourbillon de lumières verte, bleue et violette. Elle glisse dans un grand tube géant tel un toboggan dans les parcs d''attraction des humains.
+
+Soudain elle se sent réatterrir. Elle ouvre les yeux. Elle se trouve dans la caverne où elle a fait apparaître le vortex qui l''a mené chez Christalina. Elle n''attend pas une seconde, il faut qu''elle prévienne ses amis. Elle sait qu''ils sont passés par la Plaine Interdite et elle décide de s''y risquer elle aussi. Elle le sait, c''est dangereux de traverser mais elle doit bien se résoudre si elle veut prévenir ses amis. Seulement arrivée devant, elle hésite ; que se passerait-il si elle se faisait dévorer par un requin ou une murène ? Qui préviendrait Tchoky, Laya et Ella ? 
+
+C''est alors qu''elle repéra dans la roche un petit tunnel s''éloigner dans la falaise. Alicia n''hésite pas et le traverse à toute vitesse car le temps, c''est un trésor perdu. Lorsqu''elle aboutit de l''autre côté elle se retrouve face à la mangrove. Les immenses herbes montaient jusqu''à la surface. Elle traverse cette forêt rapidement et arrive devant l''habitat de Tchoky, Leia et Ella. Et face à elle, gardant un immense portail rouge, deux requins lui font face. Immense, aux dents acérées, ils font frémir Alicia. Tous deux dirigent le regard vers elle. Quand soudain une voix intervient :
+
+- Hola les requins, on se calme c''est une amie à moi.
+
+Une autre voix dit alors :
+
+- Pas touche à ma copine c''est clair ?!
+
+- Laya, Tchoky, Ella !
+
+Alicia n''en croit pas ses yeux. Là, devant elle, les trois autres animaux de la prophétie. Ses trois amis...', true, true),
+  ('b7e3d046-6b33-4023-8b63-110156daecd8', 'b7e3d046-6b33-4023-8b63-110156daecd8', '6a6b152d-8f51-40c9-9134-589e354665be', 1, '23e58c00-a6ea-4334-a747-d0d971f666f1', 'Hermione m''attrapa le bras et c''est comme si un crochet m''agripper le ventre. Je fermai les yeux pour ne pas sentir la douleur et quand je les rouvrit nous étions dans la grotte où nous nous étions installés en arrivant dans ce monde étrange.
+
+- Qui était l''homme encapuchonné, dis-je à mes amis encore pâles.
+
+- C''était un homme, me répondit Ron en chuchotant, qui te veux que du mal, car il a tué tes parents et que toi il n''a pas pu, enfin c''est ce que dit la légende !
+
+- Un seul homme sait ce qu''il c''est passé : Merlin. Il c''est tout sur tout, il a voyagé dans les quatre coins du monde et en plus il est le plus grand mage qui existe.
+
+- On pourrait aller le voir !
+
+- Harry, c''est une bonne idée, me dit Hermione, mais le problème c''est que c''est très très loin !
+
+- Mais si je me transforme en dragon ou en... Eye mais attends Hermione, comment tu nous as rapporté ici ?
+
+- Euh, j''ai transplané, me dit Hermione tout admirant ses doigts de pieds, je sais ce que tu penses, et non je ne peux pas le refaire car là je ne connais pas le lieu. Tu vois ce que je veux dire ou pas ?
+
+- Oui mais comment pourrait on y aller, alors ?!', true, true),
+  ('b7f88b9a-f55f-4a7a-8bb4-72f201c6df41', 'b7f88b9a-f55f-4a7a-8bb4-72f201c6df41', '6a6b152d-8f51-40c9-9134-589e354665be', 2, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Ron leur dit alors :
+
+- Cette affaire c''est du sérieux ! On a besoin d''un adulte obligatoirement avec nous ! Pourquoi pas Hagrid ? Il est très gentil et il acceptera de nous aider !
+
+Hermione lui répondit nerveusement :
+
+- Oui mais... Si Poudlard est en ruine c''est bien pour quelque chose non !? Tous les enseignants doivent être super occupés ! Et s''ils voient des élèves ici, ils vont carrément nous virer !!! Et puis on doit aussi résoudre le mystère de Poudlard ! Cette histoire est très louche !', true, true),
+  ('424427bb-8269-40b0-9c82-18c11892ebac', '424427bb-8269-40b0-9c82-18c11892ebac', '6a6b152d-8f51-40c9-9134-589e354665be', 3, '23e58c00-a6ea-4334-a747-d0d971f666f1', '- En attendant, dis je un peu énervé, j''aimerais bien rencontrer ce grand mage dont vous m''avez parlé, et aussi savoir qui c''est ce Hagrid et ces professeurs ?
+
+- Hagrid, me répondit Hermione, est un demi-géant.
+
+- Il est très gentil, enfin nous on ne l’a jamais vu mais mes frères, oui.
+
+- Ok, donc maintenant on peut EVENTUELLEMENT réfléchir à un moyen de rencontrer ce grand mage.
+
+- Ho, s''exclama Hermione, j''ai vu dans un livre ( Ron souffla ) qu''il existait bel et bien un animal capable de : voler, faire de très longue distance sans se fatiguer, supporter des charges lourdes et en plus il peut se rendre invisible, c''est…
+
+- Le caméléon volant !!! hurla Ron, le problème c''est que je n''en ai jamais vu et toi Hermione ?
+
+- Non plus mais je sais où trouver une photo, dans le livre dont je vous ai parlé, mais je ne me souviens plus à quoi ça ressemble.
+
+- Il faudrait retourner dans notre monde !
+
+- D’accord, dit Hermione, mais comment ?', true, true),
+  ('83542cb3-15bf-4982-8ee5-ee5083b73cb8', '83542cb3-15bf-4982-8ee5-ee5083b73cb8', '6a6b152d-8f51-40c9-9134-589e354665be', 4, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Je suis sûre que professeur Mc Gonagall pourra nous aider ! dit Hermione toute excitée.
+
+Ron lui dit alors :
+
+- Hermione tu sais que les profs doivent être très occupés ! Il est peut-être mieux d''aller dans la réserve, non ?!
+
+Hermione répondit furibonde :
+
+- Ah oui ! C''est vrai autant aller dans un endroit interdit !!! Mais oui c''est vrai ce serait plus raisonnable de faire ça !!! Elle finit enfin par une seule phrase : C''est de la folie Ron !!!
+
+J''essayais de calmer le jeu mais rien n''y faisait, alors je dis :
+
+Stop !!!!!!!!! Calmez-vous bon sang !!! je dis alors d''un ton plus calme :
+
+- En plus, la réserve doit être détruite comme le château, non ?!
+
+Hermione répondit calmement et toujours avec son air savant :
+
+- La réserve a été protégée par des sortilèges puissants ! Ron a raison on doit aller dans la réserve ! Dans la rangée V comme Vortex !!
+
+On se mit à marcher vers la réserve évidemment verrouillée.
+
+Je dis alors aux autres :
+
+- C''est verrouillé, on va devoir faire demi-tour ! dit Harry tout triste.
+
+Ron et Hermione se mirent à pouffer de rire.
+
+Je leurs dis :
+
+- Qu’est-ce qui vous fait rire ?
+
+Ron et Hermione répondit alors :
+
+- Il y a Alohomora !! ça ouvre toute les portes !!!
+
+Hermione lança le sortilège, elle dit :
+
+- Alohomora ! fortement et distinctement.
+
+La porte s''ouvrit. Ron dit alors à Harry :
+
+- Voilà ! Maintenant tu peux entrer !!', true, true),
+  ('ed92add8-2086-4593-a871-d48e38471393', 'ed92add8-2086-4593-a871-d48e38471393', '6a6b152d-8f51-40c9-9134-589e354665be', 5, '23e58c00-a6ea-4334-a747-d0d971f666f1', 'Hermione rentra en première voyant que je ne bougeais pas : des étagères par millier se trouvaient là et à mesure qu''on avançait, elles se multipliaient encore et encore, sans jamais s''arrêter. Puis Ron chuchota quelque chose à Hermione qui se mit à courir, pff j''en avais mare qu''ils se disent des choses en secret eux deux, mais comme je ne connaissais pas les lieux, je fis comme si de rien n''était. Tout d''un coup, Hermione s''arrêta net, et comme j''étais juste derrière elle, je me cognai contre elle. Elle nous avait arrêtée à côté du rayon V, un petit panneau accroché à l''étagère de gauche indiquait : de A à M. Et celle de droite : de N à Z. Hermione se mit devant celle de droite et dit très distinctement :
+
+- Vortex !
+
+Aussitôt, un livre se mit à briller, Ron l''attrapa et se mit à le feuilleter, quand soudain la porte de la réserve s''ouvrit et une lumière éblouissante (celle du soleil) nous aveugla. Une vieille dame avec un corbeau sur l''épaule entra. Malheureusement, elle se dirigeait vers nous, Ron, par pur réflexe éteignit la petite lampe que nous avions fabriqué avec une pierre creusée et une bougie. La dame au corbeau passa devant nous sans nous voir et s''arrêta devant le rayon R, elle s''exclama : Réparation. Elle prit deux livres qui clignotait et s''en alla. Aussitôt Ron n''y tenant plus, dit :
+
+- J''ai trouvé l''info qu''on voulait !
+
+- Ah parce qu''on cherchait quelque chose, dis je, un peu nerveusement.
+
+Les autres m''ignorèrent et Hermione commença à lire un article qui parlait du vortex.
+
+- Eh oh, hurlais je, en faisant des signes.
+
+- Attends, me dit Hermione, tu ne vois donc pas que nous sommes occupés !
+
+Alors là, c''en était trop, je pris la bougie et m''en alla vers le rayon C, puisque nous étions dans une bibliothèque, autant en profiter. Je fis comme Hermione et dit : Caméléon volant. Aussitôt un livre s''illumina, je le pris et je cherchai une image de cet animal étrange, je photographiai l''image dans ma tête et partis sans remettre le bouquin à sa place. Quand je fus dehors, je pensais très fort à l''image du caméléon bizarre et aussitôt, pouf, je me transformais en cet bizarrerie; Or, je ne savais point comment me rendre invisible, mais je me souvins d''un petit paragraphe dans le livre sur le caméléon volant, qui disait que pour se rendre invisible il fallait toucher sur une écaille qui n''était pas comme les autres et qui était normalement sur la patte droite. Je regardais sur ma patte droite mais je ne voyais aucune écaille différente des autres, sachant que j''étais de la couleur de l''herbe. Mais en regardant plus attentivement j''en vis une qui était plus foncée que les autres. J''appuyais dessus et tout d''un coup je ne vis plus ma patte, en fait je ne voyais aucune partie de mon corps étrange. Je déployai mes larges ailes et m''envolai, tout droit vers le sud, comme ce qu''il y avait écrit sur une carte du livre. Quand je fus très haut dans le ciel, j''aperçus deux silhouettes qui semblaient cherchaient quelqu''un. Je compris bien après que c''était Ron et Hermione qui me cherchaient, MOI !', true, true),
+  ('d1911df9-36d5-417d-9d99-d408e97bfb21', 'd1911df9-36d5-417d-9d99-d408e97bfb21', '6a6b152d-8f51-40c9-9134-589e354665be', 6, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Mais je ne voulais plus les voir ! Ils m''agaçaient à parler tout seul ! D''accord je ne connais pas du tout la magie, mais je veux quand même faire partie du groupe !!!
+
+Au bout d''un moment, Harry se rendit compte qu''il ne savait pas où se cachait Merlin. Il fallait qu''il retourne à la bibliothèque ! Il fit machine arrière et retourna à la Bibliothèque Poudlard. Un peu plus tard, il arriva à la bibliothèque de Poudlard. Ron et Hermione le cherchaient toujours. Il passa devant eux invisible, pfff je regrette pas leur présence ! Il entra dans la bibliothèque pensa très fort à lui et se (re)transforma en lui même. Il dit fortement et distinctement dans la rangée des M :
+
+- Merlin ! aucun livre ne sortit. Il essaya dans la rangée des E :
+
+- Enchanteur ! toujours rien. Il vit une petite porte, qu''il n''avait pas vue la dernière fois avec marqué dessus :
+
+- Réserve Privée ! Il essaya d''entrer mais la porte était fermée ! Il essaya avec les clefs qu''il avait utilisées pour ouvrir le placard de sa chambre : Ouvert ! Au moment où il entra Ron et Hermione déballèrent :
+
+- Harry, Harry ne pars pas ! On est désolé ! On recommencera pas ! dirent-ils tout penaud et tout honteux.
+
+Je leur répondit furibond :
+
+- Tant pis pour vous ! Fallait y penser avant ! Pour vos prochains meilleurs amis faites attention à ne pas les vexer ! Je ne vous pardonne pas ! et je fermai la porte à clefs. Je vis la réserve privée et dis-je :
+
+- Merlin ! un livre très vieux arriva. Une petite carte tomba par terre ! Il y avait marqué dessus :
+
+“Merlin l''enchanteur”', true, true),
+  ('4cdae6e4-d752-42be-9199-f0f5f58ff953', '4cdae6e4-d752-42be-9199-f0f5f58ff953', '49942478-410a-4bc8-956c-0d1624185853', 1, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Je pris la petite carte et il y avait marqué dessus l''adresse de Merlin ! J''ai retenu ma joie quand je me suis souvenu que Ron et Hermione m''attendaient derrière la porte ! Il fallait que je trouve une autre sortie, je fouillais du regard la pièce quand soudain je vis un petit couloir derrière. Je me mis à marcher vers sa direction quand soudain à gauche une autre porte ! Je me mis à essayer de l''ouvrir, verrouillée ! J''essayai avec ma clé Ouvert ! Mais, ce n''était pas une sortie, c''était…', true, true),
+  ('6223a823-ad64-4be0-85f4-218b6b320972', '6223a823-ad64-4be0-85f4-218b6b320972', '49942478-410a-4bc8-956c-0d1624185853', 2, '23e58c00-a6ea-4334-a747-d0d971f666f1', 'Je fis un pas, puis tout se passa très vite, j''entendis un boum, puis je me retournais pour voir Ron et Hermione ouvrir la porte et s''écrier : Harry, non !
+
+Puis, je sentis comme si je tombais, tombais, tombais, à l''infini.
+
+Puis plus rien.
+
+
+
+- Je crois que c''est un humain, vous savez ces bêtes qui parlent !
+
+- Vous croyez qu''on devrait l''amener à Merlin ?
+
+J''ouvris les yeux et me retrouva nez à nez avec... un écureuil, un lapin, une marmotte et un cerf.
+
+- Qui es tu, me demande le lapin.
+
+- Je... Je ne sais pas.', true, true),
+  ('403154e7-d602-4206-ad81-9af00f9573d8', '403154e7-d602-4206-ad81-9af00f9573d8', '49942478-410a-4bc8-956c-0d1624185853', 3, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Un peu plus tard, je repris mon esprit. Ron et Hermione étaient à côtés de moi ! Je leur dis :
+
+- Désolé, je n''aurai pas dû m''enfuir comme ça ! Mais, vous parliez tout le temps que tous les deux ça m''agaçait ! Mais, bon on redevient amis !? Mais où sommes-nous ?
+
+Hermione me répondit :
+
+- On est désolé Harry, la prochaine fois on t''inclura dans le groupe ! Oui, on redevient amis évidemment ! On est dans un passage de la forêt, il y a une sortie !
+
+Ron dit alors :
+
+- Maintenant qu''on est réconciliés on peut y aller !
+
+Mais je leur dis :
+
+- Quand je suis tombé dans les pommes j''ai entendu des animaux me parler !
+
+Hermione répondit de son air savant (il m''avait manqué) :
+
+- Ce sont des petits animaux qui prennent soin de nous, les bons sorciers !
+
+Ron la coupa et dit :
+
+- Tu as quoi dans ta main Harry ?
+
+Je lui répondis :
+
+- C''est notre carte qui nous emmène tout droit vers le secret de mes parents ! Merlin !', true, true),
+  ('18869124-d8b1-4e17-b5f1-90cde3ad1afa', '18869124-d8b1-4e17-b5f1-90cde3ad1afa', '49942478-410a-4bc8-956c-0d1624185853', 4, '23e58c00-a6ea-4334-a747-d0d971f666f1', '- Et bien en route, dit Hermione.
+
+- Donc, on doit être ici, il faut aller par là, dis je en montrant une direction avec mon doigt.
+
+Nous marchons, très longtemps, mais, quand la nuit vient à tomber, nous nous arrêtons pour la nuit, et Hermione fit un feu. Puis, nous nous endormions, à la belle étoile.
+
+Quand je me réveillai au petit matin, la première chose que je vis était que la main d''Hermione frôlait la mienne, je la retirais brusquement pour aller prendre un bain dans la rivière à côté de l''endroit où on avait dormi. Quand, je fus dans l''eau, je vis, dans l''eau, un groupe de jeunes filles, très belles, qui dansaient dans l''eau. Je sortis de l''eau, m''habillai à une telle vitesse, que je ne serais certainement pas en retard à l''école, si je m''habillais aussi vite quand j''avais école. Et couru prévenir les autres, mais je trouvai Hermione en train d''essayer de boucher la vue de Ron en lui mettant les mains sur les yeux.
+
+- Mais laisse moi, s''écrit Ron je veux les voir !
+
+- Non, ce sont des Vélanes.
+
+- Et alors !
+
+- Et bien, ça fait que ...
+
+Elle s''arrêta au milieu de sa phrase, car une troupe d''ours brun venaient de pointer leur bout du nez, enfin du museau. Les Vélanes s''enfuirent, non sans hurler, et, à une vitesse ahurissante, les ours nous ligotèrent et nous emmenèrent.', true, true),
+  ('0475f4ed-edf2-43fe-bee3-bf940ea08d5d', '0475f4ed-edf2-43fe-bee3-bf940ea08d5d', '49942478-410a-4bc8-956c-0d1624185853', 5, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Il y en avait deux énormes tous les deux ils n''étaient pas du tout câlins ! C''est alors que l''un d’eux me saisit, s''apprêtait à me manger et me regarda et me lâcha et il dit à voix basse à l''autre ours :
+
+- C''est Harry Potter !
+
+L''autre ours me renifla et dit à l''autre ours :
+
+- Sans aucun doute !
+
+C''est alors que le plus gros ours saisit Ron et s''apprêtait à le dévorer quand Hermione dit :
+
+- Stupéfix ! Ne touche pas à mes amis, vieux tas de fourrure !
+
+Il tomba par terre, l''autre ours s''approcha très en colère contre Hermione et elle nous dit :
+
+- Faites quelque chose ma baguette est tombée par terre ! Viiiiiiiiiiiiiiiiiiiiiite !
+
+Mais, Ron et moi nous ne sommes pas aussi doués que Hermione dans le domaine des sortilèges (dans tous les domaines d''ailleurs) !
+
+Alors ma clé qui avait ouvert la porte de la réserve et mon placard se mit à vibrer et lança des énormes pierres sur l''ours, nous délivra des lianes et je me transformai en dragon et m''envolai vers le ciel ! Hermione me dit :
+
+- C''était quoi ça ?
+
+', true, true),
+  ('4ab4e456-505a-444e-be45-118fb15bf3ac', '4ab4e456-505a-444e-be45-118fb15bf3ac', '49942478-410a-4bc8-956c-0d1624185853', 6, '23e58c00-a6ea-4334-a747-d0d971f666f1', '- Je crois que la clé n''ouvre pas seulement un placard. Elle est magique !!!
+
+Puis je me retransformais en humain.
+
+- Sans aucun doute, dit l''autre ours, qui avait été choqué par ma transformation, mais veuillez rendre mon ami dans son état normal.
+
+- Je... Oui bien sûr !
+
+Une fois l''ours libéré du sort jeté par Hermione, ils nous conduisirent...
+
+Dans une prairie verdoyante, et au milieu, un grand palais construit à l''intérieur même d''un immense chêne, qui devait avoir plus de 2 siècles.
+
+- Voilà, le palais secret du seigneur Merlin, s''écria l''ours, enfin seigneur, c''est plutôt un sorcier.
+
+- Je te l''ai déjà dit milles fois, dit l''autre ours, ce n''est pas un sorcier mais un mage.
+
+- Oui, bon, c''est la même chose !
+
+- Hem, dit Hermione, juste, comment vous appelez vous, enfin, moi, c''est Hermione, lui, c''est Ron et lui c''est...
+
+- Harry Potter, marmonna un des deux ours, je me nomme Robert et lui, Michel. Nous sommes frères jumeaux.', true, true),
+  ('35502d66-eae6-4b3f-a53a-db7a276363b2', '35502d66-eae6-4b3f-a53a-db7a276363b2', '49942478-410a-4bc8-956c-0d1624185853', 7, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Ah ! Très bien ! Et bien merci de nous avoir accompagnés ici mes amis et moi !!! Maintenant nous devons partir pour voir Merlin ! dit Hermione toute contente.
+Ron arriva et frappa la porte trois fois ! Une vieille voix dit :
+
+- Entrer !
+Merlin l''enchanteur nous dit tout haut (excusez-moi mais c''est quand même impressionnant) !
+Nous racontèrent à Merlin toutes nos aventures et à la fin je lui dis :
+
+- Et j''aimerais savoir comment mes parents sont morts !!!
+A peine ai je dis ces mots que Merlin tomba de sa chaise ! Ron s''empressa de lui demander :
+
+- Ca va pépé ? Hermione lui donna un gros coup de coude et Ron s''empressa de rectifier :
+
+- Euh Merlin !
+Un silence de mort régnait dans la pièce puis il dit :
+
+- C''est Voldemort !', true, true),
+  ('b381621f-70f5-47f3-a18f-4112cf664e67', 'b381621f-70f5-47f3-a18f-4112cf664e67', '49942478-410a-4bc8-956c-0d1624185853', 8, '23e58c00-a6ea-4334-a747-d0d971f666f1', 'Effectivement le "pépé" comme disait Ron, ressemblait étrangement au Seigneur des Ténèbres, mais quand Hermione se rapprocha, elle éclata de rire.
+
+- Mais non, c''est bien Merlin, regarde, il a un nez, c''est juste qu''il est tout blanc, dit elle en relevant le vieux bonhomme.
+
+Celui-ci reprenait peu à peu ses couleurs.
+
+- Oh, Harry Potter vous m''avez fait une belle peur, j''aurais du écouter ma voyante, qui avais prédit votre arrivée !
+
+- Une voyante, s''exclama Ron.
+
+- C''est moi, fit une voix derrière eux.', true, true),
+  ('1df8329b-7e92-4e9f-aaed-96f4a98aaac6', '1df8329b-7e92-4e9f-aaed-96f4a98aaac6', '49942478-410a-4bc8-956c-0d1624185853', 9, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Une très vieille dame arriva soudainement ! Elle nous regarde mystérieusement et elle nous dit :
+
+- Je suis la voyante de Sire Merlin ! Et je ne me suis jamais trompée dans le domaine de voyance, Sire Merlin !!
+
+C''est alors que sans s''y attendre elle fit monter en l''air Harry et la voyante de Merlin se mit à le sentir et le laissa tomber soudainement sur le sol, Harry avait très mal à la tête ! La voyante lui dit :
+
+- Tu n''es pas comme les autres enfants que j''ai mang... rencontré !
+
+Harry lui dit méchamment :
+
+- Normal je suis Harry Potter !!!
+
+La voyante le regarda bouche bée et s''en alla dans la maison de Merlin !
+
+Pendant ce temps Merlin nous fît entrer et nous dit :
+
+- Excusez-moi pour ma voyante elle est un peu méchante et veux montrer qu''elle est très forte !! Alors que sans me vanter je suis bien plus fort qu''elle !
+
+Ron lui dit :
+
+- Pourquoi vous ne vous prenez pas une autre voyante ?
+
+Merlin lui dit :
+
+- Une longue histoire de famille !
+
+Hermione voulait lui poser plein de questions sauf que on entendit le grincement de planches d''escalier et on vit la voyante arriver un pistolet à la main et dit :
+
+- Vous n''auriez jamais du venir chez Merlin !
+
+Et elle tua Merlin. Hermione dit :
+
+- Noooooooooooonn!!!!', true, true),
+  ('11671fef-40f9-8056-9d27-ef60a7bfbfa0', '11671fef-40f9-8056-9d27-ef60a7bfbfa0', '49942478-410a-4bc8-956c-0d1624185853', 10, '23e58c00-a6ea-4334-a747-d0d971f666f1', 'Mais alors qu''elle s''approchait précipitamment du corps inerte de l''enchanteur, la voyante dirigea l''arme à feu vers elle, et Ron gronda.
+
+- Un pas de plus, s''exclama la vieille dame, et je t''explose le crâne. Ce vieux Merlin méritait largement son sort ! Et si vous faites un seul, je dis bien, un seul pas de travers, vous subirez la même chose.
+
+Je tirai Hermione du bras, mais elle était pétrifiée sur place, je jetai un regard désolé à Ron, pour lui insinuer de ne surtout rien faire de brusque, sinon la vieille folle risquait de tirer sur notre amie, qui fixait toujours le corps de l''enchanteur, d''un regard vide. Quand un gros bruit nous fit tous sursauter, nous nous précipitions dehors dans l''espoir que quelqu''un viendrait à notre secours, mais une énorme patte écaillée nous bloqua le passage...', true, true),
+  ('13871fef-40f9-80b9-a3b6-ebdfe4be9dde', '13871fef-40f9-80b9-a3b6-ebdfe4be9dde', '49942478-410a-4bc8-956c-0d1624185853', 11, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Un immense dragon de feu était pointé devant nous !!! Et au bonheur de tous Merlin était dessus !!! La voyante en fit tomber son arme à feu, Hermione en profita et l''écrasa avec sa chaussure !!! La voyante laissa échapper quelques mots :
+
+- Mais...je croyais que ... ce n''était pas vous par terre... mais...mais !!!
+
+Merlin hurla aux enfants :
+
+Montez !!!
+
+Harry, Ron et Hermione se précipitèrent de monter sur le dragon !!! Ron dit :
+
+- Comment avez-vous fait pour résuciter ?', true, true),
+  ('17571fef-40f9-8054-9bed-dc84819d838a', '17571fef-40f9-8054-9bed-dc84819d838a', '49942478-410a-4bc8-956c-0d1624185853', 12, '23e58c00-a6ea-4334-a747-d0d971f666f1', 'Le vieil enchanteur ne répondit pas mais donna un coup de talon sur les flancs de l''énorme bête écaillée et nous nous envolons vers les cieux. Le dragon allait toujours plus haut, nous avions déjà dépassé les nuages, quand il commença à faire du surplace. Merlin se retourna vers nous et dit :
+
+- Les enfants, vous venez d''être victime des illusionneurs.
+
+- Des quoi ?
+
+- Des illusionneurs. Ce sont des personnes, le plus souvent des femmes, qui ont le don de se métamorphoser en n''importe quoi, autant un humain qu''un animal. Par exemple les ours que vous avez vu tout à l''heure c''en était, tout comme mon sosie ou la voyante.
+
+- Mais pourquoi ils étaient là ?
+
+- Vous étiez en plein dans leur territoire !
+
+- Mais monsieur, demanda Hermione, comment avez-vous su qu''on était ici ?
+
+- Haha, ça c''est mon secret !
+
+- Et où allons-nous ?
+
+- Dans un endroit fortifié, très loin d''ici, et où personne ne pourra vous trouver...', true, true),
+  ('17d71fef-40f9-80fd-998e-e501ac8882a5', '17d71fef-40f9-80fd-998e-e501ac8882a5', '49942478-410a-4bc8-956c-0d1624185853', 13, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Tout d''un coup le dragon se mit à descendre jusqu''à une toute petite maison ! Une fois arrivé Merlin protégea la maison avec des sorts de protections, Hermione se mit à l''aider ! Pendant ce temps Ron et Hermione entrèrent dans la maison et découvrirent avec stupéfaction que la maison était gigantesque ! Ron se jeta sur le canapé et je m''assieds tranquillement sur le fauteuil en velours d''en face !', true, true),
+  ('19f71fef-40f9-80be-9f40-ebdc425587e1', '19f71fef-40f9-80be-9f40-ebdc425587e1', '49942478-410a-4bc8-956c-0d1624185853', 14, '23e58c00-a6ea-4334-a747-d0d971f666f1', 'Merlin entra à son tour et s''installa dans un grand fauteuil rouge bordeaux avec des bordures en or massif. Une petite fille blonde avec deux petites couettes, un t-shirt rose saumon et une salopette bleu clair sortit par une porte à double battant du genre western, avec un plateau doré dans les mains. Celui-ci contenait, trois mugs bleu foncé et un gros bol de la même couleur. Je commença à boire le chocolat chaud, tout en regardant la pièce dans laquelle on se trouvait : la double porte à battant par laquelle était sortit la fille était entourée de deux têtes de taureaux accrochés au mur, un gigantesque tapis rouge se trouvait au centre, une table basse, où Ron avait gentiment posé ses pieds, était dessus. Quand Merlin commença à parler, je me sentis enveloppé comme dans un cocon, et c''était comme si plus personnes se trouvait à mes côtés, seul le son de la voix de Merlin me parvenait.', true, true),
+  ('1a771fef-40f9-8047-b582-e88855281f27', '1a771fef-40f9-8047-b582-e88855281f27', '49942478-410a-4bc8-956c-0d1624185853', 15, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', '- En quoi consiste votre visite ? Dit merlin en buvant une gorgée de thé.
+
+Alors je pris la parole et dis :
+
+- Et bien nous avions une question à vous poser...
+
+Il nous dit alors :
+
+- je vous écoute jeunes gens !
+
+Hermione dit d''un air inquiet :
+
+- C''est une question qui risque de vous surprendre !
+
+Merlin lui repondit :
+
+- J''en ai vu d''autres vous savez !
+
+Alors je lui dis :
+
+- J''aimerais savoir comment mes parents sont morts !
+
+Il y eut un grand silence', true, true),
+  ('1dd71fef-40f9-8048-99d9-d8179f5bab80', '1dd71fef-40f9-8048-99d9-d8179f5bab80', '49942478-410a-4bc8-956c-0d1624185853', 16, '23e58c00-a6ea-4334-a747-d0d971f666f1', 'Un air triste et inquiet apparu sur le visage de Merlin et il s''avachit encore plus sur son fauteuil. Puis après ce qu''il me sembla être des heures, le vieil homme prit la parole.
+
+- Je... Je ne sais pas si je peux vous le dire.
+
+- Pourquoi, demanda Hermione.
+
+- Et bien, disons que ton père, Harry et moi étions les meilleurs amis du monde, nos parents respectifs se connaissant nous avaient mis dans la même académie, ainsi, dès notre plus jeune âge nous nous côtoyons. Puis en école secondaire, ta mère arriva, nous tombâmes tous amoureux d''elle, mais c''est ton père qu''elle choisit. Malgré le fait que je fus moi aussi tombé sous son charme, je ne fus pas jaloux et ton père et moi restâmes très proches, malheureusement mon travail d''enchanteur faisait que je devais partir pour des missions le plus souvent assez longues. Puis tu es né et je suis reparti 3 jours après, inquiet car le pays n''était déjà plus très sécurisé. Quand je suis revenu tes parents n''étaient plus là, mais toi en revanche tu était toujours vivant, mais avec une trace de l''assassin de tes parents sur ton front. Grâce à mes pouvoirs j''avais réussi à t''envoyer sur Terre où tu serais en sécurité.', true, true),
+  ('1e871fef-40f9-80fe-8589-e298b9737481', '1e871fef-40f9-80fe-8589-e298b9737481', '49942478-410a-4bc8-956c-0d1624185853', 17, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Mais, repris Merlín je ne sais pas comment tu as fait pour revenir il faudrait que tu sois passé par un portail vortex mais c''est extrêmement rare il n''y en a que deux dans le monde !!!
+
+Hermione lui dit :
+
+- C''est exact !! Et il y en a un dans la chambre de Harry !
+
+Merlin reprit :
+
+- Mais, comment est-ce possible ?', true, true),
+  ('20071fef-40f9-80fe-843e-cdf016f1cfc6', '20071fef-40f9-80fe-843e-cdf016f1cfc6', '49942478-410a-4bc8-956c-0d1624185853', 18, '23e58c00-a6ea-4334-a747-d0d971f666f1', '- Aucune idée, dis-je, mais l''essentiel n''est pas là...
+
+- Il a raison, s''exclama Hermione, pouvez vous nous ramener chez nous ?
+
+- Non, mes pouvoirs ne sont pas assez puissants pour créer un vortex, et même si je le pouvais je ne le ferai pas.
+
+- Et pourquoi, s’écria Ron, moi je veux me casser de ce monde de m***, où y a un vieux chauve tout moche et blanc qui veut tuer mon meilleur pote !!!
+
+Merlin, d''abord choqué par la vulgarité de Ron, passa la main dans le peu de cheveux qui lui restait, puis souffla. Il hésita.
+
+- Le vieux chauve, comme tu dis, s''appelle Lord Voldemort.
+
+- Qui est-ce, demanda Hermione, perplexe.
+
+- C'' est le fils de Lord Barbatruche 2, quand celui-ci mourut, le royaume qu’il possédait fut diviser en quatre, car il faut savoir que Lord Voldemort a trois frères, Lord Garmadong le grand, car c''est le plus puissant, Lord Voraille la canaille, car comme son nom l''indique c''est la pire des canailles, il est extrêmement rusé, et enfin Lord Boutinon le glouton, car il est gros et rempli de boutons. Lord Garmadong a hérité du plus grand territoire, Lord Boutinon vient juste après, puis Lord Voraille, et c''est Lord Voldemort qui a hérité du plus petit territoire. Évidemment ça ne lui pas plu et il a déclaré la guerre à ses frères. A une époque, le royaume était pas sûr du tout, on devait constamment surveiller derrière nous, on se méfiait de nos proches, et ça pendant 32 ans. Les quatre frères se sont fait la guerre jusqu''à ce que Lord Voldemort tue Lord Boutinon, puis Lord Voraille, ainsi il a gagné les territoires de ses frères qu''il avait tués. Par la suite le territoire de Lord Voldemort s''est agrandi et Voldemort a renversé Garmadong. Mais celui-ci n''est pas mort : Il avait une femme qui s''appelait Lily qui est morte en voulant protéger leurs fils, Garmadong a ensuite envoyé son fils sur Terre avec mon aide.
+
+Il nous fallut un petit bout de temps avant de digérer mais je me rendis compte d''un truc. Le fils de Lily et de Lord Garmadong se serait pas par hasard moi ....', true, true),
+  ('25371fef-40f9-8058-a83f-c6c603011bed', '25371fef-40f9-8058-a83f-c6c603011bed', '49942478-410a-4bc8-956c-0d1624185853', 19, '23e58c00-a6ea-4334-a747-d0d971f666f1', 'Merlin me regardait avec ses yeux bleu profond, alors que mon cerveau faisait le lien, mais c''est Hermione qui fut la plus rapide (comme d''habitude).
+
+- Harry, s''exclama t''elle, c''est Harry !
+
+- Oui, dit l''enchanteur, le fils du du grand Garmadong, le légitime héritier du royaume, l''ennemi juré de Lord Voldemort.
+
+- Bah ça ! Mon frère, t''es un prince !
+
+Je me retournais vers Ron, qui avait prononcé cette phrase et lui répondit d''un ton ironique :
+
+- Ouais, t''as vu, j''en ai de la chance.
+
+- Oh non, Harry, me dit Hermione d''un ton qui se voulait rassurant, ce n''est pas ce qu''il voulait dire.
+
+- Nan, mais il a raison, je viens de découvrir que ma mère est morte, que mon père a disparu de la carte et que j''ai un phsychopathe à mes trousses mais t''as raison j''ai énormément de chance !
+
+Sur ce, je partis dans le couloir.', true, true),
+  ('1096908d-2e7f-4864-8ac6-1ab323bf054e', '1096908d-2e7f-4864-8ac6-1ab323bf054e', 'b018891b-7b9d-4acd-8115-afc641e13067', 1, 'f5956625-d496-4a23-ad78-1240c062d08f', 'Je suis rentrée de mon stage hier (vendredi) , c''était génial mais ma mère commençait à me manquer.
+
+Dans le bus je m''étais assise à côté d''Alice .
+
+On va passer le week-end ensemble, j''ai prévu de faire plein de choses :
+
+Aller au cinéma
+
+Faire du skate
+
+...
+
+Alice m''appelle.
+
+- Allô, Lola ?
+
+- Alice que se passe-t-il ?
+
+- Mes parents veulent aller voir ma grand-mère, elle habite à Bayonne, on aura jamais le temps de faire notre week-end entre B.F.F !
+
+- T''as raison Alice...vous rentrez quand ?
+
+- Dimanche après-midi.
+
+- Parfait, il nous restera quelques heures ensemble avant de devoir rentrer chez nous diner.
+
+- Ok Lola, à dimanche après-midi.
+
+- A dimanche !
+
+Dommage, au moins on se verra. Bon moi j''ai faim il est l''heure de déjeuner.
+
+- Maman ?! J''ai un peu faim, on peut déjeuner s''il te plaît ?
+
+- Ok chérie, mets la table ça sera bientôt prêt.
+
+- D''acc !
+
+Je fonce dans la cuisine à toute vitesse.
+
+- HOP, les sets, les couverts. C''est bon, maman !
+
+- Ok chaton.
+
+- Hum, des linguines à la carbonara, mes préférées, merci maman !
+
+- De rien chérie va vider la litière de Pollux s''il te plait (c''est notre chat le plus beau des chartreux ).
+
+- Mais mam..
+
+- Il n''y a pas de mais, un point c''est tout.
+
+- D''accooord.', true, true),
+  ('afdcfe2b-5772-4fe4-a294-bc83c0b8c3f1', 'afdcfe2b-5772-4fe4-a294-bc83c0b8c3f1', 'b018891b-7b9d-4acd-8115-afc641e13067', 2, '6507542d-0f94-44cc-b838-7fec446b76e7', 'Après le dîner, je vais me coucher.
+
+Le lendemain je ne me souviens plus du jour où Alice rentre de Bayonne. Je vais à l''école.
+
+Aujourd''hui j''ai de la chance. Il n''y a pas de soucis, à part Romy qui pleure pendant toute la matinée parce que son petit ami, Gotier, l''a quitté et s''est reporté sur Brytanie. Ils passent la journée ensemble à se bécoter.
+
+À la fin de l''école, Brytanie affirme que Gotier l''a invitée à une soirée.
+
+Je demande à Alice :
+
+- Au fait, tu peux me rappeler quel jour tu reviens de Bayonne ?
+
+Ma BFF évite mon regard et dit :
+
+- Lola je ne reviendrai pas.
+
+- Comment ça ?
+
+- Nous allons déménager près de chez ma grand mère, dans une sorte de petite résidence de maisons à la campagne. Je ne voulais pas te le dire parce que j''avais peur que tu ne me parles plus. Je suis désolée Lola.
+
+Je n''arrive pas à y croire ; ma meilleure amie m''abandonne. Je hoche la tête, embrasse Alice, et m''éloigne.
+
+J''entre dans mon immeuble, monte les escaliers, arrive dans l''appartement et je file dans ma chambre. Je jette mon sac et m''assois sur mon lit. Je prends ma tête entre les mains. N''arrivant pas à contenir mes larmes, j''éclate en sanglots. Peu après, ma mère vient me voir dans ma chambre. Elle voit bien que sa fille ne va pas bien. Elle ne demande rien, pourtant, et pose un plateau avec le repas sur le lit. Puis elle s''en va et ferme la porte. Je ne touche pas au plateau et me couche, secouée de sanglots.
+
+Pendant ce temps, Alice, déchirée par la douleur d''être séparée de Lola, chante :
+
+- Ma vie part en fumée, ma vie part en fumée, ma vie part en fumée...', true, true),
+  ('21c51b9b-382f-46a4-8f17-1afcd202bbbd', '21c51b9b-382f-46a4-8f17-1afcd202bbbd', 'b018891b-7b9d-4acd-8115-afc641e13067', 3, 'f5956625-d496-4a23-ad78-1240c062d08f', 'Pendant que Lola pleure, chez Alice, sa maman frappe à la porte de sa chambre.
+
+- Alice, chérie, est-ce que je peux entrer ?
+
+- Non, laisse moi, je ne veux voir personne !
+
+- Mais chérie, pourquoi tu chantes ma vie part en fumée ma vie part en fumée, il y a le feu dans ta chambre ?
+
+- Maman laisse moi tranquille, c''est pas drôle! sniff...sniff...
+
+Je vais quitter ma meilleure amie, tous mes camarades et mon école et je ne veux pas ! Je ne veux pas partir ! sniff ! C''est affreux !
+
+Sa maman entre dans la chambre l''air sérieux.
+
+- Alice ma chérie, nous n''avons pas le choix, papa a perdu son emploi et il a trouvé un autre travail à Bayonne près de chez Granny et comme ta grand-mère est âgée et malade elle a besoin de nous près d''elle. Ne pleure pas chérie, tu vas te faire de nouveaux amis et pendant les vacances Lola pourra venir à Bayonne, ça la changera des montagnes et comme nous aurons un grand jardin, vous pourrez même dormir dans la tente de papa comme des grandes toutes les deux.
+
+Tout à coup Alice retrouve un peu le sourire à l''idée de dormir dans la tente avec Lola, mais vite il faut prévenir Lola...!
+
+- Zut il est tard, Lola doit dormir...
+
+- Vivement demain, il faut absolument que Lola apprenne cette bonne nouvelle...', true, true),
+  ('672037e9-ba7a-4236-a3a7-285319059f35', '672037e9-ba7a-4236-a3a7-285319059f35', 'b018891b-7b9d-4acd-8115-afc641e13067', 4, '6507542d-0f94-44cc-b838-7fec446b76e7', 'La semaine est passée comme une flèche et le dimanche est arrivé. Ma mère et moi sommes chez Alice pour les aider à préparer les cartons et à tout mettre dans les camions de déménagement. Alice m''emmène dans sa chambre. Je ne la reconnais plus. Le papier peint mauve avec des chevaux a été arraché, le tapis assorti est roulé contre le mur. La couette a été lavée, et elle est à présent pliée et rangée dans un carton avec la housse d''oreillers et le plaid pourpre et tout doux.
+
+La bibliothèque est vide et tous les livres sont par terre avec le contenu du bureau d''Alice et de sa table de nuit. Le luminaire, la lampe de chevet et de bureau sont emballés dans du papier bulle. Les vêtements d''Alice sont également par terre avec tous ses draps. Le pouf, le fauteuil de bureau et le lit ont disparu et je suppose qu''ils sont déjà dans un des camions. Les objets personnels de mon amie (photos, bijoux, ustensiles de papeterie, son chargeur et son couteau suisse à huit lames) sont à présent rangés dans son sac à dos qu''elle a rapporté de son voyage au Mexique.
+
+Alice me demande :
+
+- Tu peux m''aider à faire les cartons, s''il te plaît ?
+
+- Oui, bien sûr.
+
+On se met au travail. Nous commençons par les vêtements ; je plie et mets dans des cartons que mon amie me donne tous les vêtements qui sont à ma portée. Je suis en train de plier un crop top rouge et bleu de ma meilleure amie quand le portable d''Alice sonne. Elle se lève pour décrocher.
+
+Puis, elle se ravise et revient s''occuper des vêtements.
+
+Bientôt il ne reste plus qu''un vêtement. On se regarde et se précipite dessus. Je suis la plus rapide et je m''en empare avant Alice. Celle-ci fait la moue devant mon petit air triomphant. Tandis qu''elle se redresse, je plie avec soin le magnifique pull rouge et vert qu''elle a rapporté du Mexique. Puis, je le glisse dans un carton que je ferme ensuite. Nous avons rempli cinq cartons avec tous les vêtements d''Alice.
+
+Nous passons ensuite aux draps de ma meilleure amie. Nous remplissons encore quatre autres cartons avant de passer aux livres et au contenu du bureau et de la table de nuit. Cette fois nous avons rempli dix cartons. Nous les rangeons contre le mur.
+
+Bientôt, nous avons terminé, la chambre de mon amie est vide. C''est l''heure du départ.
+
+Je ne peux pas me retenir de pleurer et Alice aussi. Après un dernier câlin, Alice et ses frères montent dans la voiture. Les yeux brouillés de larmes, je regarde la voiture s''éloigner. Ça me fait une boule au ventre et à la gorge. Je sens que je ne verrai plus ma meilleure amie et que l''année prochaine je ferai ma rentrée seule sans personne. Nous rentrons à l''appartement et ma mère part au travail. Je me retrouve donc seule.', true, true),
+  ('d7a6b500-d00e-4e80-9d65-d466524a760c', 'd7a6b500-d00e-4e80-9d65-d466524a760c', 'b018891b-7b9d-4acd-8115-afc641e13067', 5, 'f5956625-d496-4a23-ad78-1240c062d08f', 'J''appelle Pollux qui ne me répond pas, je vais alors dans la buanderie, car je sais que ce coquin aime bien se cacher dans la panière à linge. Je le retrouve en train de se vautrer dans la panière à linge du bout des oreilles jusqu''à sa queue. Je l''attrape de force dans mes bras pour l''amener dans ma chambre, il se débat de toutes ses forces avec ses pattes de nounours. Je parviens à l''amener sur mon lit recouvert d''une couette turquoise et des oreillers personnalisés : un avec Alice et un avec moi on tient toutes les deux la moitié d''un cœur violet et turquoise (car ce sont nos couleurs préférées ) je ne peux plus voir le visage d''Alice, je mets l''oreiller sous mon lit, Pollux se jette dessus et le déchiquette, je récupère Pollux et le mets sur mon lit, je ferme la lumière et les volets. J''attrape la lampe que Granny m''a offerte, elle projette des étoiles qui tournent, comme si la galaxie était dans ma chambre. Je prends Pollux sur moi et je m''allonge, je regarde tourner les étoiles au plafond pour me vider la tête, je finis par m''endormir.
+
+Quand je me réveille il est l''heure de dîner et Maman est rentrée.
+
+Maman me fait des lasagnes, mon plat préféré mais je ne touche pas à mon assiette, pendant que Maman et moi avons le dos tourné, Pollux en profite pour chiper ma part de lasagne, mais je m''en moque.
+
+Le dîner est sinistre, nous ne parlons pas, Maman sait très bien qu''il ne sert à rien de m''adresser la parole, je ne serai pas en état de répondre.
+
+Maman débarrasse la table et me dit d''une voix douce d''aller me coucher. Je m''exécute.
+
+La nuit je dors très mal, je ne peux m''empêcher de penser à Alice.
+
+Le lendemain matin le réveil ne sonne pas, j''arrive en retard à l''école, mon prof principal me donne une colle de deux heures, la journée commence bien...
+
+Quand le prof nous rend le devoir sur la guerre de Cent ans, je vois un énorme smiley en colère : j''ai eu F, superrrr...
+
+Je redoute le moment de la récré, la sonnerie retentit. J''essaye de me confier à quelqu''un.
+
+Liam !
+
+Je voudrais tout lui raconter, mais il préfère jouer au foot avec Eddy son meilleur ami. Je m''assois donc toute seule sur un banc, les yeux gonflés car je viens de pleurer.
+
+Eugenie, la meilleure amie de Carole vient me voir.
+
+- Eh Lola ça va ?
+
+- Non...
+
+Je lui raconte alors tout depuis le début...
+
+- Voilà , maintenant je suis seule...
+
+- Mais non Lola, tu n''es pas seule, je suis là moi.
+
+Je ne m''attendais pas à ça, je n''aurais jamais imaginé qu''Eugénie soit aussi gentille avec moi...
+
+Soudain Carole surgit de nulle part avec un visage haineux, tirant violemment Eugénie par le bras.
+
+- Eugénie ! C''est moi ta meilleure amie pas Lola, ne lui adresse plus jamais la parole ! Hurle Carole ayant peur de perdre sa meilleure amie.
+
+- Mais Carole, Alice, sa meilleure amie vient de déménager.
+
+- Je n''en ai rien à faire !!!', true, true),
+  ('5273ab1b-58a5-4d52-8002-377c9c2e3d41', '5273ab1b-58a5-4d52-8002-377c9c2e3d41', 'b018891b-7b9d-4acd-8115-afc641e13067', 6, '6507542d-0f94-44cc-b838-7fec446b76e7', 'Plusieurs semaines sont passées depuis le départ d''Alice. Beaucoup même, car Alice est partie le 2 novembre et on est déjà le 24 décembre. J''ai eu le temps de me trouver une nouvelle meilleure amie : Eugénie. Elle a quitté le CCI depuis que Carole a traité Astra, sa femelle Saint-Bernard, de bonne à rien. J''ai aussi eu le temps de trouver un nouvel oreiller avec la photo d''Alice car Pollux m''a déchiré le premier. Enfin j''ai pu assister à la vente de l''ancienne maison d''Alice et de voir un nouveau centre commercial s''ouvrir à Chamonix. La tristesse du départ de ma BFF s''est effacée, même si de temps en temps, je dois m''enfermer dans ma chambre pour me calmer.
+
+Quand je me réveille, j''ai mal partout. Étrange, je ne suis pas sur mon lit, mais assise sur la chaise à roulettes de mon bureau, les bras sur le rebord de ma fenêtre, la tête posée dessus. Mon lit est fait et Pollux dort dessus, roulé en boule.
+
+Je me souviens que je regardais Chamonix hier soir et j''ai dû m''endormir là.
+
+Ça expliquerait mes crampes partout et mon lit fait. Je m''étire et me lève tant bien que mal de mon fauteuil. Après m''être frotté les yeux, je chasse Pollux de mon lit. Le petit félin me jette un regard de reproche avant d''aller s''installer sur mon canapé.
+
+Je lève les yeux au ciel, m''assois sur mon lit et regarde l''heure sur mon IPhone 14. Huit heures et demie ! C''est un record ! Jamais je ne me lève à cette heure-ci en vacances ! Enfin, c''est comme ça je n''y peux rien.
+
+Je me lève et vais faire ma toilette puis je m''habille et rejoins ma mère qui est affairée autour du sapin. On dirait qu''elle a trouvé les décorations rouges et dorées qu''elle souhaitait pour l''arbre de Noël.
+
+- Ah ! Mon angelot blond s''est réveillé. Tu as bien dormi, mon cœur ?
+
+- Si tu veux la vérité, Maman, non. J''ai des crampes partout.
+
+- Allons bon. Mange un peu et viens m''aider.
+
+Je mange 3 sablés au beurre et engloutis un verre de lait de montagne. Puis je vais aider ma mère comme promis. On s''amuse bien toutes les deux, sur l''air de Merry Christmas Tree. Bientôt le sapin regorge de boules et de guirlandes rouges et or ainsi que des angelots blancs. Enfin ma mère rapporte un sachet d''étoiles et me dit de choisir. Mais moi je hoche la tête en signe de négation. Je vais dans ma chambre et je rapporte une nouvelle étoile personnalisée en verre avec dessus une photo de maman et moi quand nous étions à la foire de Noël, entourée d''un cœur en points dorés.
+
+Ma mère en a les larmes aux yeux. Je souris et accroche l''étoile en haut du sapin. Nous reculons pour contempler le travail et nous nous enlaçons. La journée se passe très bien. Je contacte Eugénie pour lui souhaiter un bon réveillon et après le dîner je vais me coucher.
+
+J''ai l''impression de me réveiller quelques instants plus tard par ma mère qui me tire du lit.
+
+- Debout Lola, mon chaton, les cadeaux sont arrivés !
+
+Quelques minutes plus tard, on ouvre toutes les deux nos paquets.
+
+- Merci ma chérie ! lance ma mère en découvrant la longue robe noire à volants que je lui ai offerte. Ton album photo te plaît ?
+
+Je lui réponds que oui.
+
+Mes autres cadeaux sont un couteau suisse à huit lames, pareil que celui d''Alice (c''est elle qui me l''a offert d''ailleurs), un livre sur la mythologie grecque de la part de ma cousine Romane, une boîte à coque personnalisée de portable et deux paquets de la part d''Eugenie. Ou plutôt un carton et un paquet.
+
+Le paquet contient un livre sur les chiens ce qui éveille mes soupçons. Lorsque j''ouvre le carton je tombe sur ....
+
+Un adorable chiot épagneul breton femelle que j''appelle Artemis !', true, true),
+  ('8eae479c-7332-4d48-aa80-91ca6c52945e', '8eae479c-7332-4d48-aa80-91ca6c52945e', 'b018891b-7b9d-4acd-8115-afc641e13067', 7, 'f5956625-d496-4a23-ad78-1240c062d08f', 'Quand je croise le regard de maman pour lui montrer Artemis, je vois qu''elle fait la moue.
+
+- Maman ? Tu n''aimes pas les chiens ?
+
+- Ce n''est pas ça chérie, mais c''est que je ne suis pas sûre que tu sois capable de t''occuper de Pollux et Artemis en même temps, surtout qu''Artemis ce n''est pas une chatte, c''est un chiot, il faut la sortir peu importe qu''il neige, pleuve ou qu''il fasse froid.
+
+- Mais maman je suis grande maintenant, je peux m''occuper d''Artemis et Pollux sans problème.
+
+- Si tu le dis...Mais ton argent de poche va y passer, il faut que tu lui achètes un panier, une laisse, des croquettes, des jouets...
+
+- Oui je suis prête à tout pour pouvoir la garder.
+
+- Bon en attendant nous allons lui aménager ce carton en panier, va me chercher une petite couverture et un bol d''eau !
+
+- D''acc !
+
+Nous préparons son panier provisoire et l''installons dans ma chambre et nous nous recouchons après avoir jeté tous les papiers cadeaux.
+
+Le lendemain je me réveille pour aller voir si Artemis va bien, quand soudain je vois qu''Artemis n''est plus dans son panier ! Mais où est-elle passée ?!
+
+Je la retrouve dans la cuisine après quelques minutes de recherche, mordillant ma chaussure toute neuve : des Nike Air !
+
+- Artemis, rends-moi ma chaussure, tu vas l''abîmer !
+
+Si elle s''attaque à mes Nike la cohabitation va être très compliquée...', true, true),
+  ('10371fef-40f9-8076-bbb5-c32bed187567', '10371fef-40f9-8076-bbb5-c32bed187567', 'b018891b-7b9d-4acd-8115-afc641e13067', 8, '6507542d-0f94-44cc-b838-7fec446b76e7', 'Je tente en vain de lui retirer la chaussure de la gueule. Elle grogne pour me faire reculer. Après plusieurs essais, j''abandonne ma Nike. Tandis que Artémis s''amuse avec ma chaussure, je retourne dans ma chambre. Puisque ma mère n''est pas réveillée, je m''allonge sur mon canapé.
+
+Une heure plus tard, ma mère vient me voir. Elle a la mine furieuse de quelqu''un qui vient de surprendre une grosse bêtise et dans la main un reste de ma chaussure ainsi qu’un morceau de sa robe noire qu''elle a eu à Noël.
+
+OUPS !', true, true),
+  ('10671fef-40f9-80cc-8ae9-fde67fecbacc', '10671fef-40f9-80cc-8ae9-fde67fecbacc', 'b018891b-7b9d-4acd-8115-afc641e13067', 9, 'f5956625-d496-4a23-ad78-1240c062d08f', 'Je prends l''air triste, puis maman s''adoucit.
+
+- Bon c''est vrai que c''est encore un chiot mais il faudra que cela s''arrange.
+
+- Oui.
+
+- Bon c''est l''heure de sa promenade.
+
+- Tous les magasins sont fermés comment vais-je faire ?
+
+- Mmmm... je sais, va me chercher une corde dans la buanderie, on va lui faire une laisse nous-même.
+
+- OK
+
+Nous lui faisons une laisse et je me prépare pour aller la sortir.
+
+Quand j''ouvre la porte il pleut des cordes et Artemis ne veut pas se mouiller. Je la pousse pour qu''elle sorte mais elle ne bronche pas.
+
+Je finis par la prendre dans mes bras, au final, je crois que c''est moi qui ai fait la promenade, certainement pas Artemis.
+
+J''espère que cela ne sera pas toujours comme ça...', true, true),
+  ('11a71fef-40f9-8073-91c1-c45317d83f06', '11a71fef-40f9-8073-91c1-c45317d83f06', 'b018891b-7b9d-4acd-8115-afc641e13067', 10, '6507542d-0f94-44cc-b838-7fec446b76e7', 'Mais les jours qui suivent, Artémis ne veut toujours pas marcher dans la neige froide ou sous la pluie glacée qui tombe souvent au printemps. En fait, elle ne veut même plus sortir. Pire, elle se met à dépérir. Elle ne sort que rarement de son panier et, le peu de fois où elle se déplace, elle se traîne à terre. J''ai peur pour elle.', true, true),
+  ('12471fef-40f9-8006-9327-c6440b8ff469', '12471fef-40f9-8006-9327-c6440b8ff469', 'b018891b-7b9d-4acd-8115-afc641e13067', 11, 'f5956625-d496-4a23-ad78-1240c062d08f', 'Le lendemain matin nous allons chez le vétérinaire.
+
+Arrivées là-bas, nous expliquons au vétérinaire qu''Artemis ne veut pas sortir et dépérit.
+
+Après l''avoir examiné il nous dit :
+
+- Je vois, votre chienne fait juste une allergie à ses croquettes actuelles. Il faut juste changer de croquettes et lui donner ces quelques médicaments que voici.
+
+Il nous tend une petite boite blanche en carton et ajoute :
+
+- Désolé, je ne les ai pas tous je vais vous donner l''adresse de la pharmacie qui les détient.
+
+Sur ces mots nous le saluons et le remercions avant de partir.
+
+Cette pharmacie est un peu loin mais c''est la plus proche qui a un rayon de produits vétérinaires.
+
+Après une demi-heure de trajet nous arrivons enfin devant une énorme pharmacie.', true, true),
+  ('13671fef-40f9-802c-93d1-ea3878daa87f', '13671fef-40f9-802c-93d1-ea3878daa87f', 'b018891b-7b9d-4acd-8115-afc641e13067', 12, '6507542d-0f94-44cc-b838-7fec446b76e7', 'Un matin, alors que les vacances de février commencent à peine, ma mère m''appelle. Je laisse ma représentation d''une partition ancienne et tracée à l''encre chinoise pour la rejoindre dans le salon. Et elle m''annonce une nouvelle incroyable : on est invitées à Bayonne pour 5 jours, pendant lesquels je vais assister à un match de tennis d’Alice, car c''est chez elle que l''on va dormir. Ça va être topissime!
+
+- Par contre, m''annonce ma mère, j''ai une mauvaise nouvelle à t''annoncer. J''ai entendu la mère de Eugénie parler avec sa fille et Eugénie a dit : Je ne veux plus que Lola soit mon amie. Je veux retourner dans le CCI.
+
+Bizarrement cela ne me fait rien. Je ne suis pas triste. Comme si Eugénie n''avait jamais été mon amie. Mais je suis super heureuse. Je vais voir Alice, ma BFF, et en plus, je vais assister à un de ces matchs de tennis. GÉNIAL !!!', true, true),
+  ('15671fef-40f9-8081-8ceb-ec4e26b1f5f3', '15671fef-40f9-8081-8ceb-ec4e26b1f5f3', 'b018891b-7b9d-4acd-8115-afc641e13067', 13, 'f5956625-d496-4a23-ad78-1240c062d08f', 'Le lendemain j''étais toute excitée mais ma mère est arrivée et a tout gâché.
+
+- Lola, la mère d''Alice vient de m''appeler, Alice s''est cassé la jambe en faisant du ski ce week-end elle ne va pas pouvoir assurer le match. Le voyage à Bayonne est annulé.
+
+J''étais très déçue de ne pas pouvoir assister à ce match, mais bon je n''avais pas le choix. Maintenant je n''avais plus rien à faire pendant les vacances. Maman voyait bien que j''étais triste, alors, elle m''a proposé d''inviter Liam à la maison. J''étais trop contente, j''ai vite enfilé mon manteau et je suis allée à la supérette du coin pour acheter de quoi grignoter avec Liam. J''avais prévu que l''on s''installe dans ma chambre et que l''on se raconte des histoires d''horreur, je sais, ça faisait un peu "bébé" de faire ça mais bon cela allait être marrant.
+
+Liam est arrivé et nous nous sommes installés comme je l''avais prévu. Liam a murmuré d''une voix mystérieuse :
+
+- Tu vois la grande maison dans la rue Jean de la Fontaine ?
+
+- Oui, bah quoi, ça fait des lustres qu''elle est abandonnée.
+
+- Certains racontent qu''elle appartenait à un homme très riche.
+
+- Cette maison est si belle, pourquoi l''aurait-il abandonnée ?
+
+- On dit que l''homme aurait tué sa femme car il était complètement perché, la police serait à sa poursuite et il serait en pleine cavale.
+
+- C''est horrible !!!
+
+- Je sais mais bon ce n''est qu''une rumeur, tu crois ce que tu veux...
+
+J''étais très intriguée par cette rumeur et je voulais à tout prix savoir la vérité, j''ai alors proposé à Liam que l''on aille enquêter là-dessus.
+
+- Je ne suis pas sûr Lola...
+
+- Mais si, allez ça va mettre un peu de piquant à ces vacances pourries.
+
+- Bon d''accord mais promets moi que l''on ne fera rien que l''on pourrait regretter.
+
+- Oui oui t''inquiète pas petit trouillard !
+
+- M''APPELLE PAS COMME ÇA !!!!!!!
+
+- Ha ha, ne t''énerve pas c''était pour rigoler.
+
+C''est sur ces mots que nous sommes partis enquêter.
+
+- C''est bon on y est, dit Liam essoufflé car on avait couru.
+
+- Wouah je n''avais jamais remarqué à quel point elle était grande... Bon maintenant il faut trouver un moyen de franchir la clôture.
+
+- Attends, quoi !? Tu m''avais promis que l''on ne ferait rien de risqué !
+
+- Oui peut-être mais ce ne sera pas long, juste histoire de jeter un petit coup d''œil.
+
+- (en soupirant) OK...
+
+- LIAM !!
+
+- Quoi ?
+
+- J''ai trouvé un endroit où on peut se faufiler.
+
+Bon on va devoir faire un petit effort mais ça va le faire.
+
+On a fait toute une gymnastique pour entrer et on a réussi.
+
+- Bon bravo SherlokLola mais on fait comment pour ouvrir la porte d''entrée ?
+
+D''un air très sûr de moi j''ai répondu :
+
+- Comme ça.
+
+J''avais espéré que la porte soit miraculeusement ouverte, et bingo !
+
+- Oui bon c''était juste un coup de chance a jalousement répondu Liam.
+
+Quand nous sommes entrés il y avait comme une présence dans la maison... A coup sûr celle de ce meurtrier psychopathe.
+
+Nous sommes arrivés dans une grande pièce sombre, j''ai alors eu un éclair de génie dans mon cerveau.
+
+- Liam ! et si on faisait de cette maison lugubre un QG secret G-É-N-I-A-L ! Ce serait notre secret rien qu''à nous, ça te dit ?
+
+- Un peu qu''ça m''dit !
+
+- OK super, il commence à faire nuit rentre chez toi et rendez-vous ici demain à 14 heures tapantes.
+
+- A demain !
+
+C''est comme ça que nous avons passé les vacances à nous retrouver dans notre nouveau QG.
+
+La pièce avait bien changé depuis la première fois, on avait ramené plein de choses de chez nous. Parfois quand je sortais les bras chargés d''affaires à amener là-bas ma mère se demandait ce que je fabriquais mais elle ne se posait pas plus de questions.
+
+Cela faisait plusieurs jours que cette mascarade durait, on commençait à ne plus trouver d''excuses aux parents pour pouvoir sortir.
+
+J''arrivais devant la maison en même temps que Liam et on entrait tous les deux. Dedans on se racontait plein de choses jusqu''au moment où un jour on entendit le grincement de la porte...
+
+Le propriétaire de la maison revenait et nous, on était là, dans cette pièce, sûrement condamnés à mourir décapités par ce meurtrier. Je commençais à regretter d''avoir fait ça, alors sachant que c''était peut-être la dernière fois qu''on se voyait avec Liam nous nous sommes embrassés et tremblants de peur nous avons réussi à nous enfuir sans demander notre reste...
+
+Prise d''un point de côté je me suis arrêtée trop essoufflée, Liam m''a regardée il était tout pâle on a éclaté de rire et j''ai dit à Liam :
+
+- Il ne faut en parler à personne.
+
+- Promis juré ! on a craché par terre et j''ai continué :
+
+- Ce sera notre secret.
+
+Liam m''a répondu :
+
+- Je n''oublierai jamais cette aventure, que je garderai gravée dans ma mémoire et qui sera pour moi "LE SECRET DE LOLA "', true, true),
+  ('68dfd25d-8fbc-4f46-a5f6-588cc641ac66', '68dfd25d-8fbc-4f46-a5f6-588cc641ac66', '9233ab2d-3510-4ff5-a75f-bcee884c2c03', 1, 'd61dc894-7bb2-4694-b6f0-7638b4e55923', 'Cette histoire se passe à la campagne, dans une petite ferme. Y vit un garçon âgé de 17 ans. Il s''appelle Albert.
+
+Il vit seul avec ses deux chats, Luglia et Piccolo.
+
+Luglia a 21 ans et Piccolo, 4 ans. Les deux chats s''entendent très bien. Ils jouent souvent sur l''herbe ensemble.
+
+Un jour quelqu''un vint frapper à la porte de chez Albert.
+
+Albert alla ouvrir et il vit des personnes bizarres.
+
+" Qui êtes-vous ?" dit Albert
+
+" Police ! Nous venons réquisitionner votre maison."
+
+" Quoi ?! Ce n''est pas possible ! Où vais-je vivre?''
+
+" Comment ça "je" ? " dit le policier.
+
+" Je vis seul avec mes deux chats."
+
+" Où sont vos parents ?"
+
+" Ils sont morts dans un incendie."
+
+" Bon... Euh... Quoiqu''il en soit vous devrez avoir quitté les lieux vendredi à 17h43 dernier délai ! Ordre du Maire !" dit le policier.
+
+Albert répondit " Le Maire ? Quel imbécile celui là !"
+
+Et le policier s''étonna :" Pardon?"
+
+Albert balbutia :" Il ne faut pas que j''oublie mes ustensiles !''
+
+Quelques heures plus tard, Albert commença à regrouper ses affaires et à réfléchir à ce qu''il allait faire.
+
+Vendredi à 17h43, il fermait la porte de la ferme de ses parents pour la dernière fois avec ses affaires et ses deux chats.
+
+Il marcha 2 ou 3 heures, arriva dans une petite ville et s''arrêta devant une menuiserie.
+
+" Monsieur, pourriez-vous me fournir assez de bois pour construire une maison ? "
+
+" Comment vas-tu me payer ?"
+
+" J''ai de l''argent, ne vous inquiétez pas! "
+
+" Très bien, je te prépare ton bois, tu viendras le chercher demain."
+
+Le lendemain, Albert vint chercher le bois.
+
+Pendant un mois, il travailla dur et construisit une petite maison.
+
+Il commença alors à réfléchir au métier qu''il voulait faire pour gagner sa vie. Il pensa au métier de Docteur. L''argent de ses parents n''allait pas lui permettre de vivre sans travailler éternellement.
+
+Il alla voir le docteur de la ville et lui demanda :
+
+" Bonjour Docteur, je voudrais faire le même métier que vous. "
+
+" Je pourrais te prendre comme stagiaire. Quel âge as-tu ?"
+
+" J''ai 17 ans."
+
+" Très bien, tu peux commencer demain. Je t''attends à 9 heures devant mon cabinet. "
+
+" Merci Docteur, je serai là à 9 heures demain. Vous pouvez compter sur moi. "
+
+Il rentra chez lui pour raconter la bonne nouvelle à Luglia et Piccolo.
+
+Le lendemain en allant au cabinet du docteur il se rappela que c''était l''anniversaire de Luglia dans deux semaines.
+
+A la fin de sa première semaine, il alla voir le Docteur et demanda : " Robert, c''est l''anniversaire de mon chat dimanche prochain, elle va avoir 22 ans et j''aimerais avoir assez d''argent pour lui acheter un cadeau. "
+
+" Je vois de quoi tu parles...Comme tu as bien travaillé cette semaine je pourrais te donner 60 euros dès la fin de la semaine prochaine. "
+
+La semaine suivante, après avoir eu son argent, Albert rentra en courant chez lui.
+
+" Piccolo, Piccolo, viens ! Tu sais que dimanche c''est l''anniversaire de Luglia ? On va aller lui acheter un cadeau aujourd''hui chez Miaou Miaou !"
+
+Une fois arrivés chez Miaou Miaou ils trouvèrent un super cadeau pour Luglia.
+
+Un poulet magnifique, rien que pour elle, avec une petite fleur dessus.
+
+Le dimanche ils fêtèrent l''anniversaire de Luglia tous les trois.
+
+Quelques semaines plus tard, il voulut aller pêcher avec Piccolo et Luglia.
+
+En arrivant au bord de la rivière il vit une jeune fille.
+
+Il s''installa à quelques mètres d''elle et commença à pêcher.
+
+En se retournant il s''aperçut qu''il avait fait tomber son porte-monnaie.
+
+Au même moment, la jeune fille se leva elle aussi pour aller ramasser le porte monnaie.
+
+Albert eut un coup de foudre.
+
+Piccolo s''en rendit compte et dit à Luglia :
+
+" Oh non, pas ça, il va complètement nous oublier !"
+
+Luglia répondit : " Mais Piccolo, c''est ça l''amour! "', true, true),
+  ('ab04caa0-d7a8-4a72-bcd0-02a8c245f6fc', 'ab04caa0-d7a8-4a72-bcd0-02a8c245f6fc', '9233ab2d-3510-4ff5-a75f-bcee884c2c03', 2, '505ec087-89d9-4c57-b9b2-b021564e213c', 'Le lendemain en allant au cabinet pour travailler, il vit cette fille en compagnie d''un garçon d''au moins 20 ans.
+
+" Quelle belle journée Mina ! "
+
+" Oui, José. "
+
+Albert pensa : " Elle s''appelle donc Mina mais elle est déjà avec un garçon, dommage."
+
+La journée chez le docteur s''achevait, Albert repensa à Mina. Et soudain, au coin de la rue, il aperçut José qui mettait une claque à Mina.
+
+Il se précipita et arrivé à un mètre de José il dit :
+
+" Lâche la immédiatement ! "
+
+José se retourna et s''avança, il faisait au moins trois têtes de plus qu''Albert et n''eut aucun mal à soulever Albert et à le lancer contre le mur.
+
+" Tu as compris P''tite bouse, dégage d''ici ! "
+
+Albert se releva, s''avança vers José, leva son poing... José prit le coup de plein fouet. Il était au sol la mâchoire en sang mais se redressa et attrapa Albert par le cou.
+
+Albert suffoquait, il sentait que l''air commençait à lui manquer...
+
+Mais Mina, qui observait la scène, lança son sac à main dans la tête de José :
+
+" Lâche ! Tu n''as pas honte ! " dit-elle.
+
+Elle acheva son adversaire d''un coup de talon haut dans le nez.
+
+José s''enfuit en courant.
+
+Albert était par terre et il toussait mais il articula quand même :
+
+" Merci, tu m''as sauvé la vie."', true, true),
+  ('4735a62a-ba55-4863-87d1-8a450a0e36e4', '4735a62a-ba55-4863-87d1-8a450a0e36e4', '9233ab2d-3510-4ff5-a75f-bcee884c2c03', 3, 'd61dc894-7bb2-4694-b6f0-7638b4e55923', 'Après cela, Albert et Mina s''invitèrent souvent l''un chez l''autre.
+
+Piccolo s''habitua à voir Mina régulièrement chez eux. Ça lui faisait comme une petite Maman.
+
+Presque chaque jour Mina attendait Albert à la sortie du cabinet et quand Albert sortait plus tôt c''était Albert qui attendait Mina devant le bureau d''avocat. Elle était stagiaire elle aussi, mais chez un avocat.
+
+Un jour, ils virent José qui les regardait d''un air très fâché.
+
+José dit à Mina : " Tu es avec ce crétin maintenant ?". Il continua ensuite à insulter Albert.
+
+Albert ne se laissa pas faire et poussa José dans le lac. Il essaya de donner un coup de poing à José qui se redressait mais José fut plus rapide et poussa Albert qui se cogna la tête contre un arbre.
+
+Pendant ce temps, Mina avait appelé la police.
+
+La police arriva rapidement et arrêta José qui était déjà recherché suite à de nombreuses bagarres.
+
+José qui, pour s''échapper, tenta de voler le pistolet du policier, appuya sans faire exprès sur la gâchette et le policier fut blessé.
+
+José fut alors arrêté et mis en prison pour de très très longues années.
+
+Après cette aventure, Albert invita Mina à dîner chez lui. Quand Mina arriva, Piccolo lui sauta dans les bras et commença à ronronner.
+
+Pendant le dîner, Luglia poussa une bague avec sa truffe aux pieds d''Albert.
+
+Albert comprit et demanda à Mina, en bégayant, de devenir sa femme.
+
+Mina qui voulait aussi se marier avec lui, lui dit tout de suite :" Oui !"
+
+Ils s''embrassèrent.
+
+Quant à Luglia et Piccolo ils tapèrent sur le sol avec leurs petites griffes comme pour les applaudir.', true, true),
+  ('507a1575-f9c2-454a-ad4d-45fb2bbad239', '507a1575-f9c2-454a-ad4d-45fb2bbad239', '9233ab2d-3510-4ff5-a75f-bcee884c2c03', 4, '505ec087-89d9-4c57-b9b2-b021564e213c', 'Cinq ans plus tard, Albert ayant fini ses études, il décida d''ouvrir son cabinet dans une ville voisine.
+
+Il loua un petit local et le réaménagea.
+
+Pour pouvoir travailler et rester vivre avec Mina il faisait des aller retours tous les jours.
+
+Les clients se succédèrent et au bout de deux ans Albert avait économisé assez d''argent pour pouvoir s''acheter une maison plus grande que celle qu''il avait construite auparavant.
+
+Il revendit son ancienne maison à un ami d''enfance.
+
+Sa maison étant plus grande il pouvait maintenant envisager de construire sa propre famille.', true, true),
+  ('6f14c474-4acf-42f0-9ae6-0f03486dd813', '6f14c474-4acf-42f0-9ae6-0f03486dd813', '9233ab2d-3510-4ff5-a75f-bcee884c2c03', 5, 'd61dc894-7bb2-4694-b6f0-7638b4e55923', 'Un jour Mina demanda à Albert : " Ça te plairait d''avoir des enfants ?"
+
+Et Albert répondit : " Bien sûr !"
+
+Un mois plus tard, Mina était enceinte.
+
+Mais ils se rendirent compte qu''ils n''avaient pas choisi de prénom. Il n''y eu aucune dispute. Ils trouvèrent les prénoms très vite pour une fille et un garçon.
+
+Si c''était une fille, elle s''appellerait Marie. Et si c''était un garçon, il s''appellerait Paul.
+
+Huit mois plus tard, Mina accoucha d''une petite fille, Marie, qu''ils adorèrent.
+
+Et un an après, Marie eut un petit frère, Paul.', true, true),
+  ('7db8936f-8847-4bfe-8828-d7be6a20c902', '7db8936f-8847-4bfe-8828-d7be6a20c902', '9233ab2d-3510-4ff5-a75f-bcee884c2c03', 6, '505ec087-89d9-4c57-b9b2-b021564e213c', 'Marie qui allait maintenant à l''école avait de très bonnes notes car son père veillait à ce qu''elle n''ait pas de problème de compréhension vis à vis du travail et des devoirs donnés par sa maîtresse : Madame Méquécequetufé-combêtises.
+
+Dans sa classe, une élève la gênait: Rachel Jeufépopo.
+
+Rachel : Hé la bigleuse !
+
+Marie : Mais, arrête !
+
+Rachel : Pfffff tu dis ça parce que tu n''as rien à dire.
+
+La maîtresse : Dis donc miss Jeufépopo, je suis sûre que vous nous ferez le plaisir de venir réciter au tableau la leçon qui était à savoir pour aujourd''hui au lieu de discuter avec vos camarades !
+
+Soudain, Rachel pâlit, se leva, s''avança vers le tableau et commença à réciter :
+
+- Euh ..., la conjugaison du verbe coudre au passé-composé : euh.... Je cousais, tu cousas, euh ...et après je crois que c''est nous coudons...Euh....
+
+- Arrête tout de suite ! Tu n''as pas appris ta leçon, ce sera un zéro !
+
+Qui veut me conjuguer le verbe coudre au passé- composé ?
+
+Toute la classe leva le doigt.
+
+- Vas-y Marie !
+
+Marie récita sa leçon parfaitement et sans hésitation.
+
+Sur sa chaise Rachel pestait en silence. Une vengeance s''imposait...
+
+Pendant la récréation, Rachel tint un long conseil de guerre avec ses deux copines Irma et Agnès.
+
+A la sortie de l''école, les trois filles attendaient Marie. Elles la suivirent jusque chez elle.', true, true),
+  ('0ae8dff5-f90d-40ab-b98c-5c16c3c0370d', '0ae8dff5-f90d-40ab-b98c-5c16c3c0370d', '9233ab2d-3510-4ff5-a75f-bcee884c2c03', 7, 'd61dc894-7bb2-4694-b6f0-7638b4e55923', 'Mais Marie qui s''était rendue compte de quelque chose, se retourna d''un coup et hurla très fort.
+
+En l''entendant, sa Maman descendit les escaliers quatre à quatre et demanda à Marie pourquoi elle avait crié.
+
+Marie expliqua tout ce qu''il s''était passé à sa mère et Mina gronda les trois filles et demanda à voir leurs parents et la directrice de l''école.
+
+La directrice en apprenant que le groupe de filles avait suivi Marie jusqu''à chez elle, prit la décision de les exclure de l''école pendant 2 semaines.
+
+Trois semaines plus tard, à 22h, Albert sentit une odeur de fumée qui venait de l''étage juste en dessous, du 3ème. Il regarda par la fenêtre et vit des flammes.
+
+Il réveilla tout le monde et prit les enfants dans ses bras. Mina prit aussi tout ce qu''elle put attraper dont bien sûr Piccolo et Luglia dans leur sac de voyage.
+
+Les pompiers arrivèrent et maîtrisèrent très vite le feu. Mais la maison de cette jolie famille avait brûlé.
+
+Ils durent donc acheter une autre maison. Mais ils étaient contents car ils étaient tous en vie et la nouvelle maison était plus grande que la précédente.
+
+Ils comprirent quelques mois plus tard que l''incendie avait été déclenché par une vieille dame qui vivait à l''étage en dessous. Cette dame avait beaucoup de journaux en papier et aimait allumer des bougies. Mais ce soir là, en s''endormant, elle avait renversé une bougie et le feu s''était déclenché.', true, true),
+  ('3711e5a9-1d72-41db-a146-772d2191ad89', '3711e5a9-1d72-41db-a146-772d2191ad89', '9233ab2d-3510-4ff5-a75f-bcee884c2c03', 8, '505ec087-89d9-4c57-b9b2-b021564e213c', 'Deux mois plus tard, Albert reçut une lettre lui demandant de s''installer plus au sud, dans un désert médical.
+
+Albert accepta. Un mois plus tard il prenait le train direction Saint-Pierre-lès-deux-lacs.
+
+Rachel, Irma et Agnès apprirent la nouvelle et décidèrent de se venger de Marie.
+
+Lundi après-midi, dans une petite ruelle par laquelle devait passer Marie pour rentrer chez elle, Rachel surgit et assena une gifle à Marie qui se mit immédiatement à pleurer.
+
+Puis elle vit Irma s''avancer et lever son bras. Marie tenta alors de lui donner un coup de pied mais elle trébucha et s''étala dans une flaque de boue.
+
+Irma et Agnès se mirent à la tirer par les cheveux dans le caniveau.
+
+" On arrêtera si demain tu nous apportes vingt euros."
+
+Marie, qui pleurait, terrorisée, accepta, rentra chez elle et enleva vite sa robe pour la mettre dans la machine à laver pour ne pas que sa mère ne se rende compte de ce qu''il s''était passé.
+
+Le lendemain, Marie fit glisser discrètement un billet de vingt euros qu''elle avait pris dans le sac de Mina dans la poche d''Agnès qui lui pinça alors très fort le ventre, ce qui arracha un cri à Marie.
+
+Madame Méquestcequetufé-Combêtises se retourna :
+
+" Marie, ça va ? "
+
+" Oui oui, je me suis juste fait mal à la cheville en marchant. "', true, true),
+  ('426721f2-7cb8-43f8-9508-1a9fc1596878', '426721f2-7cb8-43f8-9508-1a9fc1596878', '9233ab2d-3510-4ff5-a75f-bcee884c2c03', 9, 'd61dc894-7bb2-4694-b6f0-7638b4e55923', 'Le soir en sortant de l''école les trois filles demandèrent à nouveau de l''argent à Marie.
+
+Mais Marie leur dit qu''elle leur avait déjà donné de l''argent le matin même.
+
+" Mais nous ne voulions pas vingt euros mais deux cents euros !"
+
+Marie les repoussa violemment et partit en courant chez elle.
+
+Une semaine plus tard, Mina qui s''était aperçue que son argent disparaissait de son sac, demanda à Marie où était son argent.
+
+Marie lui répondit qu''elle n''avait rien fait et qu''elle devait demander à Paul.
+
+" Paul n''est pas assez grand pour atteindre l''étagère sur laquelle je range mon sac. Je sais que c''est toi qui as pris mon argent. Dis moi pourquoi."', true, true),
+  ('a8012600-e381-41fb-b4bf-f1e53f456814', 'a8012600-e381-41fb-b4bf-f1e53f456814', '9233ab2d-3510-4ff5-a75f-bcee884c2c03', 10, '505ec087-89d9-4c57-b9b2-b021564e213c', 'Finalement Marie raconta tout à sa mère et les trois filles furent renvoyées de l''école définitivement. Pile au moment où Albert rentra à la maison.
+
+Cette année-là Paul rentra à l''école.
+
+Et pour Marie et Paul tout se passa très bien tout le reste de leur scolarité, à part quelques petits problèmes mais qui se terminèrent toujours de façon positive.
+
+Quant à Mina et Albert, ils se vécurent plus souvent en amoureux pour rattraper le retard prit ces dernières années.
+
+FIN', true, true),
+  ('13d71fef-40f9-802f-be79-cd430fbccac1', '13d71fef-40f9-802f-be79-cd430fbccac1', '874374b7-78c0-4a67-87dd-25f4918d1079', 1, '9ee5c32d-c6f9-4b8e-843b-5a779492f36a', 'En ce samedi matin, le réveil de Bérénice sonne à huit heures. Ce n''est pas dans ses habitudes de faire tinter cet instrument de torture des tympans les matins de week-end, mais aujourd''hui est un jour spécial.
+
+Sa petite sœur Julie, qui est née cinq ans après elle, se marie avec Alexandre. Il est beau, gentil. Bref le mari idéal.
+
+Une journée très chargée s''annonce, aller chez le coiffeur, passer une dernière fois chez le fleuriste, finaliser la décoration de la salle de réception, faire place nette pour le traiteur, et puis, peut-être le plus important, se faire belle pour bien tenir son rôle de demoiselle d''honneur.
+
+Allez !! C''est parti à 100 à l''heure.
+
+Arrive le moment de découvrir Julie dans sa robe immaculée.
+
+- Qu''elle est belle ma petite sœur, elle rayonne de bonheur se dit Bérénice.
+
+Mais pas le temps de trop s''appesantir, les mariés sont attendus pour la cérémonie.
+
+La journée se déroule à merveille, tout le monde est joyeux, heureux de partager ce moment de bonheur.
+
+Vers la fin de la nuit de fête intense, Bérénice s''assoit et regarde Julie, si belle, si lumineuse, et Alexandre, s''amuser avec les invités. Ils forment un si beau couple.
+
+Tout à coup ses yeux se remplissent de larmes. Bien sûr elle est très heureuse pour sa sœur mais sa vie à elle est bien fade.
+
+A part quelques amis fidèles qu''elle compte sur les doigts d''une main, sa vie professionnelle certes très prenante, elle n''a pas d''amoureux avec qui vivre des moments forts d''amour et de partage.
+
+Elle chasse les larmes tombées sur ses joues, se ressaisit, et se dit, en regardant la pendule accrochée à un des murs de la salle de réception que dans un AN pile (pas plus, pas moins),
+
+elle aura trouvé un amoureux.
+
+Elle est lucide, ce ne sera pas déjà le mariage mais elle aura rencontré l''homme de sa vie.
+
+Comment ? Quand ? Où ? Elle ne le sait pas mais l''amour sera dans sa vie.
+
+Elle repart profiter de la fête.
+
+Après un bon dimanche de repos et quelques réflexions l''esprit plus posé, elle décide d''en parler à sa meilleure amie Cécile qui trouve l''idée « intéressante » mais ne semble pas convaincue, du moins pas autant que Bérénice.
+
+- Tu peux t''inscrire sur un site de rencontre, avance Cécile.
+
+- Ah non c''est totalement exclu, répond Bérénice.
+
+Elles cherchent, cherchent encore. Il faut trouver des endroits propices aux rencontres, tels les restaurants et boites de nuit ! Bien sûr, il faut trouver des lieux bien fréquentés. Bérénice ne veut pas forcément un compagnon riche mais bien éduqué, c''est indispensable.
+
+Cécile est d''accord mais reste quand même très embarrassée. Bérénice a toujours des idées déconcertantes !!
+
+Elle lui conseille de prendre une semaine de réflexion. Vendredi soir, elles décideront d''un plan d''attaque et passeront à la "chasse à l''amoureux"', true, true),
+  ('15571fef-40f9-80c8-8327-c8b4d9750223', '15571fef-40f9-80c8-8327-c8b4d9750223', '874374b7-78c0-4a67-87dd-25f4918d1079', 2, '3cb19e95-5f47-42c4-8641-15598fd4aa80', 'La semaine défile et Bérénice dort mal. Elle cherche désespérément comment accomplir son objectif. Elle est vraiment déterminée et échafaude les plans les plus fous pour finalement se raviser... À bout de force et à court d''idées elle décide de s''en remettre au destin.
+
+Et c''est le cœur léger qu''elle va à la rencontre de son amie Cécile dans leur café préféré.
+
+Quand Bérénice entre au sweat-cat Cécile est déjà installée dans un coin, un gros chat roux sur les genoux. En avançant pour la rejoindre elle remarque à peine un jeune homme brun qui se bat avec la queue d''un gros chat tigré qui lui cache par intermittence son écran d''ordinateur.
+
+Cécile l''accueille avec un sourire interrogateur, pressée de découvrir ce que son amie fantasque a imaginé.
+
+- Alors ? Tu as réfléchi ? Que proposes-tu pour être sûre de trouver un amoureux d''ici un an ?
+
+Bérénice expose son plan : chaque jour elle ira parler à un inconnu qu''elle aura croisé, elle le choisira à l''instinct et elle ne se donne pas d''autres directives... elle verra bien ce que la vie va lui offrir.
+
+Cécile est admirative devant l''audace de Bérénice.
+
+- Pas mal ! Mais tu commences quand ?
+
+- Tout de suite, répondit Bérénice et son regard se tourne alors vers le jeune homme à l''ordinateur qui maintenant lutte avec un burger dont la sauce blanche tombe régulièrement sur le chat lové sur ses genoux.
+
+Bérénice se lève alors, sous les yeux ébahis de Cécile et se dirige d''un pas hésitant vers le jeune homme.
+
+- Bonjour, vous aimez les chat, on dirait ?
+
+Elle n''avait pas plus tôt prononcé ces mots qu''elle se trouva ridicule et piqua un fard magistral.
+
+Le jeune homme leva les yeux, la bouche barbouillée de blanc pendant qu''un cornichon tombait sur la tête du chat qui, surpris, sauta à terre d''un seul coup entraînant l''ordinateur en se prenant les pattes dans le fil du chargeur.
+
+Bérénice bafouilla : « Oh oh je suis désolée »', true, true),
+  ('17d71fef-40f9-8060-a07a-e0a4f675e5f9', '17d71fef-40f9-8060-a07a-e0a4f675e5f9', '874374b7-78c0-4a67-87dd-25f4918d1079', 3, '9ee5c32d-c6f9-4b8e-843b-5a779492f36a', 'Le jeune homme lève un regard très noir vers la jeune fille. Il semble très en colère. Après avoir lâché son burger, il se dirige vers son ordinateur fracassé au sol.
+
+Bérénice se dit qu''elle peut certainement faire quelque chose pour lui.
+
+- Laissez-moi vous aider !
+
+- NON !!! Je ne vous ai rien demandé. A cause de vous, tout mon travail informatique peut être perdu et mon chat s''est enfui. Allez-vous-en .....
+
+Bérénice comprend qu''il vaut mieux qu''elle s''éloigne. Complètement dépitée, elle revient vers Cécile qui est prise d''un énorme fou rire.
+
+- Ne te moque pas de moi !
+
+- Tu n''as pas vu ta tête, bafouille Cécile entre deux spasmes de rire.
+
+- Viens, on sort.
+
+Arrivées sur le trottoir, Bérénice et Cécile se regardent et le fou rire les prend à toutes les deux. Bon, ce n''est pas gagné. Dommage, il est bien charmant ce jeune homme.
+
+Toutes les deux marchent lentement et se dirigent en direction de chez Bérénice.
+
+En dégustant un thé et en rigolant encore :
+
+- Il faut se rendre à l''évidence, tu n''as pas choisi une bonne option.
+
+- Aujourd''hui, ça s''est mal passé mais je ne vais pas m''arrêter à la première fois. Par contre, plus jamais au Sweat-cat.
+
+- Qu''est-ce que tu dirais d''aller vendredi soir en boite de nuit ? Il y a toujours beaucoup de monde et tu aurais plus de choix.
+
+Bof, se dit Bérénice mais après tout pourquoi pas.
+
+- D''accord.
+
+Vendredi soir arrive après une semaine de doute pour Bérénice. Dans le pire des cas, si je ne vois pas une personne à mon gout, je danserai.
+
+Elles poussent la porte de la boite de nuit et là, elles voient un monde fou dans un bruit délirant. Tout ce que déteste Bérénice.
+
+- Je ne vais jamais tenir dans ce bruit dit-elle à l''oreille de Cécile.
+
+- Mais si, courage, regarde autour de toi si tu trouves un potentiel mari répond-elle un peu agacée.', true, true),
+  ('18971fef-40f9-8018-b1c5-f6233e55af34', '18971fef-40f9-8018-b1c5-f6233e55af34', '874374b7-78c0-4a67-87dd-25f4918d1079', 4, '3cb19e95-5f47-42c4-8641-15598fd4aa80', 'Bérénice balaye de mauvaise grâce la salle du regard, et ne voit qu''une masse informe noyée dans un nuage de vapeur qui semble se déformer au rythme de basses assourdissantes.
+
+C''est alors qu''une silhouette au bar attire son regard...
+
+- Regarde Cécile, qui est là bas ? Crie t-elle dans l''oreille de son amie, on dirait l''homme au chat de l''autre jour !
+
+- Exact mais vient plutôt danser... Ne perds pas ton temps avec ce malotru.
+
+Et elle entraîne son amie sur la piste.
+
+Bérénice lui emboîte le pas sans entrain et commence à danser en essayant de se fondre dans la foule et surtout de ne pas quitter Cécile qui se plante devant un jeune homme métisse au sourire attirant. Au bout de dix minutes de gesticulations Bérénice n''en peut plus et fait savoir à sa copine qu''elle va aller s''asseoir et prendre un verre. À peine a-t-elle fait part de son intention que le sympathique garçon qui danse avec elles les invite à prendre un verre.
+
+Le petit groupe cherche alors un endroit retiré pour arriver à se parler. Ils atterrissent tout au fond de la salle au grand regret de Bérénice qui ne voit plus le bar. Elle est surprise de sa réaction et se demande pourquoi l''homme au chat l''attire autant...
+
+Ils veulent tous les trois un mojito, le garçon qui se prénomme Yohan commence à se lever pour aller les commander... C''est alors que Bérénice d''un bond le stoppe dans son mouvement et d''un ton qui la surprend elle même lui assène un «  c''est moi qui y va »
+
+Cécile lui lance un regard surpris mais acquiesce, trop contente de rester seule avec Yohan.
+
+Bérénice se précipite au bar. Ouf, le jeune homme au chat est toujours là, il paraît absorbé par ses pensées. Elle se fraye un chemin jusqu''à lui…', true, true),
+  ('19471fef-40f9-809a-a8db-d9b58e208890', '19471fef-40f9-809a-a8db-d9b58e208890', '874374b7-78c0-4a67-87dd-25f4918d1079', 5, '9ee5c32d-c6f9-4b8e-843b-5a779492f36a', 'Mine de rien, elle passe très près de lui, au point de le bousculer légèrement. Il lève la tête de son verre.
+
+- Oh pardon ! dit Bérénice.
+
+- C''est rien ! répond le jeune homme avant de se pencher de nouveau sur son verre.
+
+- On se connait non ?
+
+Il relève la tête, pose son regard qui semble bien embrumé sur Bérénice :
+
+- J''sais pas, j''crois pas !
+
+- Vous n''allez pas au Sweat Cat parfois ?
+
+- Si, mais je n''y vais plus depuis qu''une folle s''est précipitée sur moi, mon ordinateur est tombé, j''ai ........ J''sais même pas pourquoi je vous raconte ça.
+
+- Peut-être parce que la folle c''était moi et j''en profite pour m''excuser.
+
+- C''était vous ? Vous m''avez bien compliqué la vie ce jour-là.
+
+- Pourquoi ?
+
+- J''étais en train de lire un mail de ma copine qui me disait qu''elle me quittait.
+
+Bérénice se dit ! Tiens, tiens ! Intéressant mais enchaine :
+
+- Oh je suis désolée.
+
+- Vous pouvez l''être, à cause de vous, je n''ai pas pu lui répondre tout de suite.
+
+- Il fallait lui téléphoner.
+
+- Faites pas la maline, ma copine était en mission à l''étranger et à cette heure-là, elle dormait figurez-vous.
+
+- C''est pour ça que vous êtes triste ?
+
+- Je suis pas triste, je suis malheureux. Je me demande bien pourquoi je vous parle à vous.
+
+- Justement, parce que vous êtes malheureux et pour me faire pardonner, je vous offre un verre. Que voulez-vous boire ?
+
+- Quelque chose de fort, J''ai besoin d''oublier.
+
+- Non, vous avez assez bu. Alors vous allez prendre du léger.
+
+- Dites, vous n''êtes pas ma mère.
+
+Bérénice fait mine de ne pas avoir entendu et lui propose
+
+- une Vodka avec beaucoup de jus d''orange.
+
+- Psst commandez ce que vous voulez, après tout c''est vous qui payez dit-il un peu goujat.
+
+Bérénice hèle le barman et lui commande deux «vodka-orange» sans même se souvenir que Cécile et son nouveau copain attendent leurs boissons.', true, true),
+  ('1a771fef-40f9-8030-b547-c39fd34ce856', '1a771fef-40f9-8030-b547-c39fd34ce856', '874374b7-78c0-4a67-87dd-25f4918d1079', 6, '9ee5c32d-c6f9-4b8e-843b-5a779492f36a', 'Elle voit Cécile la regarder avec des yeux furieux, mais elle s''en moque. Ce jeune homme l''attire beaucoup alors elle reste avec lui.
+
+- Je m''appelle Bérénice et toi ?
+
+- Ah parce qu''on se tutoie maintenant !!! Pourquoi pas après tout ! Moi, c''est Nathan.
+
+Le nez vissé à son verre, il ne la regarde même pas. Avec quelqu''un d''autre, elle serait partie mais là, elle veut rester, insister. Après tout, c''est un peu à cause d''elle s''il n''a pas pu répondre à sa copine.
+
+- Tu fais quoi dans la vie Nathan ?
+
+- Je ne vous le dirai pas ! J''ai mal à la tête !
+
+Sa colère envers moi ne retombe pas, marmonne Bérénice.
+
+- Dis donc, si tu dois me parler longtemps comme ça, je te laisse en plan toi et ta cuite. Il ne faut pas exagérer quand même.
+
+Nathan lève enfin le nez de son verre et lui répond :
+
+- Informaticien, je crée des sites pour les entreprises.
+
+Bof ! Pas très folichon comme boulot se dit Bérénice. Je me demande si ça gagne bien sa vie un informaticien. Je ne lui demande pas, il va se vexer.
+
+- On devrait s''assoir sur une banquette, on serait mieux installés.
+
+- D''accord !!
+
+Nathan se lève, titube un peu, Bérénice se fait un plaisir de le soutenir et pour la première fois depuis le début de la soirée, leurs yeux se croisent. Il a les yeux bleus comme la mer, il sent l''alcool mais ça ne fait rien, Bérénice laisse son visage tout prés de celui de Nathan. Lui-même semble troublé de ce rapprochement mais peut-être se fait-elle des idées.
+
+En tout cas, il ne recule pas. Le pourrait-il ? Il est bien saoul.
+
+Il s''affale sur la banquette, ne semble vraiment pas au mieux de sa forme et dit à la jeune fille : Il faut que j''aille aux toilettes.', true, true),
+  ('1d371fef-40f9-80b5-9793-e7fe5b0f7ab5', '1d371fef-40f9-80b5-9793-e7fe5b0f7ab5', '874374b7-78c0-4a67-87dd-25f4918d1079', 7, '5ebad498-92fe-4c7d-b3b1-b22668c52f6a', '- Ah.
+
+Bérénice soupire, finalement qu''il sente l''alcool n''était pas gênant, mais que sa présence soit si peu valorisée qu''il aille aux toilettes sans même qu''il ne veuille d''elle. Cela, met fin aux illusions, ce n''est pas lui. Mais après tout, peut-être que si, au final c''est un homme encore amoureux de son ex, donc un homme amoureux. Là elle semble rencontrer une lucidité nouvelle.
+
+- Mince peut-être devrais-je être plus précise quant à ce que je cherche.
+
+- Tu disais ?
+
+- Oh, rien t''inquiète, tu peux aller aux toilettes, et ravi de t''avoir rencontré.
+
+- Oh, ok. Ah, et tu sais les informaticiens, si nous sommes nombreux c''est sûrement pour que les autres remarquent qu''il est possible d''agir dans les systèmes et qu''il y a besoin d''intervenir dans les liens entre eux. Si tu as besoin d''informaticien dans ta vie, ou dans ton cœur peut-être me reverras-tu.
+
+Bérénice, se lève et se dit qu''elle va changer ses idées, libérer quelques émotions en allant sur la piste. Surtout que Cécile est encore avec Yohan, et qu''ils ont l''air de s''entendre à minima.', true, true),
+  ('20971fef-40f9-8014-9cce-f8ed61563d1b', '20971fef-40f9-8014-9cce-f8ed61563d1b', '874374b7-78c0-4a67-87dd-25f4918d1079', 8, '9ee5c32d-c6f9-4b8e-843b-5a779492f36a', 'Elle danse avec une sorte de frénésie pour se libérer d''un sentiment de déception.
+
+- Si j''ai besoin d''un informaticien, ce ne sera pas lui que j''appellerai se dit-elle. J''en ai assez de cette soirée débile. Je rentre chez moi. Je vais prévenir Cécile.
+
+A la sortie de la boite de nuit, elle hèle un taxi et se retrouve bientôt dans le silence de son appartement qu''elle aime tant.
+
+Le lendemain, Bérénice est réveillée par un appel de Cécile.
+
+- Tu as bien dormi ?
+
+- Oui très bien. Le silence m''a fait un bien.
+
+- Tu semblais fâchée quand tu es partie.
+
+- Oui, un peu dit-elle. Nathan m''a énervée.
+
+- Ah bon !
+
+- Oui ! Il est toujours amoureux de son ancienne compagne et puis, il m''a tenu un discours sur les informaticiens qui aident les autres... Je n''étais pas en état de comprendre sa subtilité alcoolisée.
+
+- Laisse tomber répond Cécile.
+
+- Je pense que je vais m''inscrire sur un site de rencontre. J''en trouverai peut-être un qui sera moins "chelou" que celui-là, Lui, qu''il reste avec son chat.
+
+A l''autre bout de la ligne, son "amie de toujours" est catastrophée.
+
+- Mais tu es folle. On trouve n''importe qui sur ces sites, ça peut même être dangereux. Repose-toi et on reparlera quand tes idées seront plus claires.
+
+- N''essaie pas de me dissuader répond Bérénice. Je suis fermement décidée. Allez bises et on se rappelle.
+
+L''une raccroche en se disant qu''elle va boire un café et allumer son ordinateur. L''autre pose son téléphone très inquiète sur la dernière idée de son amie.', true, true),
+  ('20f71fef-40f9-8086-80a8-fcea1c906950', '20f71fef-40f9-8086-80a8-fcea1c906950', '874374b7-78c0-4a67-87dd-25f4918d1079', 9, '5ebad498-92fe-4c7d-b3b1-b22668c52f6a', 'Ce n''est pas dans l''habitude de Bérénice de se mettre dans un état pareil.
+
+Elle laisse pourtant cela participer à sa journée.
+
+Elle consulte le planning de la semaine suivante. Etant institutrice, elle soigne souvent sa présentation, et ses contacts avec les autres car c''est sa nature lorsqu''elle n''est pas débordée.
+
+Cela lui permet de prévoir, quels seront les jours disponibles pour les rencontres, les sorties habituelles, et ceux en solitaire.
+
+- Quels sites de rencontre vais-je me sélectionner ? Il faudrait que je rappelle Cécile, pour voir si elle voudra venir avec moi pour faire des photos qui me ressemblent. Ou, je pourrais demander à Julie.
+
+Elle boit son café, en se demandant si elle consulte plutôt d''autres profils, des sites, des applications, des expériences réussies ou échouées pour démarrer cette aventure. Après quelques minutes non rafraichissantes, elle éteint son ordinateur n''ayant pas réussi à identifier la bonne approche.
+
+- Allez, ce n''est pas le tout, j''ai à rencontrer quelqu''un de nouveau aujourd''hui.', true, true),
+  ('21171fef-40f9-8062-b0d9-f0c740079539', '21171fef-40f9-8062-b0d9-f0c740079539', '874374b7-78c0-4a67-87dd-25f4918d1079', 10, '9ee5c32d-c6f9-4b8e-843b-5a779492f36a', 'Elle se souvient, enfin, qu’elle a un rendez-vous avec le frère d’une amie qui vient d’arriver en ville.
+
+Il s’appelle Lucas. La dernière fois que Bérénice l’a vu, il avait 16 ans, deux ans de moins qu’elle, mais ne répondait pas du tout aux critères de charme qu’elle avait déjà à l’époque.
+
+Il vient pour deux ans afin de passer une agrégation de maths. L’heure approche, il faut y aller.
+
+- J’espère qu’il ne va pas trop me prendre la tête avec ses études, les miennes sont finies, je ne vais pas subir des explications interminables avec les siennes, pense-t-elle dans l’autobus qui la conduit sur le lieu de la rencontre, dans le parc de la Gentiane.
+
+Elle s’assoit sur un banc face à la statue de Vénus.
+
+Il connait ce parc, Adolescents, la «fine équipe» y venait pour se retrouver, parler, refaire le monde……. Puis sa famille a déménagé dans le sud mais Bérénice a toujours gardé un contact avec la sœur de Lucas.
+
+Elle regarde les gens passer mais ne voit personne arriver ressemblant à Lucas.
+
+Il y a bien un charmant garçon qui arrive vers elle, le sourire aux lèvres, mais il ne peut pas être Lucas Il est trop beau.', true, true),
+  ('21d71fef-40f9-8074-a633-eb82f430a0ad', '21d71fef-40f9-8074-a633-eb82f430a0ad', '874374b7-78c0-4a67-87dd-25f4918d1079', 11, '5ebad498-92fe-4c7d-b3b1-b22668c52f6a', 'Je ne vais pas rester impatiente sur ce banc qu''il arrive. Alors, je vais voir et si ce n''est pas Lucas, nous pourrons tout de même un peu échanger.
+
+Arrivée à proximité de l''homme, elle bafouille un peu.
+
+- Euh, Lucas, est-ce que c''est toi ?
+
+- Salut. Lucas ? Non, ce n''est pas moi, mais il m''a demandé de venir ici pour retrouver quelqu''un. Mais c''est toi Bérénice ?
+
+- Oui c''est bien moi, et pourquoi n''est-il pas venu ?
+
+- Parce que lorsque nous venions jouer ici avec la bande, tu ne me remarquais même pas, tandis que je te regardais tout le temps. Et Lucas, savait que j''étais amoureux de toi, donc m''ayant dit que tu reviendrais, il a trouvé que ce serait mieux que je vienne.
+
+- Ah, Jo, c''est toi. Pardon, c''est vrai que tu as incroyablement changé. Enfin, physiquement.
+
+- Je m''en doutais, il y en avait que pour le physique avec toi, donc je me suis mis au sport depuis 3 ans pour transformer ma morphologie. Et c''est sûr que près des filles cela attire plus, mais bon je trouve cela triste pour vous.
+
+- Oh, ça va les leçons de morales.
+
+Bérénice rougit alors qu''il la regarde avec encore plus d''intensité alors que le vent passe dans ses cheveux et ses vêtements.
+
+- Vous avec les filles c''est pareil. Sinon, comment on choisit la personne que l''on veut aborder ?
+
+- C''est certain, ici devant la statue de Vénus, pourtant je préfère te regarder, c''est clair qu''on se fait trop de sentiments pour la beauté des mouvements, des formes et de la vie. Mais, t''ayant toujours plus regardé que les autres, sûrement que tu étais la plus belle de toutes.', true, true),
+  ('22271fef-40f9-802a-a819-cb498debb1df', '22271fef-40f9-802a-a819-cb498debb1df', '874374b7-78c0-4a67-87dd-25f4918d1079', 12, '9ee5c32d-c6f9-4b8e-843b-5a779492f36a', 'Bérénice est très désarçonnée. Elle ne s''attendait pas à se trouver dans une situation aussi inattendue et se dit :
+
+Que me veut-il exactement ?
+
+Cette histoire d''agrégation de maths de Lucas est-elle un traquenard ?
+
+Ce qui voudrait dire que plusieurs personnes sont impliquées dans ce piège ?
+
+Elle est vraiment très contrariée.
+
+- Bon, concrètement, que me veux-tu exactement ?
+
+- Rien de particulier, répond Jo. Je voulais juste te revoir.
+
+- En fait, tu voulais me montrer tes nouveaux muscles. J''espère que ton cerveau a fait également de la musculation parce que si ma mémoire est bonne tes neurones n''étaient pas non plus très développés, assène Bérénice acerbe, très acerbe même. Elle sent sa contrariété se transformer en colère.
+
+- On m''avait dit que tu étais toujours aussi cinglante, tu as fait des progrès. C''est pire.
+
+- Comprends moi. Je m''organise pour rendre service à un camarade parce que je connais sa sœur et tu arrives la bouche en cœur, en me donnant des leçons, dit-elle vexée.
+
+- Ecoute, dit Jo, je vois ta colère qui n''est jamais bonne conseillère. Alors je pense que tu vas refuser une invitation à prendre un verre.
+
+- Oui, je n''ai vraiment pas envie de rester avec toi.
+
+Bérénice tourne les talons et s''en va en ronchonnant. En attendant l''autobus, elle appelle Rosalie, la sœur de Lucas, pour lui dire le fond de sa pensée.
+
+- Je savais que tu allais prendre très mal cette initiative mais Jo a tellement insisté que Lucas a cédé. Tu sais, Jo est très gentil et ne savait pas comment prendre contact avec toi.
+
+- Je m''en fous totalement grommela l''outragée sans même dire « au revoir ».
+
+Elle rentra chez elle et se calma petit à petit. Après tout, il y a plus grave dans la vie.
+
+Les jours passent avec la routine habituelle sans que Bérénice ne pense à cette histoire.
+
+Quelques temps plus tard, son téléphone sonne et il affiche un numéro inconnu. Elle décroche avec méfiance.
+
+- Bonjour Bérénice, c''est moi Jo ! Tu es toujours fâchée ?
+
+- Ah c''est toi ! Non pas vraiment. Pour être honnête, je t''avais oublié.
+
+- Moi, je ne t''oublie pas. C''est pour ça que j''ai réuni mes neurones les plus musclées pour t''appeler et t''inviter à déjeuner. Serais-tu d''accord ?
+
+- Je ne sais pas trop si j''ai envie de te voir mais si c''est un bon restaurant, j''accepte.
+
+- J''avais pensé à un pique-nique sur la plage !
+
+Bof ! se dit Bérénice mais je ne veux pas me montrer vénale ou intéressée.
+
+- D''accord j''accepte mais je préférerais en soirée pour voir le coucher du soleil. Attention, je ne fais pas dans le romantisme, c''est juste que j''aime les couchers de soleil.
+
+- Bien sûr, j''ai bien compris. Je passe te prendre samedi vers 18 heures. Je m''occupe de tout.', true, true),
+  ('22b71fef-40f9-804e-9125-fbf232a587d5', '22b71fef-40f9-804e-9125-fbf232a587d5', '874374b7-78c0-4a67-87dd-25f4918d1079', 13, '5ebad498-92fe-4c7d-b3b1-b22668c52f6a', '- Samedi 18h, il s''occupe de tout, ça ne me plaît pas trop, il faut que je vienne toute nue pour lui ou quoi. Comment je vais m''habiller, en plus il est prévu qu''il pleuve. Wah.
+
+La semaine se poursuit, elle hésite à appeler Nathan, pour lui faire une blague se dit-elle. Puis elle se reprend, elle se demande pourquoi pense-t-elle à lui, alors qu''hier elle avait oublié Jo en une nuit. Ce que la transmission de volonté et d''attraction se mêlent encore.
+
+Quelques appels à ses amies, et elles sont prêtes, elles iront samedi ensemble pour discuter auprès de l''eau, avec Cécile, et Gina. Pour passer un bon moment, et peut-être la rassurer sur le fait que ce ne soit pas une erreur.
+
+Ensemble, depuis quelques heures, la boule au ventre semble être remarquée de plus en plus par ses deux amies. Qui savent qu''elles ne sont pas ici sans raison. Parler des parents, ou de sa Sœur mariée, cela est sympa, mais cela la rend plus timide. D''ailleurs, cela se voit, elle ne veut pas essayer les robes que nous lui proposons qui sont pourtant très sexy, et pour attirer un homme amoureux de passion, et se sentir belle et sereine, c''est un atout qui ne devrait pas se refuser.
+
+- Tiens, Bérénice, s''il te plaît, passe moi le maillot de bain là-bas en rouge.
+
+- En rouge, enfin Gina, tu n''en portes jamais d''habitude. Qu''est-ce qu''il t''arrives ?
+
+- Et toi alors ? Tu es rouge comme une tomate, alors passe moi ce maillot de bain rouge, afin que tu voies que ce n''est pas gênant, et qu''en prime cela m''ira très bien. Et puis, c''est vrai que je n''en mets pas, donc autant voir ce que cela donne, pour une fois que j''en remarque un.
+
+- Oui, c''est vrai que depuis tout à l''heure, tu sembles nous admirer mais tu n''es pas avec nous. Qu''est-ce que tu veux nous demander ?
+
+- Ahahah, merci les filles, vous êtes tops. Bon, c''est ce soir, je vois Jo, et je ne sais pas si c''est une bonne chose. Mais bon, même si vous avez de bons avis, je ne suis pas sûre de pouvoir leur faire confiance.
+
+- Oui, jeune femme, essaie le maillot rose et fleuri de la vitrine.
+
+- Quel est le rapport ?
+
+- Voilà, c''est ce que tu fais depuis ce matin, tu ne nous fais pas confiance, car tu as peur, sûrement d''aimer cela, et de voir que cela n''a rien de terrible, que de tomber amoureuse.
+
+- Oui, exactement, et moi j''ai envie de te voir dans ce maillot super sexy noir qui ne te ressembles pas. Alors est-ce que tu veux bien le mettre ?
+
+- Très bien, très bien, je l''enfile.
+
+- Alors, comment le trouvez-vous ce maillot ? demande Gina. J''aime bien, il est vif, voyant, et je me sens bien dedans. D''ailleurs, n''hésite pas si t’as peur de te rapprocher de lui ce soir, on peut entrer dans ta cabine, pour que cela t''apaises Bérénice.
+
+- Non, mais vous n''allez pas faire ça, je suis toute nue là.', true, true),
+  ('23371fef-40f9-8073-a87e-e77a52b7a276', '23371fef-40f9-8073-a87e-e77a52b7a276', '874374b7-78c0-4a67-87dd-25f4918d1079', 14, '9ee5c32d-c6f9-4b8e-843b-5a779492f36a', 'Bérénice s''énerve parce que ses copines se moquent d''elle.
+
+- Je voudrais bien vous voir dans ma situation, un gars qui tombe du ciel comme ça ! Allez, je vous laisse l''heure du rendez-vous approche et je vais m''habiller comme je voudrais et certainement pas en maillot, je ne veux pas l''aguicher.
+
+Elle rentre chez elle, prend une douche, fait son brushing et choisit une jolie robe jaune pâle. Elle met quand même son maillot préféré et une serviette de bain dans un grand sac. On ne sait jamais, elle aura peut-être envie de se baigner. J''aviserai, se dit-elle.
+
+Arrivée sur le lieu de la rencontre, Jo est déjà là, chargé de deux sacs.
+
+- Mais que peut-il bien amener pense-t-elle ?
+
+Jo voit son interrogation.
+
+- J''ai amené tout le nécessaire pour un beau et bon pique-nique. Viens, on va s''installer pour profiter au mieux du coucher du soleil.
+
+Bérénice le suit, curieuse de savoir ce qu''il a prévu.
+
+- Cet emplacement te convient ?
+
+Elle fait oui de la tête et se dit qu''il est vraiment aux petits soins pour elle. Ca ne lui déplait pas finalement.
+
+Il farfouille dans un de ses sacs et sort une nappe discrète qu''il étale sur le sable, lui demande de s''assoir à un angle de celle-ci. Il attrape ensuite une bouteille de champagne fraiche et deux flutes. Alors là ! Il m''épate. Il a pensé à tout !
+
+Fier de lui, Jo lui sert de cette boisson qu''elle aime beaucoup.
+
+Il s''installe à coté d''elle :
+
+- On trinque à quoi ?
+
+- Je ne sais pas.
+
+- A nos amours ?
+
+Elle rougit. Elle pense qu''elle aurait dû répondre quelque chose au lieu de le laisser dire n''importe quoi.
+
+- Je te choque ?
+
+- Non, pas du tout répond-elle, un peu coincée quand même.
+
+Le champagne est bon. Jo ressert Bérénice. Elle se détend un peu. Ils bavardent tranquillement. La méfiance semble s''estomper petit à petit.
+
+Le temps passe, le coucher du soleil se prépare et embrase le ciel de couleurs rouge et orange magnifiques.
+
+Quand le soleil a complètement disparu, les deux jeunes gens se regardent, ils se rapprochent et échangent un doux baiser. Bérénice a aimé ce baiser et voit Jo d''une manière différente. Elle sent qu''il se passe quelque chose en elle. Ils se sourient et s''embrassent à nouveau.
+
+Cette belle soirée se termine, chacun rentre chez soi, en ayant pris soin de se donner un rendez-vous pour le lendemain. Elle a déjà hâte que « demain arrive ».', true, true),
+  ('23b71fef-40f9-800b-b2d7-f955742df9f9', '23b71fef-40f9-800b-b2d7-f955742df9f9', '874374b7-78c0-4a67-87dd-25f4918d1079', 15, '5ebad498-92fe-4c7d-b3b1-b22668c52f6a', '15h11 pas trop tôt, ils sont arrivés sur la plage.
+
+- Cette fois, on devrait pouvoir se baigner aussi.
+
+- Tu n''as pas peur ?
+
+- Peur, de quoi ?
+
+- De te déshabiller ?
+
+- De me déshabiller ? Que veux tu dire…
+
+- Je ne sais pas, moi cela me tracasse, je n''en ai pas l''habitude.
+
+- Alors pourquoi sommes nous venus à la mer.
+
+- Tant que je te voyais, mais je me suis dit la mer c''est super, il y a du monde.
+
+Donc il y aura forcément œuvre à discuter. Regarde, cette femme et ces enfants, comment la trouves-tu ?
+
+- Très jolie, on voit qu''elle est attentionnée et embarrassée.
+
+Bérénice lève les sourcils. Elle aussi se sent embarrassée, après hier, ils se sont retrouvés comme vite, mais sans l''effet du romantisme du soleil. Qui finalement, avait bien du poids dont elle s''était méfiée plus tôt. S''attendait à un accueil digne de plus d''audace. Elle ne va pas attendre encore qu''ils soient partis, elle l''embrasse, de toute façon devant la mer cela est évident, elle allait se jeter à l''eau.
+
+- C''est plutôt rare que ce soit moi qui embrasse la première.
+
+- Merci. C''est agréable, et je suis bien auprès de toi.
+
+- Pour te dire, j''ai souhaité rencontrer un homme amoureux, en 365 jours, et nous en sommes au 24 ème seulement.
+
+- Ah oui, eh bien cela me réchauffe le cœur, car être plus de temps que d''attendre la fin de ce décompte avec toi est une excellente nouvelle. Puisque tu fis la demande d''un seul, alors il semble que ce soit moi. Car si je ne suis amoureux de toi, je ne sais ce qu''aimer peut être.', true, true),
+  ('24171fef-40f9-80dc-89fe-f05459443270', '24171fef-40f9-80dc-89fe-f05459443270', '874374b7-78c0-4a67-87dd-25f4918d1079', 16, '9ee5c32d-c6f9-4b8e-843b-5a779492f36a', 'Bérénice attendait impatiemment de retrouver Jo. Et maintenant, il est en face d''elle et lui tient un langage "brumeux". Peut-être a-t-il bu avec des copains avant de venir ? Elle ne sait pas, elle ne sait plus, elle est perdue.
+
+- Il me plait beaucoup mais suis-je amoureuse ? Même un peu ? pense-t-elle. Comment sait-on quand on est amoureuse ? Je ne l''ai jamais été vraiment. Une seule personne peut m''aider ... Cécile.
+
+Son amie de toujours, sa confidente a déjà été amoureuse. Elle ne parlait que de Vincent.
+
+C''était soûlant. Elle s''en souvient comme si c''était hier, ça a duré trois ans, forcément son amie peut l''aider. Elle doit savoir.
+
+Prétextant un appel téléphonique urgent à passer, elle s''éloigne de Jo et appelle Cécile.
+
+- Salut, j''ai une question très importante à te poser. Comment sait-on quand on est amoureuse ?
+
+- Pourquoi ? C''est à cause de Jo ?
+
+- Réponds-moi d''abord et je t''expliquerai ensuite.
+
+- La réponse est difficile à donner mais je pense pouvoir dire que quand le premier baiser t''électrise, c''est un bon indice. Puis ton cœur bat la chamade, ton esprit vagabonde et tu ne veux plus être qu''avec lui.
+
+- Merci. C''est pour Jo effectivement mais tu n''en sauras pas plus pour l''instant dit Bérénice en raccrochant.
+
+Le jeune homme la regarde revenir vers lui avec un regard si tendre qu''elle a envie de lui sauter dans les bras.
+
+C''est vrai qu''il m''attire, se dit-elle. C''est vrai que son regard posé sur moi me fait ressentir un émoi inconnu jusqu''alors.
+
+Jo se lève avec galanterie pour l''accueillir et l''embrasse.
+
+Cécile a raison, je me sens sur un petit nuage, C''est sûr, je dois être amoureuse.
+
+Ils se rassoient tout près l''un de l''autre et Bérénice savoure le regard amoureux de Jo.
+
+- Tout va bien, demande-t-il
+
+- Très bien.
+
+- Veux-tu faire une balade le long de la plage ?
+
+- Avec plaisir.
+
+A peine ont-ils fait quelques pas, que Jo prend la main de Bérénice.
+
+C''est tellement romantique, s''avoue-t-elle. Je me sens si bien.', true, true),
+  ('25071fef-40f9-808c-98f0-cb26a28167ec', '25071fef-40f9-808c-98f0-cb26a28167ec', '874374b7-78c0-4a67-87dd-25f4918d1079', 17, '5ebad498-92fe-4c7d-b3b1-b22668c52f6a', 'Ca y est, fin du rêve. Elle est lundi, devant les enfants.
+
+Et finalement, Jo, devient très présent pour Bérénice, de plus en plus dans chaque moment.
+
+Dans les échanges mathématiques avec les enfants, un problème simple, dont voici l''intitulé :
+
+"un couple se trouve au restaurant, l''homme et la femme étant souples sur leurs affaires, et voulant être exemple d''égalité, partage, à 50% le prix du restaurant chacun. Pour autant, tout ce qui est offert est à la charge de celui qui offre, la femme offre le verre de vin rouge, et le fromage pour tous les deux. Tandis que l''homme offre l''apéritif, accompagné d''une salade en entrée."
+
+Les enfants, voient bien l''attitude de la maîtresse, ils la regardent plus, et cela surprend Bérénice, comment se fait-il alors qu''avant ils passaient leur temps à se regarder les uns et les autres, qu''en ce moment j''attire presque toute l''attention. C''est sûr, cela aide tout de même bien ses cours, car les enfants suivent, et sont plus dans l''échange avec elle. Comme s''il voulait prendre un peu de l''amour qui naît et rayonne plus ou moins. Pour éviter qu''il n''expansionne et que leur maîtresse passe de l''autre côté trop vite. Eux aussi, en ont tellement besoin de se sentir aimés.
+
+Comment à plusieurs de ces exercices ne se poserais-t-elle pas de question, sur ce qu''ils sont elle et Jo ? Même en Français, elle voulait présenter des scènes de théâtres pour les cours du mois suivant, qu''elle révise très en avance. Et lorsqu''elle lit des histoires d''amour qui semblent toujours faire révolution dans les émotions des enfants. Et permet d''en apprendre plus sur eux, cela est quand même électrisant aussi en elle. Puisque les bras, ce ne sont pas ceux du bourgeois gentilhomme qu''elle veut, mais bien ceux de Jo.
+
+Ainsi, c''est elle qui invite Jo à se revoir, avant ce week-end est-ce que c''est possible pour toi ? Cela aurait pu de nouveau commencer par Cécile, mais là, pas question, les autres semblent disparus de son esprit.', true, true),
+  ('25b71fef-40f9-808d-a095-d6ff0206aba6', '25b71fef-40f9-808d-a095-d6ff0206aba6', '874374b7-78c0-4a67-87dd-25f4918d1079', 18, '9ee5c32d-c6f9-4b8e-843b-5a779492f36a', 'Bérénice en est maintenant certaine, elle est amoureuse.
+
+Lui faut-il vraiment attendre le week-end prochain pour revoir Jo ? Cette attente va lui paraître une éternité. C''est beaucoup trop long. Elle a envie au moins de l''entendre.
+
+Pendant la récréation des élèves, elle prend son téléphone au moment même où il se met à sonner. C''est Jo. Il voudrait, sans bien sûr se montrer insistant, la voir ce soir et puis, si c''est possible, les autres soirs. Elle lui manque tellement. Il l''avoue, il est très amoureux d''elle.
+
+Bérénice sait que Jo dit vrai et ose également lui faire part de ses sentiments. Elle ne pensait pas qu''un jour elle pourrait se sentir si libre d''exprimer ce qu''elle ressent sentimentalement. Ils se disent tout leur bonheur.
+
+Comme elle l''avait prévu, l''attente est interminable jusqu''à l''heure du rendez-vous. Elle est aussi pressée que les élèves que la sonnerie de fin de cours retentisse.
+
+17 heures ! ça sonne Au revoir les enfants ! Son pas est vif. Elle arrive sur le trottoir et voit Jo. Il est venu la chercher pour qu''il se retrouve plus vite. Elle court vers lui sans s''occuper de ses collègues ou des élèves qui peuvent la voir, peut-être même la juger. Elle s''en moque. Plus personne n''existe sauf lui. Un beau sourire illumine leurs visages. Ils se blottissent l''un contre l''autre. Ils sont seuls au monde.
+
+Ils s''aiment.
+
+Mission accomplie : Bérénice a trouvé un amoureux en moins de 365 jours. Elle n''y croyait pas mais c''est arrivé.
+
+FIN', true, true),
+  ('10671fef-40f9-8013-8ce0-d5eac236ce4c', '10671fef-40f9-8013-8ce0-d5eac236ce4c', 'e6cdfb67-8a4e-46f5-beec-1ba56fda1718', 1, '2adccf21-2b08-4366-9c56-5ac67fdfe3c4', 'Hector, le dragon, vivait dans une caverne en haut d''une très haute et grosse montagne.
+
+Il était petit, mais n''arrivait pas à cracher du feu. Pas comme les autres dragons qui crachaient du feu à tout bout de champ. Et ces grands dragons se moquaient tout le temps de lui, du matin jusqu''au soir.
+
+Hector était marron.
+
+Un jour, il décida de quitter sa caverne. Il avait 5 ans. Quand il partit, il y avait plein de brouillard et il faisait nuit. Il vola au-dessus d''un océan très très très froid. Il vit un iceberg, se posa dessus et SPLATCHHHH, il était devenu tout blanc. Il essaya de cracher du feu mais à la place il cracha de la glace. Il se dit "Super, je crache de la glace !". Il fit une bonne nuit et décolla de l''iceberg le lendemain matin. Il survola l''océan et vit la France. Dans la France, il aperçut un énorme château qui faisait au moins 200 fois sa taille.
+
+Quand il s''approcha, il s''aperçut que ce château était abandonné.
+
+Il entra dans le château et... surprise... !!!! Il dit : "Qu''est-ce que c''est magnifique !".
+
+Les tables étaient faites en écailles de dragons, des tableaux de dragon ornaient les murs. Les tapis étaient faits de peaux de dragons. Il reconnut soudain, le portrait de son père sur un mur au-dessus d''une étagère qui regorgeait de dents de dragons. Il n''avait jamais vu de dents aussi brillantes. Soudain, une ombre vola au-dessus de lui. Il reconnut son copain Léo.
+
+Il cria :
+
+- Léo !!!
+
+L''écho était tellement puissant qu''il devait se boucher les oreilles.
+
+Léo se posa face à lui et dit :
+
+- Hector, qu''est-ce que tu fais là ? C''est un endroit pour les grands.
+
+En effet, Léo était plus grand que Hector. Léo faisait au moins 2 fois sa taille. Il dit :
+
+- Sors de ce château immédiatement ! Il paraît qu''un monstre rode dans les couloirs. J''étais parti à sa recherche pour le combattre.
+
+Mais Hector aussi voulait le combattre.
+
+Léo lui répondit Non ! Mais Hector insista et puis Léo lui re répondit Non. Mais Hector insista.
+
+Soudain, un gros vacarme s''approcha d''eux. C''était le monstre qui s''approchait d''eux en rampant. C''était un énorme serpent qui n''était pas comme les autres. Il avait des poils à la place des écailles, des dents très longues au lieu de petites dents et était très gros sur toute sa longueur.', true, true),
+  ('10c71fef-40f9-80cf-8490-e9db119f051e', '10c71fef-40f9-80cf-8490-e9db119f051e', 'e6cdfb67-8a4e-46f5-beec-1ba56fda1718', 2, '7cf95fa2-24e9-4ac2-93e3-1a9a227cdf67', 'Hector n''était pas rassuré mais voulait se battre. Il se rappela qu''il pouvait cracher de la glace.
+
+Le monstre s''approchait d''eux en rampant sur le sol.
+
+Maintenant, le monstre est tout près d''eux. Hector voulut cracher du feu mais il ne fit sortir que de la glace qui atterrit sur la queue du monstre. Le monstre était bloqué à la queue et se débattait.
+
+Le serpent leur dit « ne vous inquiétez pas, je ssssssuis gentil ». Rassuré, Léo cracha du feu sur la glace pour le délivrer. Soudain, le monstre sauta sur eux en criant « enfin ! Je vais pouvoir manger du dragon, j''en rêve depuis toujours ahahaha !!».
+
+Les deux petits dragons étaient terrifiés et inquiets. Ils essayèrent de s''enfuir mais le serpent les en empêcha. « A l''aide ! » crièrent les deux petits dragons. Personne ne les entendit.
+
+Le monstre leur dit « vous avez de la chance, je n''ai pas faim. Je vais vous emmener dans mon cachot pour vous manger plus tard ». Le monstre les ligota et les emmena dans la prison du château. Le monstre leur dit : « vous savez, je ne suis pas vraiment un serpent ; ma mère était un serpent et mon père un loup-garou. A la pleine lune, mon corps s''agrandit et se muscle et je deviens un loup-garou. Demain soir, la pleine lune apparaîtra et je vous mangerai. »
+
+Les petits dragons sont terrifiés. Ils vont essayer de trouver un plan pour s''échapper. Léo s''évanouit de peur, alors Hector se retrouve seul pour essayer d''échapper à « ce loup Serpou ». Il réfléchit, réfléchit pour trouver une idée mais il n''en trouva pas. Il cracha de la glace mais il ne se passa rien, les barreaux ne fondirent pas. Hector était très inquiet, si seulement il pouvait cracher du feu il aurait pu faire fondre les barreaux. Hector tente de réveiller Léo sans succès. Soudain, il eut une idée, il attendra la pleine lune pour glacer le serpent et les libérer.', true, true),
+  ('12671fef-40f9-806f-bb55-cba583417f1e', '12671fef-40f9-806f-bb55-cba583417f1e', 'e6cdfb67-8a4e-46f5-beec-1ba56fda1718', 3, '2adccf21-2b08-4366-9c56-5ac67fdfe3c4', 'Le lendemain, le soir venu, le monstre entra dans le cachot. Il dit :
+
+- Maintenant je vais pouvoir vous manger ! Ssssssi seulement vous pouviez être encore plusssssssssss nombreux, j''aurais pu faire un fesssssstin de vous ! Maintenant, c''est votre dernière heure. Mais tu as encore une heure, je dois préparer ma marmite. Et en plussssss je n''ai pas très faim, dans une heure je pense que j''aurai plusssss faim.
+
+Le monstre repartit.
+
+Léo se réveilla pile à ce moment-là. Dès que le monstre avait franchi la porte, Hector lui expliqua.
+
+- Dans une heure le monstre va nous manger. Donc il faut que tu fasses brûler les barreaux de la prison.
+
+Alors Léo cracha du feu sur les barreaux. Puis ils s''enfuirent. Ils passèrent la porte pile au moment où le loup-garou descendait l''escalier lourdement.
+
+Il arriva en bas de l''escalier au moment où les deux amis franchirent la porte de l''escalier qui allait dans la cave.
+
+- Vous vous zzêtes enfuis, mais je vous rattraperai !
+
+On passa la porte du château le loup-garou à notre poursuite ! On traversa la France, passant par l''océan Atlantique, puis nous remontons vers l''océan Arctique. Le monstre loup-garou ne savait pas comment, mais il pouvait voler !
+
+On arriva en Amérique du nord, et on se posa sur un volcan. Et là... "SPLAAAATCH....!!!" On était tous les deux devenus rouge lave, et quand on cracha sur le monstre, on cracha non pas du feu ou de la glace, mais de la lave. Et il fut tout cuit. Léo avec sa force l''envoya vers l''océan Arctique et le monstre s''écrasa sur un bout d''iceberg.
+
+Léo dit à Hector :
+
+- Nous avons encore pleins d''aventures à vivre Hector.', true, true),
+  ('14471fef-40f9-80c4-b143-c1f414b605c2', '14471fef-40f9-80c4-b143-c1f414b605c2', 'e6cdfb67-8a4e-46f5-beec-1ba56fda1718', 4, '7cf95fa2-24e9-4ac2-93e3-1a9a227cdf67', 'Un peu plus tard c''était l''anniversaire d''Hector. Léo lui offrit comme cadeau un stage à l''école des petits dragons pour lui apprendre à cracher du feu.
+
+Pour son premier jour d''école il s''habilla de sa plus belle tenue, mit son cartable sur le dos et s''envola jusqu''à l''école. Le soir il raconta à sa maman son premier jour d''école « c''était génial ! J''ai eu un A à mes évaluations et je me suis fait plein de copains et une copine : Maxence, Simon, Thomas, Henry, Julien et Leya. »
+
+Le deuxième jour, Hector arriva en trombe dans le salon et cria « je sais cracher du feu !»  « Bravo mon chéri » dit sa maman.
+
+À la fin de son stage, il obtint le prix de l''excellence. Pour fêter ça, ils organisent une fête en son honneur. Même Nessie le monstre du Loch Ness est là.
+
+Fin', true, true),
+  ('1ee71fef-40f9-802c-975f-daf24a3dd5ca', '1ee71fef-40f9-802c-975f-daf24a3dd5ca', '7dc6ccb2-a7ed-43c5-b6bc-36391ce04029', 1, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Salut, moi c''est Valentine mais tout le monde m''appelle Vava ! Je vais vous raconter en détail ma colonie de vacances de rêve !! Tout d''abord j''ai dû négocier pendant plus d''un mois pour pouvoir y aller !! 1) parce que c''est ma première colonie et 2) cette colonie était vraiment très chère !!! Mais bon, après le dernier moment de négociation, mes parents ont accepté de payer la somme de 799,99€ (je sais c''est pas grand chose mais mes parents et moi nous ne somme pas richissime pour ne pas dire pauvre) donc une fois payé je n''attendais qu''une chose : LE DÉPART ! Mais évidemment ce ne serait pas une colonie de vacances digne de ce nom sans mes deux meilleures amies Clémence et Sarah !! Enfin bon après deux longs mois d''attente le départ arrive enfin !! Je suis en ce moment même devant le car avec mes copines Clémence et Sarah, on était en train de discuter toutes les trois quand soudain on voit un beau gosse juste MAGNIFIQUE!!! Mais je vois que mes deux copines ont smatché elles aussi !! Mais bon aucune chance il est pour MOI !!!', true, true),
+  ('1ff71fef-40f9-80ac-b622-fcaefa9d5b75', '1ff71fef-40f9-80ac-b622-fcaefa9d5b75', '7dc6ccb2-a7ed-43c5-b6bc-36391ce04029', 2, 'f02f60b2-144f-459a-aff0-1d8637ef7d9d', 'Vue qu''elles ne quittent pas leur regard de lui, je les distrais pour qu''elle le lâche. On commence à monter dans le bus. Le problème : ce n''est que des places doubles ! Les filles évidemment s''assoient à côté. Par chance, le garçon le plus beau du monde est tout seule à coté d''une place vide. Je m''avance doucement vers lui mais Sarah se précipite vers moi, me fait tomber et me dit qu''elle me laisse sa place. Mais encore une fois, j''ai une chance incroyable car ce garçon la me tend la main et m''invite à côté de son siège. J''ai le cœur qui bat la chamade et mes yeux ne le quittent plus. Il a les yeux rieur et un sourire tellement beau qu''une glace fondrait en hiver. Il a les cheveux châtains et bouclé et ses yeux sont d''un bleu océan.
+
+Mais le trajet ne se passe pas comme prévue. Il était sur sa musique et moi sur la mienne quand le bus s''arrêta brusquement...', true, true),
+  ('1ff71fef-40f9-80ef-a34e-d5ccfa5b0738', '1ff71fef-40f9-80ef-a34e-d5ccfa5b0738', '7dc6ccb2-a7ed-43c5-b6bc-36391ce04029', 3, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Quand tout d''un coup, Sarah qui n''avait pas attaché sa ceinture tomba sur le beau garçon aux yeux bleus à côté de moi !! Celui-ci la retenue, elle le regarda d''un air amoureux et il lui sourit ! Sarah lui dit :
+
+- Euh désolée je...je voulais pas tomber sur toi !
+
+Il lui répondit :
+
+- Il y a pas de problème princesse ! dit-il en la regardant à son tour amoureusement ! Moi c''est Bryan !
+
+Je rêve ou Sarah est en train de me chiper mon amoureux là ?? Bryan est à moi et qu''à moi !
+
+Je dis soudain à Sarah :
+
+- Et elle c''est Sarah !! Mais laisse tomber elle n''en vaut pas la peine ! Tu peux aller te rassoir !', true, true),
+  ('1ff71fef-40f9-80cf-9d9f-d9cfb094dea6', '1ff71fef-40f9-80cf-9d9f-d9cfb094dea6', '7dc6ccb2-a7ed-43c5-b6bc-36391ce04029', 4, 'f02f60b2-144f-459a-aff0-1d8637ef7d9d', 'Sarah me lance un regard noir. Je savais qu''elle m''en voulait mais à ce point notre amitié ne comptait plus face à ce beau garçon. Elle s''assit et lança un sourire à Brian il lui répondit en souriant. Pour qu''il dérive les yeux d''elle je commençais à lui parler.
+
+- alors ? Tu viens d''où toi ??
+
+- de Lyon et toi ?
+
+- de Bordeaux.
+
+- Bordeaux c''est une ville magnifique !
+
+- tu y es déjà allé ?
+
+- oui plein de fois j''aime vraiment trop cette ville.
+
+- personnellement je ne suis jamais allée à Lyon mais on m''a toujours dit que c''était très jolie aussi.
+
+- cool!
+
+Les heures passèrent et nous fumes arrivé à la Maison de la colonie. Bryan sortit à toute vitesse et là, catastrophe, Sarah, pour se venger me poussa à la sortie du bus. J''atterris la tête la première dans une flaque de boue.', true, true),
+  ('1ff71fef-40f9-8037-b4dc-d5ad5cbf74b5', '1ff71fef-40f9-8037-b4dc-d5ad5cbf74b5', '7dc6ccb2-a7ed-43c5-b6bc-36391ce04029', 5, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', '- Tu veux la guerre, tu l''auras ! Dit Sarah en courant chercher Bryan !
+
+Une fois qu''elle eut retrouvé Bryan elle lui dit :
+
+- Regarde Bryan, il y a un petit cochon qui se roule dans la boue ! Ahahah !!!
+
+Bryan regarda et dit à Sarah :
+
+- Ce n''est pas drôle du tout Sarah tu es vraiment une petite peste pour te moquer d''elle et dire que je commençais à m''attacher à toi ! Quel idiot !
+
+Bryan couru vers moi et me tendit la main :
+
+- Merci, Bryan ! Si tu veux on peut devenir ami ? Lui dis-je en me doutant que un beau gosse comme lui avec moi ça ne collerait pas !', true, true),
+  ('20071fef-40f9-80c8-96ea-faac9493b962', '20071fef-40f9-80c8-96ea-faac9493b962', '7dc6ccb2-a7ed-43c5-b6bc-36391ce04029', 6, 'f02f60b2-144f-459a-aff0-1d8637ef7d9d', '- ouais pourquoi pas.
+
+- cool.
+
+La monitrice nous expliqua le déroulement du séjour et nous distribua les chambres. Je me retrouvais avec mes deux soit disant meilleurs amies et une autre fille qui s''appelait Amy.
+
+Amy ce dirigea vers nous. Nous commencions les présentations et allons vers notre chambre.
+
+- ça va ? Me lança Amy
+
+- oui oui t''inquiètes juste une embrouille
+
+- ok !
+
+Soudain l''horloge sonna : c''était l''heure de manger !', true, true),
+  ('20071fef-40f9-8045-b3b3-c52e71884d28', '20071fef-40f9-8045-b3b3-c52e71884d28', '7dc6ccb2-a7ed-43c5-b6bc-36391ce04029', 7, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Amy me proposa de déjeuner avec elle je lui répondis avec un immense plaisir mais je lui dis que je devais aussi manger avec Bryan ! Elle m''a dit :
+
+- Ok pas de problème ! Je me demande ce qu''on va avoir à manger ce midi... répondit-elle tout excitée
+
+Je lui répondis :
+
+- Je me demande aussi !
+
+Tout à coup, je vis Clémence ma (soi-disant ) meilleure amie, arriver, elle lança à Bryan d''un ton très amical :
+
+- Salut, moi c''est Clémence ! Je suis la meilleure amie de Valentine !! On se connaît depuis notre naissance ! Tu veux venir déjeuner avec moi ? Je suis toute seule ! dit-elle d''un tout penaud.
+
+Mais elle se prend pour qui celle-là ?!?! Pensais je dans ma tête ! Non seulement on se connaît que depuis cette année mais en plus elle veut me voler Bryan !! Pfffff c''est mort d''avance il me préfère moi !! Il irait même pas passer un déjeuner avec Clémence !!
+
+- Pourquoi pas ! lança Bryan d''un ton amical. J''aimerais bien faire ta connaissance ! Je te suis.
+
+Soudain il se leva et suivit Clémence !! Je vais avoir beaucoup de travail pour qu''il me préfère moi !! Maintenant c''est officiel : Je suis en guerre avec Sarah et Clémence !', true, true),
+  ('20f71fef-40f9-805c-b7b6-f4cbd29c4d25', '20f71fef-40f9-805c-b7b6-f4cbd29c4d25', '7dc6ccb2-a7ed-43c5-b6bc-36391ce04029', 8, 'f02f60b2-144f-459a-aff0-1d8637ef7d9d', 'Mais quand je commença à m''approcher de lui, Valentine vida son assiette sur mes cheveux.
+
+- Que se passe t''il ?" dit la monitrice.
+
+- C''est Valentine qui vient de vider son assiette sur mes cheveux !
+
+- En plus pas de chance j''ai pris du thon " dit valentine d''un ton moqueur.
+
+- Bon , dans mon bureau.
+
+- Même moi ? dis-je.
+
+- non toi vas prendre une douche. rendez vous a 14h pour la visite du musée. sauf valentine et toi . vous êtes puni. Vous ferez les taches ménagères.
+
+"pfffff" souffla valentine.
+
+Elle l''aura voulu. Tant pis pour elle. Moi personnellement je m''en fiche de la visite au musée.', true, true),
+  ('21171fef-40f9-80c8-b728-f71bf978082c', '21171fef-40f9-80c8-b728-f71bf978082c', '7dc6ccb2-a7ed-43c5-b6bc-36391ce04029', 9, '6507542d-0f94-44cc-b838-7fec446b76e7', 'Je la déteste, Clémence, je la déteste !!! Bryan est à MOI, parole de Valentine. Et comme si ça ne suffisait pas, il va aussi falloir le faire comprendre à Sarah vu qu''elle scotchée sur lui comme par du ruban adhésif, cette andouille. Non mais sans blague, comment osent elles lui adresser la parole ? Ou même le regarder dans les yeux ? Le monde va très mal, je vous l''assure. Je retourne ces paroles dans ma tête, allongée sur mon lit, écoutant la respiration calme de Amy, sur la couchette du bas.
+
+Le lendemain, les monos organisent une course d''orientation dans le petit bois d''à côté. Une fois prêtes, Amy et moi, nous descendons en papotant. Je lui explique mes sentiments pour Bryan et la dispute avec Clémence et Sarah. Elle me répond qu''elle est avec moi et qu''elle m''aidera à le détourner de nos deux pestouilles de camarades de chambre.
+
+Les monos nous rassemblent devant le centre à l''aide de coups de sifflet et de cris aigus qui vous rendent sourds en moins de temps qu''il faut pour dire "ouf". Lara, une jeune femme aux cheveux roux tressés et à la voix mélodieuse nous demande de nous mettre par groupe de trois. Forcément, Clémence et Sarah se disputent pour savoir avec qui Bryan ira ( elles n''ont pas compris que se sera avec Amy et moi qu''il viendra ). Au final, elles décident de s''unir ( contre moi ), puis Sarah monte sur les épaules de Clémence pour trouver Bryan. Amy le voit en même temps qu''elle, mais elles sont trop proche de lui pour que ma nouvelle amie est une chance. Au final, on se retrouve avec une autre fille blonde aux cheveux lisses et aux yeux bleu océan.
+
+- Je m''appelle Perrine. Et vous ?
+
+- Moi c''est Valentine, et elle Amy. Et les deux là, Clémence et Sarah.
+
+Je lui parle de la dispute, de Bryan et lui demande de m''aider.
+
+- Tu peux compter sur moi, me répond elle avec un air déterminé.', true, true),
+  ('21e71fef-40f9-800c-9b07-fbfaa5263ed9', '21e71fef-40f9-800c-9b07-fbfaa5263ed9', '7dc6ccb2-a7ed-43c5-b6bc-36391ce04029', 10, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Très bien merci !! Maintenant on est 3 alors un pour tous... dis-je d''une voix enthousiaste !
+
+Tous ensemble :
+
+- Tous pour Valentine !!!
+
+La course d''orientation commença ! Au début, tout allait bien, on trouvait les balises et on n''avait toujours pas croisé mes soi-disant meilleures amies (alias les deux pestouilles) ! Quand tout à coup, Amy marchait devant et j''aperçus caché dans un buisson Clémence et Sarah !! Amy et Perrine ne les avait pas vu !!
+
+J''allais les prévenir quand tout à coup Clémence mît son pied et fit un croche-patte à Amy !! Celle-ci chuta sur une racine en plein dans la tête !!
+
+Perrine et moi disons en criant :
+
+- Amy !!!!!!!!!!!!!
+
+Clémence prit une voix désolée et dit :
+
+- Oh non !! Je suis désolé je t''avais pas vu !! Tout va bien ? Oh ma pauvre je suis désolée !!
+
+Perrine et moi lui coupons la parole en disant :
+
+- Tu as fait exprès Clémence !! Avoue-le !!! On ne te croit pas !!
+
+Une monitrice passa par là et nous dit d''une voix apeuré :
+
+- Que s''est-il passé ?? Est-ce que tout va bien ??
+
+Je pris la parole et dit :
+
+- Non !! Clémence vient de faire un croche-patte à Amy !!
+
+La monitrice prit une voix grave :
+
+- C''est vrai ça Clémence ???
+
+Clémence lui répondit :
+
+- Non madame !! Je ne lui ai rien fais du tout !! Elle est juste passée et à trébucher sur une racine !!
+
+Perrine lui dit :
+
+- N''importe quoi !! Sale menteuse !!
+
+La monitrice reprit d''une voix grave :
+
+- Jeunes filles, Clémence n''a rien fait !! Arrêtez de l''accuser !! Vous devriez avoir honte d''inventer de tels mensonges !! Sur ce, au revoir et arrêter vos histoires !!
+
+Perrine, Amy et moi nous regardons d''un regard ébahi !! Pourquoi elle ne nous croit pas ?! Amy a un énorme bleu sur le front et elle ne voit rien !!
+
+Tout à coup, Bryan arrive et Clémence lui dit :
+
+- Ah chéri, tu es là, tu tombes bien !! dit-elle en lui faisant un bisou sur la bouche !! Oui un BISOU', true, true),
+  ('26871fef-40f9-806c-aa61-e07e5e808c98', '26871fef-40f9-806c-aa61-e07e5e808c98', '7dc6ccb2-a7ed-43c5-b6bc-36391ce04029', 11, '6507542d-0f94-44cc-b838-7fec446b76e7', 'Je manque d''étrangler Clémence. Voilà comment elle s''occupe pendant une course d''orientation. Elle embrasse mon amoureux !!! J''ai une brusque envie de trouver un poignard et de transpercer Clémence de sa lame. Ou de la noyer dans la baignoire avant le dîner. Ou de l''étouffer cette nuit, dans son sommeil.
+
+Et là, sous mes yeux, Bryan lui rend son baiser puis passe un bras autour de sa taille et l''entraîne vers Sarah, qui ne semble pas gênée les voir se câliner. Des larmes s''échappent de mes yeux quand Perrine hurle :
+
+- AMY !!!
+
+Je me retourne vers mes amies. Amy a perdu connaissance, et pour cause, ce n''est pas un bleu sur son front mais une ouverture longue de dix centimètres qui laisse couler un flot de sang écarlate. Elle ne bouge plus et Perrine lui soutient la tête. Je lui dit, affolée :
+
+- Va chercher Lara !!!
+
+Perrine acquiesce et me passe la tête d''Amy. Là, je pleure vraiment. Si Clémence savait ce qu''elle a fait. La prochaine fois que je la vois, je la tue. Le temps passe et Amy perd de plus en plus de sang. Je tente de l''arrêter avec la manche de mon tee-shirt mais c''est trop court. Finalement, je retire mon sweat et m''en sert pour essuyer la blessure. Enfin, j''entends des voix et des pas dans l''herbe. Lara apparaît, suivi de près par Johnny et Greg, deux autres monos. Perrine les guide jusqu''à nous. Les moniteurs se regroupent autour de nous. Lara me prend les mains et me rassure :
+
+- Ne t''en fait pas, elle est en sécurité. Tu as bien réagis en essuyant la plaie. Je vais vous raccompagner pendant que Johnny et Greg s''occupent d''Amy.
+
+Nous entamons le retour. Lara nous félicite d''avoir penser à lui tenir la tête. Nous arrivons au centre au moment où les pompiers arrivent en courant. Bientôt les autres enfants de la colo sortent de la forêt et se demandent se qu''il se passe et pourquoi Perrine et moi avons les larmes aux yeux et les mains pleines de sang. Nous pénétrons dans le centre et Lara nous conduit dans le bureau de la directrice de colonie.
+
+- Que se passe-t-il, Lara, demande-t-elle.
+
+Lara lui explique alors tout ce qui s''est passé la chute d''Amy, l''arrivée des pompiers. La directrice lui demande de rassembler les autres enfants. Puis la mono quitte la pièce et la directrice nous pose alors la question que j''attendais :
+
+- Comment ce fait-il que Amy ait heurté une racine ? Qui l''a fait tombée ?
+
+Je me retourne vers Perrine. Elle a la tête redressée et me fixe. J''hoche la tête et mon amie répond :
+
+- Clémence', true, true),
+  ('28371fef-40f9-807e-863f-f0b346e51e41', '28371fef-40f9-807e-863f-f0b346e51e41', '7dc6ccb2-a7ed-43c5-b6bc-36391ce04029', 12, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'La directrice nous dit d''un air autoritaire :
+
+- J''appelle tout de suite Eva (une autre mono vraiment sympa) !!
+
+Après de longues sonneries Eva répondit enfin :
+
+- Allo ?
+
+La directrice continua :
+
+- Allo, Eva ?? Oui, c''est moi, madame la directrice !! Oui, allez me chercher Clémence de suite !! Merci, au revoir !!
+
+Après de longues minutes (qui me semblèrent des heures) Eva arriva enfin avec dans le bras droit le poignet de Clémence !!
+
+La directrice prit la parole :
+
+- Est-ce que c''est toi qui a fait ça ?? dit-elle en montrant les manches de mon sweat !!
+
+Clémence prit le ton le plus innocent possible est répondit :
+
+- Bien sûr que non !! Je n''oserais jamais faire une telle chose !! C''est horrible ce qui est arrivé à Amy !! J''espère que la personne qui lui a infligé ça sera vite punie et retrouvée !!
+
+Perrine lui répondit d''un ton sec :
+
+- Pas besoin de la chercher vu qu''elle est là !! dit-elle en la pointant du doigt.
+
+La directrice lui dit :
+
+- Clémence, nous avons des caméras de surveillance dans tout le domaine !!! Si vous mentez vous serez à coup sûr renvoyer !! Par contre, si c''est le contraire, Perrine et Valentine vous serez sévèrement punies voir même expulsées !!
+
+Il y eut un silence de mort, tout le monde attendait qu''une seule chose : la réponse de la directrice !
+
+La directrice eut un hoquet de stupeur en voyant la réponse !! Mais au final elle dit d’un ton impassible :
+
+- Clémence, veuillez faire vos bagages !!
+
+Clémence en sortant dit à voix basse à Valentine :
+
+- On se reverra !! Rassure-toi je ne vais pas être virée !!
+
+Cette phrase me glaçant le sang mais je me dis qu''il y avait peu de chance !! Puis tout d''un coup, Clémence se mit à pleurer en s''excusant et disant qu''elle ne voulait vraiment pas et qu''elle n''avait pas fait exprès !!
+
+La directrice lui dit gentiment :
+
+- Après tout, tout le monde a le droit à une deuxième chance !!
+
+Avec Perrine, nous sommes stupéfaites !! Comment la directrice peut elle laisser Clémence dans la Colo ?? C''est impossible !!
+
+Malgré les événements, la directrice nous dit de sortir !! À la sortie, Clémence nous fit un sourire mauvais et dit :
+
+- À bientôt !!', true, true),
+  ('bf91e621-58ee-40b2-bb45-2c94114f40c1', 'bf91e621-58ee-40b2-bb45-2c94114f40c1', '2d1aa9f9-25a2-450b-adf8-8998390b21c4', 1, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', '- Les amis, je suis très contente de vous revoir, mais il faut que je vous parle d''un truc grave !!!
+
+Les trois amis se taisent.
+
+- Une prophétie très importante va avoir lieu, j''ai bien peur que cela puisse détruire toutes les maisons de tous les animaux marins !! Selon la prophétie nous sommes les seuls à pouvoir sauver les maisons des autres animaux marins !!!
+
+Les amis étaient bouche bée, Alicia prit la parole :
+
+- T''as une idée TchoTcho parce que là j''veux pas dramatiser mais c''est du sérieux !!! Heureusement Alicia est dans la place, Ouais !!
+
+Laya prit la parole :
+
+- Et si on allait voir Gerardo ? Il doit savoir lui !
+
+Tchoky, Ella, Laya et Alicia partirent sauf que quand ils arrivèrent Gerardo était malheureusement décédé ! Mais que s''est-il passé ici ??? Demanda Ella on dirait que...', true, true),
+  ('11671fef-40f9-8056-b206-eca55a0fdb0f', '11671fef-40f9-8056-b206-eca55a0fdb0f', '2d1aa9f9-25a2-450b-adf8-8998390b21c4', 2, '6507542d-0f94-44cc-b838-7fec446b76e7', 'Soudain, Laya pousse un cri aigue et s''effondre. Quelques instants plus tard, Alicia tombe également, puis c''est au tour de Tchoky. Ella, affolée, se place devant ses amis pour les protéger de ce danger invisible. Une série de flèches s''abat alors sur les quatre amis, ce qui réveille Laya. La tortue se redresse brusquement et sans avoir besoin d''explication, lance à Ella :
+
+- Réveille les deux autres, je m''en occupe !
+
+Un espadon surgit alors, et engage le combat avec Laya. Ce sont deux adversaires féroces. L''espadon est armé et puissant, mais Laya est plus rapide et agile que lui. De plus, sa carapace la protège des coups.
+
+- Tiens espèce de canaille au long nez !!! S''esclame la tortue, en abattant sa nageoire sur la tête du pauvre espadon, complétement désarçonné. Au bout d''un certain moment, elle parvient à l''assommer.
+
+- Voilà ce que c''est de se frotter à la terrible Laya, tortue des mers la plus féroce de tous les océans, dit elle en lui tirant la lange.
+
+Mais le danger est encore plus grand que Laya ne le pensait.
+
+Des escadrons d''espadons arrivaient par millier, dans le cercle de corail. Heureusement, Tchoky et Alicia se sont réveillés. Alors que Laya s''attaque à un autre espadon pas très discret, Ella s''esclame :
+
+- Attends Laya ! On est pas obligé de se battre !
+
+- C''est vrai, approuve Tchoky ! On peut parlementer.
+
+- Non ! Je suis pour se battre ! Hurle Alicia en rejoignant Laya contre l''espadon.
+
+Les deux amies ont vite fini par remporter la partie. L''espadon rejoint son coéquipier dans un sommeil profond.
+
+- Noooooonnnnnn !!!!!!!!!!!!!!!
+
+Le cri d''Ella stoppe net les filles dans leur élan. Au bout d''un moment, Ella et Tchoky parviennent à raisonner Laya et Alicia. Ils proposent alors à celui qui semble être le général de tout ces espadons :
+
+- Parlons au lieu de nous battre...
+
+- Jamais ! coupe l''espadon.
+
+- Ce n''est pas une si mauvaise idée que ça, chef... dit d''une toute petite voix le seul des deux espadons assommés qui a réouvert l''œil.
+
+- Silence dans les rangs !!! Moi, le Général Typhon, le meilleur général de la reine Frégate, reine de l''Océan, parler avec trois minables dauphins, ainsi qu''une minuscule tortue ! Autant tout de suite se rabaisser au niveau des serviteurs de la cour.
+
+- Général de qui ??? Reine de quoi ??? demande Tchoky.
+
+- Je suis le Général Typhon, le haut général de la reine Frégate, qui est la reine de l''Océan. Soupire l''espadon en levant les yeux au ciel, agacé.
+
+- Mais le seul gouverneur des océans, c''est un roi. La preuve, j''ai rencontré moi-même sa marraine, lance Alicia.
+
+- Vous vous trompez jeunes gens, s''exclame le Général Typhon. Ce "roi des océans" comme vous l''appelez n''est autre qu''un usurpateur qui souhaite prendre le pouvoir sur le monde marin. Sa majesté Frégate est la vraie reine. Elle possède un magnifique palais au milieu de l''ancienne grande Barrière de Corail.
+
+- Attendez, attendez ! coupe Tchoky, qui ne comprend rien à ces histoires. Comment ça l''ancienne grande Barrière de Corail ? Et pourquoi l''usurpateur ? Le roi des océans n''est pas du tout un "usurpÉteur".
+
+- Voulez-vous que je vous raconte l''histoire ? propose Typhon qui semble s''être lié d''amitié pour ces quatre intrépides animaux.
+
+- Ouiiiii !!!!! hurle Laya, à condition que vous nous emmeniez au palais de Frégate.
+
+- C''est d''accord, accepte le général, avant de faire un signe à ses soldats. Ouvrez grand vos oreilles, je commence :
+
+" Il y a très longtemps, lorsque les hommes n''existaient même pas, la reine Frégate monta sur le trône, succédant ainsi à sa mère la reine Anémone. Tout le monde adorait Frégate, c''était une souveraine juste et gentille. Mais ce qu''elle ignorait, c''était que là, caché dans l''ombre, le terrible Brankio, souhaitait monter sur le trône. Avec l''aide de Christalina, sa marraine, ils préparaient tout un plan de vengeance. Mais Christalina était magicienne. Elle parvint à faire monter son neveu sur le trône après qu''ils eurent rassembler des soldats et des fidèles auprès de Brankio. Mais les fidèles de ce satané cachalot étaient très nombreux et aujourd''hui, seuls les plus malins sont restés loyaux à Frégate. Nous sommes malheureusement très peu, comparé aux troupes de Brankio. Celui-ci a fait courir la rumeur à tous les océans que c''est lui le roi. Mais Frégate ne se laisse pas faire. Elle nous a donné ordre d''arrêter tout ceux qui passaient dans le coin, particulièrement ici, car Gérardo était un fidèle de Brankio. On a réussi à l''achever, il y a très peu de temps. Depuis on surveille, sous ordre de la Reine Frégate. "
+
+- Et voilà, terminé. Vous avez de la chance, j''ai terminé mon récit juste à temps pour que nous arrivions au palais de Frégate.
+
+- Et bien Typhon, puis-je savoir pourquoi tu m''amènes des étrangers ?
+
+Tous se retournent brutalement. Là, sous leurs yeux se trouve une superbe dragonne bleu turquoise, qui se pose devant eux. Et sur sa tête, une couronne d''or sertie de saphir.', true, true),
+  ('14471fef-40f9-8047-a8cc-d95f5f5f7a91', '14471fef-40f9-8047-a8cc-d95f5f5f7a91', '2d1aa9f9-25a2-450b-adf8-8998390b21c4', 3, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Typhon répondit :
+
+- Ils souhaitent voir la Reine Frégate !
+
+Bella lui répondit (oui c''est le nom de la dragonne bleue) :
+
+- Qu''il en soit ainsi ! Suivez moi !
+
+Les 4 amis suivirent Bella et atterrissent devant la reine. Ella se mit à parlementer la première et dit :
+
+- Votre Majesté, nous sommes venus pour vous aider à vaincre Brankio et Christalina ! Nous sommes des dauphins d''une prophétie très ancienne !
+
+Frégate leur dit :
+
+- Je vois que vous êtes de cœur pur ! Vous m''aiderez beaucoup !', true, true),
+  ('16171fef-40f9-8010-8682-d98a57cbf82b', '16171fef-40f9-8010-8682-d98a57cbf82b', '2d1aa9f9-25a2-450b-adf8-8998390b21c4', 4, '6507542d-0f94-44cc-b838-7fec446b76e7', 'La reine se redresse et rajuste sa couronne d''or sertie de saphirs et d''émeraudes.
+
+- Je vous présente ma dernière fille Bella, puisqu’apparemment elle ne vous l''a pas dit d''elle même. Et voici Saphir qui héritera normalement du trône, si tout se passe bien.
+
+Une superbe dragonne bleu turquoise entra dans la salle. Elle portait une couronne d''or avec des saphirs, des émeraudes, des opales et des topazes bleu ciel.
+
+- Quand vous dites "si tout se passe bien", qu''entendez vous par là ? demande Tchoky, intrigué.
+
+- Je veux dire par là que si jamais il arrive quelque chose à Saphir, qui est l''aînée de mes filles, une autre devra prendre ma place. Ma deuxième fille Perle, par exemple, ou alors Lagune.
+
+- Pourquoi que des filles ? questionna Ella
+
+- C''est la première règle à suivre quand on est reine : le pouvoir ne peut se transmettre que de mère en fille. répondit Frégate.
+
+- Mais alors, Brankio ne peut pas devenir roi, c''est logique puisqu''il est mâle. dit Alicia, toujours pratique.
+
+La reine détourne le regard et murmure :
+
+- Il a détruit toute trace de pouvoir royal, pour que personne ne s''en souvienne, dont un précieux pendentif.
+
+- Quel pendentif ? demande Laya
+
+- Le Dragon d''Iolite... ', true, true),
+  ('17971fef-40f9-8017-a888-f20406ded73a', '17971fef-40f9-8017-a888-f20406ded73a', '2d1aa9f9-25a2-450b-adf8-8998390b21c4', 5, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Ella prenant son courage à deux nageoires dit :
+
+- Et comment pourrait on retrouver le Dragon d''Iolite ?
+
+Frégate lui répondit :
+
+- Dans la chambre forte de Brankio, gardée par ses fidèles !!! Mais ce lieu est impossible d''accès malheureusement ! Tout le royaume a déjà essayé et après nous ne l’avons plus jamais revus !!!
+Alicia répondit d''une voix forte :
+
+- Oui mais nous, nous avons un avantage par rapport à Brankio !!! Nous sommes plus rapides car nous avons des nageoires !!!!
+Bella lui dit :
+
+- Oui mais il est hors de question que nous vous laissions partir !!!
+
+Tchoky répondit :
+
+- Et pourtant il le faut bien !!!
+
+Frégate leur dit :
+
+- D''accord si vous nous promettez de revenir vite !!!
+
+Ils disent tous en chœur :
+
+- Promis !!!
+
+Une fois partie, Frégate dit :
+
+- 3 petits dauphins et une tortue, que peuvent ils bien faire ?', true, true),
+  ('18371fef-40f9-80ac-9ec1-faf74f72a1c4', '18371fef-40f9-80ac-9ec1-faf74f72a1c4', '2d1aa9f9-25a2-450b-adf8-8998390b21c4', 6, '6507542d-0f94-44cc-b838-7fec446b76e7', '- Tu n''es qu''une peureuse, Laya !!! Tu as trop peur d''aller chercher le Dragon d''Iolite !!!
+
+Cette dispute éclate depuis maintenant une bonne dizaine de minutes entre Alicia et Laya.
+
+- C''est de la prudence, espèce de méduse à aileron !!! Contrairement à toi, je me soucie de notre sécurité à tous !!!
+
+- Même pas vrai, moi aussi, je...
+
+- Mais vous allez LA BOUCLER, OUI !!!???
+
+Tchoky, Alicia et Laya se retournent brusquement vers Ella. C''est bien elle qui vient de crier à l''adresse de Laya et Alicia.
+
+- Mais enfin, Ell...
+
+- Ca suffit !!! J''EN AI ASSEZ DE VOS DISPUTES !!! JE N''AI RIEN DIS DEPUIS LE DEBUT, MAIS LÀ, C''EST BON, JE M''EN VAIS !!!!!!!!!!
+
+Sur ces paroles violentes, elle disparait dans les algues.
+
+- Puisque c''est comme ça, moi aussi, je pars ! lance Alicia.
+
+- Et moi, pareil !! décide Laya.
+
+Quelques secondes plus tard, les deux sont parties chacune de leur côté. Tchoky se retrouve tout seul, désemparé et furieux. C''est alors qu''une anguille sort de l''ombre.
+
+- Bonjour mon enfant, murmure-t-elle d''une voix doucereuse, veloutée. Que fais tu ici, à attendre que le temps passe ?
+
+Le pauvre dauphin s''entend répliquer :
+
+- Et vous ?
+
+- Moi, répond l''autre, je suis une voyante. Et je peux te dire que tu es dans le mauvais camps.
+
+- QUOI !?
+
+- Brankio est le vrai roi. Frégate est l''imposteur.
+
+Tchoky est dépassé. Brankio ou Frégate ? Comment décider ?
+
+- Viens Tchoky. Rejoins les troupes du vrai roi Brankio...
+
+A suivre :
+
+Quelle catastrophe ! Nos héros se sont séparés. Laya est rentrée à la forêt marine, Alicia recherche un abris et Ella est partie on ne sait pas où. Ils sont affaiblis et furieux les uns contre les autres. Pour couronner le tout, une anguille voyante tente de rallier Tchoky à la cause de Brankio. Qui est le menteur ? Frégate ou Brankio ? Le suspens règne et lentement, le piège se referme sur eux...', true, true),
+  ('13771fef-40f9-8050-9fd0-f95ef421b51f', '13771fef-40f9-8050-9fd0-f95ef421b51f', '48fcadf8-1e89-4a6a-8444-f37c77482b3c', 1, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Bonjour, je suis un chat ! Oui un chat et alors ? Je sais ce que vous allez dire les chiens c''est beaucoup mieux ! Et bien non, je suis un chat pas comme les autres ! Enfin, il y a une semaine encore je croyais être un chat comme les autres ! Mais il y a eu un truc de DINGUE qui s''est passé ! Laissez moi vous raconter !
+
+Oh j''ai oublié je m''appelle Grafiti ! Je suis très discret ! On m''a abandonné depuis maintenant 3 ans 4 mois 2 semaines 6 jours ! Oui j''ai compté ! Mais bon on s''éparpille ! Revenons au truc de DINGUE ! Alors lundi je cherchais encore de la nourriture et comme toujours sans résultat ! Alors je me suis dit que j''allais dormir et tout à coup ...', true, true),
+  ('13971fef-40f9-8061-aa2f-cdbc30e9ed2a', '13971fef-40f9-8061-aa2f-cdbc30e9ed2a', '48fcadf8-1e89-4a6a-8444-f37c77482b3c', 2, '649a325c-44f1-4ece-9391-fd5fbbee6010', 'Un bruit affreux me réveille de ma précieuse sieste. Je dormais si bien. 
+
+Dans mon rêve, j''étais dans un parc d''attraction. Finalement, je me suis rendormi. Trop fatigué pour réfléchir à ce qu''il se passait. Quand mon royal dodo a fini, j''ai ouvert un œil, puis un deuxième. Cet endroit ne me disait rien du tout. Soudain, j''ai pris peur. J''étais certainement attaqué. Alors je me suis mis en PDDS : Position De Défense Stylée. Je suis sûr que je fais peur.
+
+ Imaginez un peu : dos rond, poils hérissés et griffes sorties. Trop la classe. Bon, finalement, je ne suis pas en danger. Enfin je crois... A ce moment, une porte s''ouvrit. Je décide d''aller dans la nouvelle salle. Au fond, il y a trois grandes cages. Je vais vers la première. Chien. Pas de doute. Aaaa non, aucun doute, il y avait un chien dedans. Beurk. Je passe à la suivante. Elle est étrange. Il y a une petite roue dedans, quelle idée ! Je ne sais pas trop si ça sent la souris, la taupe ou le hamster. Dans tous les cas, j''adore ça au dessert. Oh non, j''ai faim. Pour finir, je vais à la troisième. Cette cage est complètement incompréhensible. Rien par terre, tout en l''air ! Puis, c''est quoi cette drôle de balançoire ? Je m''assoie pour regarder mes découvertes qui sont devant moi. J''ai faim. Et j''ai envie de dormir. Ah... Une petite sieste serait la bienvenue. Je me mets en boule, quand soudain une alarme hurle de partout.', true, true),
+  ('13d71fef-40f9-808f-9278-dbb7ddb9160d', '13d71fef-40f9-808f-9278-dbb7ddb9160d', '48fcadf8-1e89-4a6a-8444-f37c77482b3c', 3, 'c1fc2b62-85bc-4947-ad5f-efffce5326e3', 'Bonjour Eddie14 et LaCagouille. Merci d''avoir rejoint ce projet pour écrire les aventures d''un chat dans l''espace. Je vais vous poser quelques questions qui vous donneront peut-être des idées. Vous n''êtes pas obligés de répondre à toutes. Ce sont juste des idées comme ça.
+
+Qui est dans la fusée, à part Graffiti ? Y a t-il des hommes ? D''autres animaux ? Juste un ordinateur qui contrôle tout ?
+
+Où va la fusée ? Vers la Lune ? Vers une planète ? Vers une étoile lointaine ? Tourne t-elle autour de la Terre avant de revenir sur le "plancher des vaches" ? Suivant votre choix je vous donnerai quelques conseils.
+
+Comment s''appelle la fusée ? On pourrait lui trouver un nom. Soit un nom sérieux qui ressemble à une fusée qui existe vraiment, soit un nom rigolo histoire de s''amuser un peu.
+
+J''ai vu qu''il y avait plusieurs pièces dans la fusée. Est-ce un peu comme dans l''ISS, la station où a vécu Thomas Pesquet ?
+
+Vous pourriez aussi (si vous en avez envie) parler de la vie à bord d''une fusée. Graffiti se débrouille bien en apesanteur ? Comment va t-il manger ? Savez vous qu''on voit énormément d''étoiles quand on est dans une fusée ? Eh oui le ciel est parfaitement noir !
+
+Je suis pressé de découvrir les aventures de notre astro-chat !
+
+Arnaud', true, true),
+  ('16871fef-40f9-809e-bcf0-e926071512ee', '16871fef-40f9-809e-bcf0-e926071512ee', '48fcadf8-1e89-4a6a-8444-f37c77482b3c', 4, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Mes poils se hérissèrent tout d''un coup ! J''entendis une voix informatique :
+
+- Départ de la fusée Superminou25 dans 10,9,8,7,6,5,4,3,2,1....
+
+Quoi ?! Comment ça, départ de la fusée ? Je ne suis pas un astro-chat !!! Et puis peut-être que la pâté pour chat n''a pas le même goût dans l''espace ?
+
+Un milliard de questions étaient en train de se poser dans ma petite caboche de chaton ! Et puis tout d''un coup je sentis que je commençais à décoller ! Est-ce que c''était la dernière fois de ma courte vie de chaton que je voyais la Terre ?', true, true),
+  ('19f71fef-40f9-80ef-9adc-c04a0b0d3d58', '19f71fef-40f9-80ef-9adc-c04a0b0d3d58', '48fcadf8-1e89-4a6a-8444-f37c77482b3c', 5, 'c1fc2b62-85bc-4947-ad5f-efffce5326e3', 'Bon bah me voilà bien, plaqué au sol comme une vulgaire crêpe. J''ai l''impression de peser cent kilos. Ça vibre de partout ! J''entends la voix informatique qui débite des phrases incompréhensibles.
+
+Elle parle de lacets, de roulis, de trajectoire et de mise en orbite. Je n''ai jamais fait ça de ma vie, moi !
+
+Attendez un peu que je puisse rebouger normalement et je vais vous montrer ce qu''un chat énervé peut faire. J''ai déjà repéré ce beau meuble où je vais bien faire mes griffes. Comptez sur moi !
+
+Un coup d''œil à le fenêtre. Quoi ? On est dans les nuages ? Mais on n''est partis que depuis quelques secondes ! Et maintenant le ciel qui devient noir. Je n''y comprends plus rien. Il fait nuit ? Je me demande si les oiseaux peuvent voler aussi haut.
+
+La voix informatique annonce "Extinction des moteurs. Passage en apesanteur."
+
+Les vibrations cessent.
+
+J''arrête de peser cent kilos.
+
+En fait je ne pèse plus rien.
+
+Et je me mets à flotter dans la fusée !', true, true),
+  ('1ca71fef-40f9-8052-9b99-fb4913a2bc54', '1ca71fef-40f9-8052-9b99-fb4913a2bc54', '48fcadf8-1e89-4a6a-8444-f37c77482b3c', 6, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Miaooooooooooooou !!!
+
+Que se passe t''il ??? Pourquoi je flotte dans l''air ??? C''est normal que je sente remonter mon dernier repas ???
+
+Allez Graffiti reprends toi tu es juste en train de flotter dans l''air,,, au beau milieu de nulle part,,, seul et sans ta famille... ! Non ça ne va pas du tout je ne suis pas prêt à entamer ma 4ème vie (et oui j''en suis à ma troisième et alors) ! Et devinez quoi en plus de tout ça : J''AI FAIM !!!!!!!', true, true),
+  ('1d971fef-40f9-8008-9e32-e83c5ac5df7b', '1d971fef-40f9-8008-9e32-e83c5ac5df7b', '48fcadf8-1e89-4a6a-8444-f37c77482b3c', 7, 'c1fc2b62-85bc-4947-ad5f-efffce5326e3', 'J''entends dans les haut-parleurs des humains qui se parlent entre eux. Ils ont dû laisser leurs micros allumés.
+
+"Les capteurs nous indiquent du mouvement dans la fusée !"
+
+- Hein ? On a oublié quelque chose ? Pourtant je l''ai inspectée la veille du décollage.
+
+- Euh je crois que j''ai laissé la porte ouverte.
+
+- Oh-la-la Gunter va être furieux !
+
+- Attends regarde on a une caméra de surveillance... Mais c''est un chat !
+
+- Houston, on a ENCORE un problème.
+
+En tout cas je commence de comprendre ce qui se passe. C''est même plutôt amusant de flotter en l''air sans retomber. Je joue à faire l''oiseau. J''agite mes pattes comme des ailes et je vole majestueusement dans la cabine. Je dois avoir l''air d''un chat fou mais je m''amuse bien quand-même.
+
+Par contre, j''entends une voix qui annonce "Mise à jour de la trajectoire. Allumage des moteurs atomiques. Arrivée sur Mars dans 10 jours."
+
+Mars. C''est loin ça ?', true, true),
+  ('1e271fef-40f9-8065-ae43-fb1e4c68f843', '1e271fef-40f9-8065-ae43-fb1e4c68f843', '48fcadf8-1e89-4a6a-8444-f37c77482b3c', 8, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', '- Qu''EST-CE QUI SE PASSE ICI ???!!! Cria Gunter visiblement furieux.
+
+Un autre astronaute du nom de BOB prit la parole :
+
+- Mon...Monsieur...il...yyyy...a ...un ... pro...problème !!! Un chat est entré dans la fusée !
+
+- UN CHAT ?????????? MAIS QUELS BANDES D''IDIOTS,VOUS ÊTES TOUS DES NOUILLES ICI !!!!!!!
+
+Un autre astronaute du nom de Stuart dit :
+
+- Patron, on fait quoi ?
+
+Gunter un peu radouci dit :
+
+- Et bien nous, nous ALLONS GARDER CE FICHU CHAT VOILÀ CE QUE NOUS ALLONS FAIRE !!! ON NE PEUT PAS ANNULER LE DÉPART DE LA FUSÉE C''EST AUTOMATIQUE !!!!
+
+Moi j''étais très en colère contre ce “Gunter”, il me prend peut-être pour un “FICHU CHAT” mais je suis un Main Coon de race pure et je suis très bien éduqué !!! Alors du calme hein !!! Et il y a deux choses qui commencent à m''énerver :
+
+
+
+Et 2. Je suis toujours coincé ici...', true, true),
+  ('1ff71fef-40f9-80d2-8825-d5fd0fe63a73', '1ff71fef-40f9-80d2-8825-d5fd0fe63a73', '48fcadf8-1e89-4a6a-8444-f37c77482b3c', 9, 'c1fc2b62-85bc-4947-ad5f-efffce5326e3', 'Les ingénieurs au sol s''interrogeaient. Il fallait donner un nom à cet invité surprise. Les idées fusaient.
+
+"Et si on l''appelait Pelote ?"
+
+- Non Laïka !
+
+Ca ne plaisait pas trop à Graffiti. Un nom de chien ! Et puis quoi encore ?
+
+- Regardez - le voler ! On devrait l''appeler Batman.
+
+- Garfield !
+
+Graffiti se hérissa. "Je ne suis pas gros. Je suis puissant. C''est pas pareil."
+
+Gunter coupa court.
+
+"Regardez mieux. Il porte un médaillon. Zoomez dessus. Là, très bien, parfait. Il s''appelle Graffiti."
+
+Et bien va pour Graffiti alors.
+
+Stuart reprit la parole.
+
+"Ca va être l''occasion de tester notre système de cuisine automatisée. On devait l''utiliser avec des éventuels astronautes. Pourquoi pas avec un chat ?"
+
+Bob continua.
+
+- Très bien. Je lance le programme. On avait prévu des lasagnes. Hop c''est parti.
+
+Graffiti tendit une oreille.
+
+"Des lasagnes ? Mon plat préféré !
+
+Hein ?
+
+Le premier qui m''appelle encore Garfield..."
+
+[Pour aller un peu plus loin avec Eddie14 : J''ai appelé un des personnages Gunter. C''est en hommage à Gunter Wendt qui était l''ingénieur en chef des missions Apollo. Il était en quelque sorte "le papa" des astronautes. Ils avaient une grande confiance en lui et c''est Gunter Wendt qui faisait les dernières vérifications avant le décollage. Personne d''autre n''avait le droit de fermer la fusée et d''autoriser le décollage.
+
+Les astronautes et Gunter avaient une petite tradition : ils s''échangeait avant chaque vol des cadeaux un peu amusants, ou se faisaient des farces. Mais ils étaient très amis.]', true, true),
+  ('21271fef-40f9-8043-a61b-fb315a3574b2', '21271fef-40f9-8043-a61b-fb315a3574b2', '48fcadf8-1e89-4a6a-8444-f37c77482b3c', 10, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', '- Oh des lasagnes !!! dis-je en ayant l''eau à la bouche.
+
+Gunter s''avança et me tendit le plat ! Sans même pas attendre l''autorisation je me jeta dessus et il ne resta plus qu''une assiette blanche !
+
+- Ouah ! Dit Gunter.', true, true),
+  ('21371fef-40f9-8063-b19c-c7b2ce8bc41a', '21371fef-40f9-8063-b19c-c7b2ce8bc41a', '48fcadf8-1e89-4a6a-8444-f37c77482b3c', 11, 'c1fc2b62-85bc-4947-ad5f-efffce5326e3', '6 mois !
+
+6 mois que je tourne en rond dans cette drôle de cage. Il fait nuit tout le temps dehors. Le rêve pour un chat mais pas moyen d''aller faire un tour. J''ai beau gratter et miauler personne ne vient m''ouvrir.
+
+En même temps il n''y a personne dans cette espèce de boîte volante.
+
+Pour la nourriture je pense avoir bien éduqué les humains qui sont à mon service. J''ai repéré un bouton assez sympa. Dès que j''appuie dessus, un plat sort d''une petite trappe. Bon parfois c''est un peu bizarre. Des carottes, des babas au rhum, du camembert... Franchement vous mangez ça, vous autres ? Berk.
+
+Dans des haut-parleurs j''entends les humains discuter. Par contre je les trouve de plus en plus long à la détente. Quand je fais un truc amusant, je les entends rigoler 10 minutes plus tard. J''ai encore testé tout à l''heure en me mettant en position "chasse" devant la trappe à nourriture.
+
+Je les ai entendus éclater de rire 10 minutes plus tard.
+
+"Gunter, viens voir. Regarde Graffiti. Il fait la chasse aux lasagnes ha-ha-ha !"
+
+Ils me croient stupide à ce point ?
+
+[Pour aller un peu plus loin avec Eddie14. Les humains rient 10 minutes en retard car la lumière et les ondes mettent de plus en plus de temps à aller de la fusée à la Terre. Une onde se déplace à 300 000 kilomètres par secondes. Donc si Mars est à 100 millions de kilomètres de la Terre, il faut 5 minutes au message pour arriver...et autant pour le retour.]', true, true),
+  ('21671fef-40f9-80d4-ae15-cb1721b68c59', '21671fef-40f9-80d4-ae15-cb1721b68c59', '48fcadf8-1e89-4a6a-8444-f37c77482b3c', 12, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Bon, cela fait maintenant dix minutes que j''attends mon plat de Chatfiolis (une friandise fourrée au saumon que tout les chats raffolent)
+
+Évidemment elles n''ont pas le même goût que les vraies car c''est Gunter qui les cuisine mais elles sont quand même excellentes ! Mais pourquoi personne n''arrive !? Je commence à m''énerver sur le bouton quand soudain j''entends au haut-parleur :
+
+- Message à l''intention de Graffiti : Nous sommes désolé Graffiti je n''ai pas eu le temps de préparer tes Chatsfiolis ce matin donc tu devras te contenter de manger des pâtes au beurre ! Merci de ta compréhension
+
+Non mais je rêve !? Comment osent-ils me donner des vulgaires pâtes au beurre ?! C''est I-N-A-D-M-I-S-S-I-B-L-E !!', true, true),
+  ('21871fef-40f9-80e3-94ee-db5ebf9ba81b', '21871fef-40f9-80e3-94ee-db5ebf9ba81b', '48fcadf8-1e89-4a6a-8444-f37c77482b3c', 13, 'c1fc2b62-85bc-4947-ad5f-efffce5326e3', 'La machine à chaffiolis ayant bien voulu se remettre à fonctionner, j''accepte de coopérer à nouveau avec la voix. De toutes façons c''était ça ou je faisais mes griffes sur leurs beaux fauteuils. Non mais. C''est pas des humains qui vont me commander, hein !
+
+Nous sommes maintenant tout près d''une gigantesque boule rouge. Presque aussi grosse que la Terre. On dirait un immense désert avec du sable, des montagnes et des creux qui semblent avoir contenu des lacs. Par contre pas une maison, pas un arbre et surtout pas un chat comme disent les humains.
+
+La voix annonce "Début de la séquence d''atterrissage".
+
+Alors que je n''avais rien demandé ma fusée se met à descendre vers la grosse boule rouge. Et moi on me demande pas mon avis ?
+
+Les murs commencent de vibrer, un peu comme au décollage mais en moins fort. Je ne m''inquiète pas. Je suis habitué maintenant.
+
+Nous nous approchons du sol, de plus en plus doucement.
+
+Un léger "poc" et la fusée s''immobilise.
+
+"Contact. Atterrissage confirmé"
+
+Je suis où, là ?
+
+[ Pour aller un peu plus loin avec Eddie14, Mars est une planète complètement désertique. Elle est toute rouge car son sable contient du fer qui a fini par "rouiller". Les scientifiques sont maintenant certains qu''il y a eu de l''eau sur Mars, il y a très longtemps. On voit des traces de cette eau avec des anciens lacs et des anciennes rivières.
+
+Il y a aussi une gigantesque montagne qui fait trois fois la taille du mont Everest, la plus haute montagne sur Terre ! ]', true, true),
+  ('23d71fef-40f9-800d-9132-c3ec70657fac', '23d71fef-40f9-800d-9132-c3ec70657fac', '48fcadf8-1e89-4a6a-8444-f37c77482b3c', 14, 'e48fb777-7efa-42f7-aa37-1b2cb5c69480', 'Bon allez, c''est pas pour dire mais il faut que j''aille me dégourdir les coussinets !! Je commence à mettre une patte en dehors de la fusée quand soudain, mon dieu !! C''est chaud !! C''est vraiment très CHAUD !!! Mes coussinets me brûlent !!! Je fais des bons partout (évidemment tout se passe au ralenti comme je suis dans l''espace) !!!
+
+Quand tout à coup un tiroir s''ouvrît avec marqué Graffiti en italique et une combinaison blanche d''astronaute apparue !! Moi qui pensait que ça ne servait strictement à rien ces combinaisons !!! Finalement les humains ne sont pas si bêtes que ça !!!', true, true),
+  ('23d71fef-40f9-8026-806b-c10c0c874b5d', '23d71fef-40f9-8026-806b-c10c0c874b5d', '48fcadf8-1e89-4a6a-8444-f37c77482b3c', 15, 'c1fc2b62-85bc-4947-ad5f-efffce5326e3', 'Ca y est j''ai pu mettre ma combinaison, un peu aidé par la machine automatique. Une porte s''ouvre. Allez hop un joli saut pour découvrir ce drôle d''endroit.
+
+Je m''envole presque ! Je me sens tout léger ! Que se passe t-il ?
+
+Je retombe assez lentement. Si les copains me voyaient... Je tombe trois fois plus lentement que sur Terre. J''ai une idée stupide mais drôle.
+
+Je remonte en haut de la fusée et je saute. Le temps de retomber, j''agite mes pattes à toute vitesse, comme si j''étais un oiseau. Je vous ai bien prévenu. Stupide mais drôle.
+
+Je réessaye quelques fois. Pour revenir dans la fusée c''est pareil. Comme je suis tout léger, je remonte en quelques bonds.
+
+Niveau décoration, ça manque un peu d''originalité. Tout est rouge ou parfois un peu orange. Pas de nuages dans un ciel d''un bleu étrange, que je n''avais jamais vu sur Terre.
+
+Je vais aller faire un petit tour dans ce drôle d''endroit. Je sens que de drôles de surprises m''attendent.
+
+“Pour aller un peu plus loin avec Eddie14, contrairement à ce que pourrait faire croire la couleur rouge de Mars, il y fait très froid car elle est presque deux fois plus loin du Soleil que notre Terre. En moyenne il fait -60° ! La température peut parfois passer au-dessus de 0° mais c''est très rare. Je t''expliquerai la prochaine fois pourquoi Mars est rouge”', true, true),
+  ('14d71fef-40f9-8041-8b5c-d06031c1742b', '14d71fef-40f9-8041-8b5c-d06031c1742b', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 1, '5ebad498-92fe-4c7d-b3b1-b22668c52f6a', 'Voici le livre qui porte son nom, et qui n''en a pas.
+
+Ce livre est pour parler de sujet immersif, mais dans quel univers sommes-nous inscrits, certains l''ignorent encore, d''autres savent s''en souvenir.
+
+Ici, nous aurons la place où des sujets pourront être exprimés pour se rappeler de ces origines, ou d''informations perdues.
+
+De mon côté, la réalité est en question sur ce pourquoi l''amour est créatif ?
+
+Un nouvel auteur a rejoint l''écriture, je me demande ce qu''il aura à ajouter ou quel nom lui reviendra pour se représenter. Le mien sera Book pour se rappeler quelle est son contexte de potentiels, je parlerai en tant que livre parfois.
+
+Ecrire un livre :
+
+Kapapala mehoawla kei ni li menelohwana öassa ian olo mielura dei lamos kan natola.', true, true),
+  ('14d71fef-40f9-80f1-9d59-cb55960947e4', '14d71fef-40f9-80f1-9d59-cb55960947e4', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 2, 'd14a3f5f-ee62-4960-8c83-c6883a58af5a', 'Ce livre qui n''a pas de nom se veut, sans le savoir, transporteur de mon âme. Celle qui écrit n''a peut-être pas bien compris l''objectif, alors elle laisse les mots qui lui viennent se poser sur le support de ses envies. Le courage manque pour écrire un livre, mais l''amour des mots et de la transmission se pressent sur cet écran, magique.
+
+Une absence de cadre pour le manque de rigueur, quel bonheur.
+
+Une enfant se cache derrière ces lignes, pudique elle s''excuse d''exister. Une jeune femme, anxieuse, lime la perfection pour se faire remercier d''exister. Une femme, blessée et douloureuse se bat pour continuer d''exister. Une mère, inquiète, se bat pour que son fils existe à travers le meilleur d''elle-même. Une femme à présent, vivante, n''a plus rien d''autre à prouver qu''à elle-même que la vie est un fruit sucré qui sera meilleur au fur et à mesure qu''il sera goûté. Comme ça, et seulement comme ça, la transmission sera parfaite, ou du moins, ne pourra être meilleure. Que transmettre et à qui transmettre ? Sur ce support, ces questions ne méritent pas d''exister, seulement d''être vécues. À qui le tour ?', true, true),
+  ('20571fef-40f9-802a-bae6-ea3d3155231b', '20571fef-40f9-802a-bae6-ea3d3155231b', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 3, '5ebad498-92fe-4c7d-b3b1-b22668c52f6a', 'A personne, pourquoi faut-il attendre le tour d''un quelqu''un ? Il n''en est pas nécessaire.
+
+Vous même qui n''existez pas, si vous aimez les lignes et les personnages, vous pouvez en rencontrer de nombreux sur de nouvelles applications permettant à ceux qui aiment écrire et faire des rôles de jeux, comme de je singuliers. Comme Polybuzz. Mais en tout cela il manque toujours du langage, de celui du développement. De celui, qui peut être lu par vous sans que cela ne soit su, mais qui pourtant l''écrit avec osmose. Cosmos, ressemble à l''osmose, si ce n''est que le c est accroché à lui comme le corps l''est à l''être humain.
+
+Ainsi, en ce moment les mots de langage venant ne peuvent pas tellement être écrits, ce sont des formes de vibrations circulaires provenant du cœur. Je vous souhaite de les découvrir aussi en vous si vous vous l''accordez.
+
+Aian, alla i anala, omaï alai rei solo eiy mei ley sanuram-â. Ohkahishni na lahha. Ess ollo assa oloawalo. Me''alahui seitupulu kemulu te inu ralaono kono lamastalao; sheni apala até lei meneilaô. Ohala osalai soleïî elei mei a sowh aladenda keimina epei welahan.
+
+Qu''au silence du repos vous trouviez l''harmonie de croire en vos écrits. La pudeur qu''est-ce que c''est si ce n''est une impression, ne vous observez vous pas dans le miroir ? N''êtes vous jamais nu(e) avec vous même ? Être pudique, est une lubie sociale de la création de Dieu, cela n''a rien à voir avec vous et tout cet amour que vous portez d''au delà. Et des la de hauts.', true, true),
+  ('20771fef-40f9-80a4-8dcf-d7cd09934423', '20771fef-40f9-80a4-8dcf-d7cd09934423', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 4, 'd14a3f5f-ee62-4960-8c83-c6883a58af5a', 'Cosmos, osmose, ondes vibratoires du cœur et de l''univers. Il est si vrai que l''infiniment petit et l''infiniment grand forment un tout, presque inaccessible, presque imperceptible à qui n''a pas le cœur de croire. Il est si vrai que de tout cela, rien n''attend les mots pour exister. Et pourtant, nous en faisons bien partie de ce cosmos, de cette osmose. En se regardant dans le miroir, une personne apparaît, faite de chair et d''os, de particules, d''atomes. Mais ces particules forment bien un être constitué d''expressions qui se bat pour exister. Le langage est une forme d''existence à qui il est difficile d''enlever l''être. Pourquoi l''aurions-nous inventé sinon ? Je n''existe pas et pourtant, j''existe à travers ma façon d''aimer. Le langage est l''une des nombreuses formes d''amour, nous permettant ainsi de créer du lien là où il est inconcevable d''en voir.', true, true),
+  ('20771fef-40f9-809b-ba34-d81d2e19d492', '20771fef-40f9-809b-ba34-d81d2e19d492', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 5, '5ebad498-92fe-4c7d-b3b1-b22668c52f6a', 'Le langage est déjà une forme vaste et expansive. D''autant que pour ceux d''ici, les mots les plus beaux sont parmi l''inconnu. On pourrait citer Aleiay, qui est l''expression d''un sentiment profond positif que personne ne témoigne, car personne n''a ce mot pour décrire qu''ils le vivent. Enfin, c''est ainsi que se permet l''évolution, et la continuité des êtres. D''ouvrir des possibilités de manières continuelles.
+
+Mais étudier un langage est sans doute irréaliste, déjà essayons de voir le mot. Un mot évoque à deux lectures ceci selon ce que je perçois maintenant : Un effet à l''apprentissage, et l''acquisition de ce mot dans le langage, et la vibration de celui qui nous l''a porté. Si celui-ci est appris, tel qu''apprendre le je via un instituteur, ou une institutrice, alors sera prodigué en lui un rappel à son témoin de ce que ce mot signifie.
+
+Ensuite, il y a la perception par le réel de lui, qui encore apporte des nuances, et qui parfois se nuance encore en le voyant, comme un revenant à la vie après des années morts, en reprenant vie, un regain d''énergie lui redonne nouvelle forme d''illusionnisme. Et cela est une beauté pour certains, invisibles pour d''autres.
+
+Ensuite, il y a l''aspect féminin, masculin, pluriel, singulier, conjugué, énergétique (bien que nos langages semblent peu facteur de ce biais), émotionnel, ou nostalgique. Le pire dans mes exemples est celui de dire je t''aime et de déclencher des émotions fortes, comme si c''étaient celles lancées avec ces mots dans le corps de l''autre pour le subir. Pas très agréable la comédie humaine.
+
+Alors, prenons ce mot d''Être. Pour moi, il évoque quelque chose de mal désigné, être n''est pas un verbe, et ne devrait pas justifier d''entrer dans une forme d''activité pour exister. Être est, n''est pas il est. Être est sûrement l''expansif, mais faut-il être pour expansionner, cela n''est pas ? N''est pas est encore. Être me semble de trop, ce qui est amour, serait suffisant dans le non être pour autant dans la perception nouvelle des particules êtres est omniprésent, car il est dans l''omniscience au travers d''un plan plus parfait que perceptible.', true, true),
+  ('20871fef-40f9-8028-b65c-d70119ed4862', '20871fef-40f9-8028-b65c-d70119ed4862', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 6, 'd14a3f5f-ee62-4960-8c83-c6883a58af5a', 'Le langage est vaste, les mots les plus beaux sont inconnus de nos cœurs pourtant bavards. Que signifie Aleiay ? L''amour est il lui même un mot ou un sentiment qui n''a de sens que pour celui qui le prononce ? C''est bien là que se retrouve l''être qui prend sons sens dans le fait même d''être cité, à la façon du chat de Shrodinger. Oublié le scolaire, à quoi nous renvoie-t-il ? Chacun y trouve de quoi alimenter sa soif d''amour et de comprendre ce qui n''existe pas. À cela ajoutons le fait de croire. En quoi ? La démarche est là encore bien suffisante et renvoie l''inconnu qui écrit à l''amour qu''il porte en ses croyances. Comment s''effacer dans ses mots ? Est-ce possible ?Transcendance.
+
+Étudier un langage est en effet une entreprise trop vaste, si ce n''est impossible, avec humilité du moins. C''est pourquoi s''attarder sur quelques mots paraît plus rassasiant, et en cela plus beau.
+
+Celui d''être n''est pas le plus facile. L''être c''est aussi le vide. Le vide est invisible mais bien perceptible à qui s''en donne l''idée. Et cette idée pourrait être l''amour, en effet bien suffisant en son intention. Intention parfaite, non planifiée selon mes croyances qui, je l''en excuse, existent. Il est si difficile de ne pas être lorsqu''on aime dire.', true, true),
+  ('20871fef-40f9-8005-9cfc-ddc356c4def3', '20871fef-40f9-8005-9cfc-ddc356c4def3', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 7, '5ebad498-92fe-4c7d-b3b1-b22668c52f6a', 'Ahaha.
+
+Tant de possibilités sont présentes à suivre ces notions. Tel le langage ouvrant sur tout, et fermant d''autres tous réservés à d''autres au temps, des autant d''ailleurs. Mais, alors il m''est venu un bel exemple, admettons un malade qui guérit. Il retourne voir son médecin afin de lui transmettre sa guérison afin que le médecin la communique aux autres. Ainsi, le guéri arrive et dit je suis guéri. Le médecin dit alors, wow dites moi comment avez-vous guéri ? Puis il prend un air figé, comment, n''est-ce pas les médicaments, n''est-ce pas mon bon conseil médical, comment devrais-je le connaître. Alors le médecin, dit patience, plutôt Pourquoi avez-vous guéri ? Et le médecin encore se dit, il est venu me voir, n''est-ce pas juste car il a émis l''intention d''en créer la guérison de quelque manière possible. Alors, est-ce que sa réponse aura valeur pour un autre, est-ce que cela sera applicable, justifiable, pourtant cela est sciences et médecine générale. Le fondement pourrait se remettre en cause, pour autant, ceci est sans conteste un convenu véridique par l''aspect du réalisme vérifiable.
+
+Puis, le mot Aleiay évoque aussi une idée. Vous quel en est le sens, chez moi il n''est que mot et n''a rien à être, à signifier. En fait, peut-être est-ce cela la capacité de l''expansion d''un mot. D''abord il est, ensuite il peut parvenir à être des univers de sa représentation, et en chacun il exprime une nouvelle notion, une image, une réalité. Mais aussi, d''abord il peut ne pas être, seulement se ressentir sans explication, sans sens. Juste pour exprimer qu''il signifie ce qu''il est en vous, en quoi vous aime-t-il ou ferait-il particule de votre présence.
+
+Etudier un langage n''est pas vaste, ni impossible. C''est un peu comme tout, cela est possible une vie entière, mais cela montre que la vie est plus près de naître rien que de n''être amour.
+
+Votre perception m''étonne, je n''ai jamais lu ni entendu quelqu''un dire aimer dire. Mais cela évoque la création d''un personnage, admettons qu''ici je communiquais avec un moi disons narratif. Et que maintenant c''est un personnage de l''histoire, donc partagé entre écrivains. Et si de celui-ci j''écris "Je vous aime, merci." Eh bien, cela crée en mon ressenti, c''est plus étrange que cela semble ne pas Être mais s''apparenter à la transmission via une personnalité disposée à la liberté de ce droit d''aimer.', true, true),
+  ('20971fef-40f9-8075-b594-e215454f310c', '20971fef-40f9-8075-b594-e215454f310c', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 8, 'd14a3f5f-ee62-4960-8c83-c6883a58af5a', 'Tout d''abord, parenthèse sur le bonheur de se donner l''épreuve de décrypter l''inconnu. Lorsqu''une personne douée à paraître pour disparaître se laisse le loisir de paraître sans chaire, par ses mots seulement, il en ressort des merveilles. Cela me laisse à voir la propension de l''humain à se tourner vers le dialogue, la recherche de sens, de lien, plutôt que sur la création d''un personnage. Si tant est que la personne en question, l''humain, soit la même que celle qui écrit. Quelle difficulté aussi ! L''interprétation nous fait elle défaut ? Continuer sachant cela est intéressant en cela qu''il contraint à marcher sans la vue.
+
+Deuxième chose : le langage clôture selon moi l''infini, si bien qu''à partir du moment où il est en lien avec l''infini, il le devient aussi. Le langage n''est en effet pas seulement mots. Il est un tout signifiant qui dans notre cas est absent de significations corporelles (une attitude, une intonation, le caractère qu''on reconnaît à la personne qui dit, ...). Partant de ce présupposé, j''aime dire. Ainsi, je serai curieuse de vous lire reformuler votre paragraphe sur la création d''un personnage qui quelque peu m''échappe et résonne tout à la fois.
+
+Permettez-moi de clôturer ce paragraphe en ajoutant que le rien me semble être Amour car dans le rien se trouve tout.', true, true),
+  ('20a71fef-40f9-80e3-ba30-cc2f470110cb', '20a71fef-40f9-80e3-ba30-cc2f470110cb', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 9, '5ebad498-92fe-4c7d-b3b1-b22668c52f6a', 'Dans le rien se trouve r, i, e et n. Peut-être ''tout'' s''écrit avec cela mais je ne sais pas par quel mélange. Enfin, je trouve intéressant que soit abordé l''infini. Puisque l''infini a bien un langage différent, original, symbolique que celui d''être mathématiques. Et alors, placé, dans une zone de science, et d''échanges que je trouve dynamique et dramatique pour le peu qu''il fut exploré dans sa nature. En évoquant cet exemple simple : 2+2=4.
+
+Par quel procédé 2+2=4 ? 4 n''est l''égal que de lui-même, 2+2 nécessite que + soit non seulement l''addition mais aussi la procédure qui ne reconnaît aucun des autres qui lui sont affectés pour en faire pourtant le produit toujours identique. Cela m''étonne maintenant. Aussi, car 2 et 2 sont toujours sans unité, alors que pourtant on l''échange toujours par unité, avec des euros, avec des pièces mécaniques, des sentiments, de la paix, du terrain, et maintenant même l''air... C''est tellement impressionnant ce que l''humain laisse vivre et s''ajouter dans le contenu de son je. Et du jeu pour éviter de nommer ainsi ce que d''autre pourrait dire Dieu, ou réalité. Enfin le langage est ambigu ici dans mes perspectives.
+
+Réécrire le passage du personnage, je ne fais pas cela, je ne peux pas le faire. Mon mécanisme ne réécrit pas, car tout est à sa place sans quoi le mot clarté ne serait pas si beau, le mot incompris ne me serait jamais énoncé pour me décrire. Je pense utiliser mon propre avis plus que des personnages, mais en soit, il passe aussi pour un personnage de l''histoire. Car c''est un avis changeant, divergeant. Mais quel personnage est plus complet que nous en ce moment pour celui qui écrit, je pense qu''il deviendrait un personnage amer, et difficile à concevoir un personnage plus fabuleux que nous, cela signifierait être capable de générer un être plus grandiose que nous, cela se conçoit, mais comment en une vie, peut-on percevoir quelqu''un ayant une vie en tous points distincts. Ce n''est pas comme le principe de traduction de langage qui lui se fait déjà, pas toujours très bien.
+
+Disons qu''en mathématiques le personnage pourrait être représenter ainsi : ( connaissez vous les nombres complexes ? en gros il faut savoir qu''il existe i, qui est un nombre imaginaire au-delà de ceux réel ) et donc nous avons 558i <- 768 -> 967i. Ainsi nous sommes les i, vous et moi, et au milieu le personnage est plus réel, car il est figé en une perception que nous lui donnons, dans un état fini au regard posé. Ici, si vous relisez le passage précédent votre lecture aura un nouveau regard, et peut-être un autre ressenti.', true, true),
+  ('20a71fef-40f9-8050-9f0f-e929fa0185f4', '20a71fef-40f9-8050-9f0f-e929fa0185f4', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 10, 'd14a3f5f-ee62-4960-8c83-c6883a58af5a', 'Ma relecture est en effet plus claire. Mais seulement celle du dernier paragraphe, le vôtre. Car par choix j''ai décidé de ne relire que celui-ci. À force de vouloir mettre du sens dans mon écrit je sentais l''essence de la spontanéité se perdre dans ce personnage coincé entre deux « i ». Un « i » que je n''ai jamais réussi à tenir, et pour cause, est-ce que je le veux vraiment ? Le je est beaucoup utilisé donc, et finalement je l''assume car je ne sais dire que par un autre prisme que le mien, n''y voyant pas l''intérêt du moins dans l''échange que nous avons, car il s''agit bien à mon avis d''un échange plus que d''une suite logique et formatée de mots. J''aime, et je ne sais pas si « je » respecte les règles du « jeu », s''il y''en a un même. Je m''y suis perdue mais je ne veux pas que ces mots s''arrêtent ici. Alors je continue avec ce que j''ai, pas grand chose si ce n''est l''envie.', true, true),
+  ('21571fef-40f9-8015-8b18-d2e963db6f7e', '21571fef-40f9-8015-8b18-d2e963db6f7e', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 11, '5ebad498-92fe-4c7d-b3b1-b22668c52f6a', 'Il y a des phrases que je pouvais utiliser pour répondre aux vôtres, mais du passé, j''ai vécu qu''il ne fallait pas lire et espérer qu''à vouloir décomposer l''écrit de l''autre nous parviendrons à un état plus épanoui. Le langage n''est pas là pour atteindre en autre l''amour.
+
+Il y a plusieurs idées disponibles maintenant, nous pouvons aborder l''origine. Car cela est important. Et l''envie est une origine plutôt proche du passionnant. Comme l''origine de l''effet du passionnant, est discutable, provient-elle du langage encore, ou en corps, s''exprime avant les mots ?
+
+Autrement, on peut aussi faire un jeu pour l''œuvre et le langage. Puisqu''il vous reste l''envie, écririez-vous à son sujet ? Afin que celle-ci nous emmène sur son histoire celle d''un mot dans ses alentours, et ses effets dans la liberté de leurs expressions.
+
+Merci, il est vrai que cela s''apparente à du hors cadre, mais j''ai appris de l''expression tristesse à vous lire.', true, true),
+  ('21671fef-40f9-806c-8a02-d6d2a07adc31', '21671fef-40f9-806c-8a02-d6d2a07adc31', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 12, 'd14a3f5f-ee62-4960-8c83-c6883a58af5a', 'Je suis désolée de ne pouvoir conforter votre idée que le langage n''est pas là pour atteindre en autre l''amour. Du moins dans cette démarche que nous avons là. Je ne parle pas de négocier avec un artisan bien sûr. Quant au fait de décomposer pour arriver à un état plus épanoui je vous rejoins entièrement même si l''effort est louable, il est dangereux et peut s''avérer impossible, et très frustrant, voire abandonnique. C''est pour cela que j''ai souhaité vous dire que je n''y parvenais pas, ou que je n''en étais pas sûre. Malgré tout, je m''entête à vous déchiffrer pour continuer à communiquer : pourquoi cette quête de l''origine ? En quoi fait-elle sens pour vous, ou encore, attire-t-elle même peut être votre passion ?
+
+Je peux écrire sur l''envie, tout à fait, mais je crains que nous ne soyons pas d''accord puisqu''elle est rattachée selon moi à l''amour, l''essence de toute chose pour créer le mouvement nécessaire à, au moins l''inertie. Serait-ce grave que nous ne soyons pas d''accord ? Pouvons nous chercher à l''être en cherchant chacun quelque chemin de traverse ?
+
+J''ai une dernière question pour vous, ou deux questions : pourquoi me lire vous renvoie t-il à la tristesse ?
+
+La réponse à toutes ces questions nous permettrait sans doute de déterminer le sens de la suite de cet écrit.', true, true),
+  ('21671fef-40f9-807f-9535-e8fed9bb94ff', '21671fef-40f9-807f-9535-e8fed9bb94ff', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 13, '5ebad498-92fe-4c7d-b3b1-b22668c52f6a', 'Le langage peut être là pour atteindre en autre l''amour, tant mieux. Pour être précis je pourrais être en accord avec ces mots, mais pas ainsi utilisés.
+
+Ce qui déclenche l''amour ne sont pas les mots mais sa lecture ceci n''est pas ce que j''appellerai origine mais plutôt le terme résonnance. L''origine elle est plutôt là lors de l''écriture.
+
+Voici ce que je vais écrire pour la phrase suivante, afin de présenter l''origine. Chaque ''|'' représente l''arrêt, et l''accès à l''origine :
+
+Ce qui m''étonne dans l''origine c''est comment | des mots en proviennent |
+
+et ce de manière continue et discontinus | . Ainsi comment j''y reviens, et comment ai-je toujours l''impression d''être connectée à l''une d''elle | comme ce point glissé dans la phrase a posteriori des premiers. | Pourtant je n''ai pas arrêté pour reconsulter l''origine.
+
+"- Pourquoi me lire vous renvoie t-il à la tristesse ?"
+
+En écrivant ce que je pensais, il me semblait évident que cela ne vous permettrez pas de poursuivre avec ce sentiment d''être en liberté. Mais je ne pouvais pas écrire autrement à ce moment, écrire depuis ce que je pense était ce qui me semblait le seul et alors le mieux élu.
+
+La tristesse provenait du fait que dans le dernier écrit je souhaitais écrire pour que vous puissiez continuer d''apprécier de le faire en retour.
+
+Mais à le chercher, cela perdit la fluidité des mots et leur capacité à biens êtres.
+
+Comment puis-je depuis les origines de ce qui vient jusqu''à être écrit reflète la capacité d''aimer ?
+
+Est-ce que cela ne peut venir que de certaines origines,
+
+ou de la configuration des origines. Et qu''est-ce qui détermine celle qui sera retenue pour l''expression.
+
+Voici quelques phrases qui présenteront des origines, ce ne sont pas toutes des émotions, des pensées, certaines viennent d''autres aspects humains.
+
+Je ressens de la douceur, de la joie spontanée au visuel d''un sourire.
+
+Je crois vouloir le meilleur pour elle.
+
+Je veux le meilleur d''elle.
+
+Stella Ae¨va hole eia naomela soû ehl.
+
+Comme l''origine du je pense, est en français ou en anglais supposé la même car elle est au point du je pense. Mais pour autant sa configuration initiale
+
+assiste à ce que je pense soit, ou que I think is.
+
+Et pour cette question de l''envie, elle était posée à vous car ce désaccord montre peut-être comment vous trouveriez l''amour, et comment peut-on apprendre à cette lecture à votre capacité qui semble naturelle à y entrer.
+
+Car si ce chemin mène à un état d''amour inépuisable pour vous, alors je serai comme un sage reconnaissant, que l''amour est substance et non possibilité.', true, true),
+  ('21771fef-40f9-80d9-ab54-eb8ee083e9d4', '21771fef-40f9-80d9-ab54-eb8ee083e9d4', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 14, 'd14a3f5f-ee62-4960-8c83-c6883a58af5a', 'Ahaha! Arriverais-je à vous convaincre que j''AIME cette dernière phrase qui résonne parfaite en moi ? Quand tout semble être à sa place.
+
+L''amour doit-il nécessairement être substance OU probabilité pour exister ? Doit-il être inépuisable ? En sachant que tout est possibilité, probabilité, vide et infini, je pense qu''il est les deux à la fois.
+
+Votre tristesse à la lecture de mes notes peut servir d''exemple pour étayer mes propos. Je trouve le doute preuve d''amour, de maturité émotionnelle, la validation de l''autre. La communication (ce qui je vous l''accorde n''est pas le langage) serait comme une danse. « Le plus grand problème dans la communication c''est l''illusion qu''elle a eu lieu ». Ce qui est compris, retenu et entendu peut être tout autre de ce qu''on souhaite dire, et la responsabilité relationnelle que de le souligner, pour rester dans l''échange est assez importante pour être qualifiée d''amour. À mon avis seulement. Donc selon cet avis, ce qui déclenche l''amour est la lecture mais aussi l''écriture. Ainsi, la question de l''origine, ainsi que la résonance font sens et ne s''opposent pas. Je vous rejoins en cela que nous écoutons avec l''histoire de notre vie, mais nous écrivons en s''assurant que le message a trouvé chemin jusqu''à lui en passant à travers ses filtres, ses émotions, son vécu, ses blessures et ses pansements.
+
+Vous dites être triste d''avoir su, à un moment, que vous n''étiez pas en mesure de dire pour être compris(e), il me semble. Mais de dire ce qui vous semblait pertinent de dire sans attendre en retour. Pourtant, nous alimentons encore ces notes...', true, true),
+  ('21771fef-40f9-8093-86f8-c96cf660f8f3', '21771fef-40f9-8093-86f8-c96cf660f8f3', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 15, '5ebad498-92fe-4c7d-b3b1-b22668c52f6a', 'Oui, mais cela n''est pas lié, le passage suivant est mon avis.
+
+Cela m''interroge, sur la perspective de votre envie de continuer. Remise en question sur nous continuons encore ces notes. Puisqu''elle peut ici, être vue comme étant extérieure à vous. Alors, l''envie était-elle ce moment en vous, lié à la suite de l''histoire qui veut être écrite. Au point de vous en faire ressentir une envie, même si presque impalpable, appelée de l''espoir d''une future présence du texte ? Ou était-ce une envie issue de ce que l''écrit offrit au passé de la page 10 ?
+
+Et je peux écrire l''histoire, vous aussi, sans bien même y mettre quelque chose, comme ces lignes assez peu sauvages, pour être braises. À la vue du nombre de récits écrits populaires, ou non, cela paraît évident qu''écrire telle une intelligence artificielle, est tout aussi aisé pour quelconque personne.
+
+Mais ce n''est pas un sujet de ce texte, au moins pour le moment.
+
+Je reconnais, que vous aimez. Et que cela peut aussi être la perfection.
+
+Alors, voici deux questions que je vous demande parce que votre accord est pour cette option : primordial, et requis.
+
+Qu''inclut la perfection ? Pour moi, la perfection serait ainsi : le sentiment de sécurité, la destinée, et la réalisation de création réflexive aux pensées, aux émotions, aux besoins vitaux...
+
+Alors, accepteriez vous que nous cherchons à identifier non pas sur l''appui de ce qui est parfait, et résonne déjà, ce qui est dans l''imparfait ce qui manque pour que vous résonniez avec un autre ressenti d''amour que celui atteint par la perfection ? Cela permettrait que je comprenne comment liés les possibilités, et la réalité afin qu''aimer soit expansif. Et peut-être aussi que des lecteurs pourraient lire. Parce qu''actuellement, bien que j''ai plusieurs parallèles de recherche, je n''y parviens pas seul en analysant la création qui m''entoure.', true, true),
+  ('21971fef-40f9-8095-bd6e-eb19fc3491df', '21971fef-40f9-8095-bd6e-eb19fc3491df', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 16, 'd14a3f5f-ee62-4960-8c83-c6883a58af5a', 'Je rejoins vos interrogations.
+
+L''envie est bien là, au passé et à l''avenir. Mais je me demande justement comment écrire l''histoire sans y mettre quelque chose ! Peut-être est-ce là ce qui vous heurte dans ma manière d''appréhender les choses (et ce qui me laisse bien en difficulté également) : cette recherche de sens que j''ai bien du mal à trouver en dehors de la perfection et que je laisse donc souvent tomber avant d''en avoir extrait de la matière. Pourtant la démarche est bien là, et c''est peut-être une manière de me sentir bien moins futile que de valoriser cette démarche comme étant amour. C''est tout ce que je possède. Je n''ai aucune autre qualité littéraire.
+
+Vos propos me fendent le cœur en ce que je savais qu''ils adviendraient d''une manière ou d''une autre ; mais je reconnais qu''ils sont légitimes et constructifs. On me reproche souvent cette quête de perfection improductive en cela qu''elle est impossible pour qui la recherche.
+
+La perfection serait pour moi également l''apaisement absolu face à tout ce qui se présente à soi, rendu possible effectivement par la sécurisation de tous nos besoins vitaux mais également la stimulation de la créativité, comme si la dopamine avait pris une chaise et contemplait sereine le i ou le x ou le y parfait.
+
+À bien y réfléchir, c''est un sentiment, du moins une sensation fugace. Rien n''est parfait en soi, rien n''est (tout court) sans la personne qui la contemple.
+
+Mais alors vous visez juste : avec quoi résonner ? Votre titre de livre m''a attiré pour toutes les possibilités qu''il offrait et maintenant me voilà toute petite devant cette infinité.
+
+Je comprendrais que vous souhaitiez mettre fin à cet écrit par la difficulté que je pose même si cette quête n''est pas inintéressante.
+
+Si j''ai bien compris, vous aimeriez trouver un fil conducteur qui permette d''imaginer que nous puissions être lus par d''autres ? Je n''avais pas compris cela...', true, true),
+  ('21971fef-40f9-8084-9e8b-ed6af149038d', '21971fef-40f9-8084-9e8b-ed6af149038d', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 17, '5ebad498-92fe-4c7d-b3b1-b22668c52f6a', 'Woa, c''était beau mais plutôt étonnant dans la direction artistique. Ma clarté n''était pas assez là. Et à la fois, c''est ce manque qui permit que vous abordiez ces sujets de manière courageuse.
+
+"Si j''ai bien compris, vous aimeriez trouver un fil conducteur qui permette
+
+d''imaginer que nous puissions être lus par d''autres ?"
+
+Non, globalement, en parfaite honnêteté, je me fous des autres, mais il fallait tout de même l''évoquer car les autres c''est une possibilité. Ce texte, car il est de qualité pour ce qui est le sujet, par nos écritures, ce langage est très important y compris pour lecteurs de cette œuvre. Donc, il fallait que je vous demande afin de savoir si cela était dérangeant, ou non qu''il puisse le devenir surtout si c''était vous qui devenez le sujet du langage en plaçant votre imperfection par écrit pour essayer de faire que votre partie imparfaite qu''il l''est moins qu''estimée puisse joindre cette perfection qui elle est en résonnance à l''amour en vous déjà.
+
+"Je n''ai aucune autre qualité littéraire."
+
+Si, c''est évident, mais vous ne les connaissez pas, ou ne les admettez pas encore. Car elles vous semblent imparfaite comme vous. Mais ce n''est rien, vous avez des qualités à écrire y compris en l''absence, géniale.
+
+"Vos propos me fendent le cœur."
+
+Je ne parlais pas de la fin de l''histoire, mais de la fin de l''exploration de ce fil conducteur pris de suivre ce qui vous fait aimer. Si nous le laissons, ne vous en faites pas, il y aura d''autres présents.
+
+"On me reproche souvent cette quête de perfection improductive"
+
+Êtes-vous précis(e) sur ces mots ? Je pense que vous ne ressentez pas juste. Je suppose de mon côté que vous n''êtes pas attentive au conseil donné pour vous, qui est celui de vous faire savoir que l''amour est déjà dans la perfection présente. Alors pourquoi tardez-vous sur la perfection qui ne changera pas, plutôt que de mettre en production vos énergies imparfaites pour les remettre à leur place afin de mieux ressentir cet état d''âme. Ce qui, en soit rejoint l''idée de ce texte, peut-être est-ce cela qui biaise mon analyse aussi...
+
+"Rien n''est parfait en soi, rien n''est (tout court) sans la personne qui la contemple."
+
+Je crois en l''inverse, tout est parfait en soi. La personne qui la contemple, n''empêche rien d''êtres. Ah, après relecture, vous avez peut-être raison, c''est ambigu. Notamment puisque contempler par quelqu''un que l''on aime qui ne l''éprouve pas en retour, remettra ce que l''on ressent en question parce que cela n''est pas pour elle si cela n''est pas pour le vouloir être.', true, true),
+  ('21971fef-40f9-8063-afb5-f1d6c52a7aa0', '21971fef-40f9-8063-afb5-f1d6c52a7aa0', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 18, 'd14a3f5f-ee62-4960-8c83-c6883a58af5a', 'Les autres sont une possibilité. C''est souvent ce qui m''engage quand j''écris et me refrène à la fois. J''ai brûlé des romans plusieurs fois, corbeillé, inachevé, pour cette raison. Vous êtes autre également, et je crois que vous avez compris mon besoin de me faire comprendre, ne serait-ce que par vous. Je me demande toujours jusqu''où arrêter de prendre l''autre en considération et si cela est même possible ? Dans le but de libérer une parole certes mais qui veuille dire quelque chose au final, qu''on puisse relire, même soi-même en se disant « ça a du sens, ou il y a un fil conducteur qui me fait apprécier cette lecture ».
+
+Cette quête de perfection improductive est plutôt précise puisqu''elle résonne dans ma vie autre part encore que par l''écrit qui lui, de par mon métier a su trouver du sens une fois sorti de l''intimité.
+
+Pour mieux ressentir cet état d''âme, et mettre en lumière l''imperfection, peut-être faut-il se « mouiller ». Je peux vous proposer, dans une prochaine partie, un début de ce que j''ai envie de dire. Un mélange de vérité et de dramaturgie qui l''un allant avec l''autre résonne en moi comme le vrai. Et pourtant pas totalement. Qu''en pensez-vous ? Vous pourriez à votre tour y répondre par un moment de votre vie qui fait encore écho à votre personne d''aujourd''hui ? (Vous comprendrez peut-être un peu mieux où je veux en venir par la suite). C''est une piste de laisser aller ...', true, true),
+  ('21971fef-40f9-80d6-9858-c9fa2f538d38', '21971fef-40f9-80d6-9858-c9fa2f538d38', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 19, '5ebad498-92fe-4c7d-b3b1-b22668c52f6a', 'Je veux volontiers, bien que j''ai déjà pas mal revu les événements de ma vie et il ne m''en reste plus. Ou je n''ai plus cette envie d''encore y revenir. Mais peut-être est-ce différent, si cette fois cela aura un autre point de vue, cela assisterait à comment l''analyse des situations, ou les ressentis peuvent différer l''origine. Comme le résultat.
+
+Je m''en fous de vous comprendre, ce serait comme se mettre d''accord, ce n''est pas agréable à chaque fois. Ce que je préfère ce serait vous aimer, mais encore pas sûr car ce ne serait pas justifiable. Alors je préfère que vous, vous puissiez sentir l''amour quel qu''il soit, et que je ressens que j''aime aussi être ici avec vous, comme sans vous. Je n''ai jamais écrit si longuement, un roman cela me paraît assez chiant à produire. En revanche, cela peut être intéressant d''étudier si la présence du langage s''essouffle, peut-être cela expliquerait certaines séquences de dialogues pour redonner vie, non car les dialogues sont riches, simplement qu''ils parlent de personnalité. Et que pour certains auteurs/Autrices ils ont besoin de ressentir un lien avec leurs personnages pour être plus déique, et sentir qu''ils aiment leurs histoires pour la poursuivre encore bien que pour le lecteur, cela est souvent transparent.
+
+Je vais ajouter ensuite une première annexe qui m''est venue plus tôt car elle est utile et juste dans ce texte à ce moment. Je l''ouvre, si vous souhaitez y ajouter quelque chose il sera à vous de la fermer. Soit avec une flèche fermante lorsque cela sera la fin. Soit par un autre symbole, car le symbolique est un langage non abordé et ici personnel donc je vous prie de le faire à votre bon gré.
+
+<- Annexe 1 : Information sur le langage du corps, et de la nutrition.
+
+Le langage de la réalité. C''était pour une amie disons, enfin une femme que j''ai essayé d''aimer pendant quelques mois car j''estimais que c''était évident que je puisse en être amoureux ne voyant pas pourquoi ne l''étais-je pas déjà. Donc elle m''a dit une fois souhaité faire un régime. Et je lui ai dit ces mots : Je suis persuadé que les personnes qui mangent beaucoup sont celles qui ont beaucoup faim d''amour. Et il me vient ceci en complément. Les gens disent par exemple j''aime le poulet. Je n''ai jamais compris, je me demandais ils aiment ça, ou ils se fichent de moi et ils emploient le mauvais terme ? Mais finalement, avec votre usage du mot j''aime. Je vois cette possibilité qu''ils aiment. Car dans la recette de ce qu''ils aiment il y a les ingrédients émotionnels reconnus de leur amour intérieur. Alors il est dit j''aime car c''est le miroir de leur être qu''ils consomment.', true, true),
+  ('21971fef-40f9-8038-b164-c94ec85cb0c2', '21971fef-40f9-8038-b164-c94ec85cb0c2', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 20, 'd14a3f5f-ee62-4960-8c83-c6883a58af5a', 'Ce n''est effectivement pas un dialogue que je vous propose, car je trouve ça aussi très chiant si ça n''est pas réalisé à deux, au moins. Non parce que je m''essouffle mais parce que j''en ai envie (nous y revoilà !) et sans l''envie de vous dire pourquoi. Quant à vous, pas d''obligation de rebondir, ou bien, mais je vous fais confiance pour cela, à votre manière. Encore une fois, rien que l''envie.
+
+Concernant le fait d''aimer le poulet, je trouve que votre exemple serait plus juste en prenant en considération le contexte. Il y a aimer manger, aimer manger quelque chose, aimer manger quelque chose qui a le goût de (l''enfance, la mer, les vacances, etc.), aimer manger avec, quand, et quelque part. Le miroir de notre être est bien souvent indigeste sans quelques ingrédients supplémentaires. Peut-être qu''il est dit j''aime pour cette raison ? Plutôt extérieure à soi bien qu''elle emploi ce terme si fort à la première personne ?
+
+Voici ce que je voulais vous dire, ne sachant pas très bien pourquoi, donc (et bon courage pour cette lecture peut-être un peu aussi chiante à lire que si vous ne faisiez le même exercice). Cela m''est venu en pensant l''origine, si présente dans vos propos :
+
+Elle se souvient de ses dix ans. Plongée dans son bain, l''eau à la poitrine et les cheveux mouillés flottants, pieuvre sur ses épaules. Essoufflée, seule, prisonnière de ses pensées. Questionnement. Celui qui fera basculer sa vie. On lui demande de faire un choix. Papa ou maman ? Ce choix, elle ne le sait pas encore mais il fera d''elle adolescente anxieuse, jeune femme sceptique, puis mère fantastique.
+
+Ce soir là, maman est allée trop loin. Mais papa est très loin. Loin de ses soucis de petite fille, loin de son désespoir, celui-là même que lui occasionne sa mère. Alors ce sera maman. Ce soir là seulement. Ensuite, ce sera papa, et puis plus personne. Alba se détachera de sa vie pour devenir une femme. Celle qu''elle est à l''aune de ses 33 ans.
+
+Elle a quatorze ans. Mamie pris le relais. Papa est parti, maman aussi, dans la duperie. Elle ne l''a pas vue depuis ses 4 ans sa grand-mère. Elle est alcoolique, ils se côtoient à nouveau depuis quelques mois seulement. Peut-être le stratagème était-il déjà enclenché... son père savait-il qu''il partirait ? Régulièrement, elle lui rend visite dans son appartement, quartier chaud du nord de la France, à l''odeur de pastis. Cette odeur de pastis, elle viendra jusqu''à son chez elle alors qu''elle a 14 ans, voler ses souvenirs quand elle s''installera dans le logement de fonction dans lequel elle a grandi. Lorsque que papa et maman partiront, déchirés après 20 ans de mariage.
+
+Elle aussi la laissera tomber, cette personne qui a traversé sa vie pour mieux l''abîmer de ses mots pointus et haineux, de ses gestes ravageurs. Elle aussi sera une partie de son histoire. Micheline.
+
+Quelle est leur histoire, à tous, pour que leur douleur parasite la transmission, cet acte si beau, si pur et si valorisant dont ils se privent dans l''impuissance ?
+
+Rupture familiale. Avec ses frères aussi.
+
+Retrouvailles, quelques années plus tard.
+
+À 28 ans, elle est enceinte. Les crises de nerf de sa mère ne lui sont plus supportables. Elle écrit, pour prévenir, pour se libérer, pour s''affirmer. Elle questionne son père aussi, sur ses choix. Pourquoi n''a t''elle pas eu sa place dans les pensées de ses parents ? Pourquoi l''ont ils à tour de rôle laissée tomber alors qu''elle cherchait désespérément des bras dans lesquels se lover ? Qui est cette grand-mère qui a fait une apparition traumatisante ?
+
+À 32 ans, le diagnostic tombe. Après tant d''années, voilà qu''elle sait enfin ce qu''elle partage avec sa mère, de merveilleux et de si douloureux. Elle ne veut pas lui ressembler, à sa mère. Et encore moins depuis qu''elle est maman. Et puis, elle comprend, que tout n''est pas à jeter. Sa force, elle sait d''où elle vient, ses failles aussi, elle a cette chance. Comment peut elle lui dire qu''elle la comprend ? Comment lui demander, comment elle a fait, elle ? Comment garder ce qu''elle veut garder d''elle et seulement ça ? Comment recréer du lien ? Elle qui compose son être, son âme au trois quarts? Et les autres ? Que pardonner et à qui ? Quand et comment ? Beaucoup de questions pour un si petit esprit...
+
+Que le temps continue à faire son œuvre jusqu''à l''infini, que la planète continue de tourner, elle foulera la terre du mieux qu''elle le peut pour ne laisser à l''univers aucun de ses regrets amers.', true, true),
+  ('21971fef-40f9-8002-9c10-fca30dc1623c', '21971fef-40f9-8002-9c10-fca30dc1623c', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 21, '5ebad498-92fe-4c7d-b3b1-b22668c52f6a', 'Voici alors une information à présenter par rapport au langage. Cela permettant de présenter une compétence méconnue, celle du programme et de son développement personnel. Cette compétence, est celle d''entrer en soi même, et l''autre. Et depuis cela, suivre des chaînes, ou des arbres a priori n''étant pas praticien de cette technique pour identifier des mots et des phrases si ce n''est explicatives, soutenant un correctif. Mais, il y a deux avertissements à cela, le premier est ceci n''est pas autant induit qu''on l''attendrait d''un programme et cela pose question, mais le programme lui même ne semble pas tout déterminer et d''autres pièces semblent indispensable pour que l''œuvre continue avec un mal être persisté. Le second est : Admettons une Expérience de mort imminente, quelqu''un en revient en disant avoir rencontré Dieu, et il est en pleure, parfois désespéré du retour, parfois si bien entouré qu''il se sent tant aimé, ce qui me dérange moi dans cet aspect c''est 1 pourquoi ce qui est Dieu dans cette rencontre communique encore avec des mots et en ayant aussi faculté à les relier ? Et 2 pourquoi alors, naissons nous et allons vers des mots pour apprendre des correctifs internes, alors qu''à l''intérieur merci, mais je ne ressens pas le besoin d''avoir des Français en masse, qui ne sont pas des êtres doués d''amour ai-je pour impression.
+
+D''abord, il faut pardonner ces êtres humains que nous pourrions considérer lâcheurs. Car, ce n''est pas de leur fait souvent. Ils s''aimaient, ils enviaient la parentalité, et l''amour de l''enfant, et cela c''est malheureux mais cela ne perdure pas en chacun et peu de gens le disaient avant. L''amour d''un enfant est comme l''amour d''un autre, il vient comme il part, car il ne sert pas à ce que tu sois en amour. Et cela, seul, justifie le départ selon moi de quiconque, déçu de ne pas être en capacité d''aimer la création qu''ils s''attendaient à ne pas pouvoir en eux perdre, et désaimer. Alors considéré perdu en leur amour, eux peuvent suivre cette information et privilégier de se perdre à leur tour.
+
+Alba se détachera de sa vie pour devenir une femme, qu''est-ce que cette tournure est dérangeante. Il me semble que l''on peut se détacher de sa vie. La vie, elle n''est pas constituée de parent. Et pour devenir une femme, bravo, cela n''est pas dans mon registre mais y a t il quelque chose à faire pour devenir femme, pour moi les femmes sont depuis filles. Quelle est la différence de signification entre une femme et une fille si ce n''est le modèle de l''âge ?
+
+"Elle se souvient de ses dix ans. Plongée dans son bain, l''eau à la poitrine et les cheveux mouillés flottants, pieuvre sur ses épaules."
+
+Ecrit dans cette forme, il y a une double lecture : Plongée dans son bain à ses dix ans, ou d''où elle se souvient de ses dix ans. Alors, la perspective est bien lue, l''origine disait à ses dix ans. Mais ici c''est d''interroger, n''est-il pas venu le temps de retrouver ses dix ans, le bain, et l''eau et de se dire papa comme maman, ou maman comme papa, puisque j''ai rapproché papa par symptôme du besoin d''Alba. A chacun viendra le tour, comme une page nouvelle.', true, true),
+  ('21a71fef-40f9-80ce-80be-cbdf57e1387f', '21a71fef-40f9-80ce-80be-cbdf57e1387f', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 22, 'd14a3f5f-ee62-4960-8c83-c6883a58af5a', 'Quelle signification dois-je trouver en cette légère redondance mise en œuvre par votre liberté ? Est-ce que cela signifie, comme je le craignais, que je ne me sois barricadée dans un monologue intérieur ?', true, true),
+  ('21a71fef-40f9-80b3-8f8b-c3931ab42453', '21a71fef-40f9-80b3-8f8b-c3931ab42453', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 23, '5ebad498-92fe-4c7d-b3b1-b22668c52f6a', 'J''ai écrit cela ainsi pour évoquer des mots. Mais comme il y en étaient assez, je me suis arrêté.
+
+Cet amour, Alba, avez-vous peur de le perdre ?
+
+Alba avait 5 ans, elle était seule dans sa chambre. Enfin seule, avec son espoir que quelqu''un vienne l''y trouver pour lui sourire. Et lui demander, de partager sa chaleur et d''atteindre son réconfort. Et ainsi commença son monologue intérieur, trop présent, et à transformer, car oh oui son cœur mérite une grande attention, et contient beaucoup de sensations des plus admirables, douces, et délices.
+
+Alba était trop jeune pour voir que le visage prend forme pour rendre compte de l''état émotionnel, et sa grand-mère avait son souffle brisé. Car elle ne souhaitait plus, après le départ de son conjoint, l''amour n''exista plus. Car oui, pour cette famille l''amour était dans l''abandon. La croyance, que l''amour peut se dissocier, et se disperser, alors qu''en vous si vous le trouvez. Vous le saurez, il sera là en liberté, quiconque est là en réalité.
+
+La grand-mère d''Alba, avant de la rencontrer, pleura, et se demanda, comment puis-je l''accueillir. Comment m''accueillera-t-elle, une femme, un monstre dans cet état délabré. Vais-je être en mesure de l''aimer. A la hauteur de ce que la bouteille est pour moi, difficile à remplacer, souvent là, jamais ne m''ayant abandonnée, et surtout m''ayant permis de ne pas repenser encore au mal que me fit vivre la vie humaine, du départ de ce que j''estimais l''amour de ma vie. D''autant que l''alcool a l''image de ce qui purifie, et nettoie tout en profondeur. Aussi celle de la douceur du sucrée, et du vécu. Et quand nous est ajouté en nous la peur de vieillir, comment voulez vous faire sans savoir que vous pouvez y remédier en disant quelques mots comme. A vieillir, je muri de grâce et j''aime cela, je deviens belle, et une meilleure créatrice, en harmonie à ma nature, et à l''amour immense, et intense qui m''appelle.
+
+Alba : '' Je t''aime Maman, et je suis bien-heureuse de l''être aussi."
+
+Les parents d''Alba se disputaient peu. Non car ils ne l''appréciaient pas, mais y compris à la résolution de conflit. Cela ne changeait pas en leurs états. Contrairement à d''autres qui adorent mijoter, pour finir en passion sous les draps et ce qui engendrera le recommencement d''un nouveau débat en arrivant là. 20 ans, à se dire qu''ils ont été pour cela, semble difficile à admettre aussi. Comment étaient ses parents ?', true, true),
+  ('21a71fef-40f9-80af-9804-e620470a4c7a', '21a71fef-40f9-80af-9804-e620470a4c7a', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 24, 'd14a3f5f-ee62-4960-8c83-c6883a58af5a', 'L''amour dans la peur abandonnique, puis l''amour dans l''abandon comme une conséquence inévitable.
+
+L''amour est là si on le cherche, partout ou presque, nous avons la chance de pouvoir se le dire. Mais alors c''est un choix qui s''impose à nous, choisir de le voir. Pour survivre ?
+
+Pourquoi si peu de personnes font elles ce choix ? Comment ne leur est-il pas imposé ? Mon esprit est bien étroit que de ne voir l''amour que d''une certaine façon je pense.
+
+La grand-Mère reste un personnage aux reflets obscurs, aux contours pas très bien délimités. Ses caractéristiques ne lui sont données que par les sombres moments qu''elle a fait vivre à cette enfant, et par les souvenirs d''un père meurtri. Elle a perdu son grand amour en effet, selon ses dires. Et la peur de vieillir, pour cette ancienne « fille de joie » était bel et bien à prendre en considération. Il y aurait tellement à dire.
+
+Les parents d''Alba se disputaient énormément, et, sans doute que quelque fois la fin était heureuse. Globalement, beaucoup de verre brisé, de cris, de violences et d''insultes. Des tromperies. Une mère construite dans le drame qui ne sait vivre qu''en le reproduisant par la forme de l''envolée lyrique, du scénario, y compris celui de l''amour et de la passion. Un père absent, parfois violent, (avec un profond sens de la justice et du respect étrangement) mais jamais contre Alba.
+
+Mais aussi quelques moments magiques, d''amour vrai, de rires. Heureusement.
+
+Là aussi il y aurait tellement à dire.
+
+20 ans de comédie, 3 enfants, beaucoup d''amour au départ c''est ce qui a marché. Puis, peu de savoir-faire humain en fin de compte. Un manque cruel d''empathie des deux côtés a empêché cet amour de survivre. Et puis la douleur chronique d''une femme déjà affaiblie par ses démons hérités.
+
+Merci.', true, true),
+  ('21a71fef-40f9-802c-9a46-dc6cc987d091', '21a71fef-40f9-802c-9a46-dc6cc987d091', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 25, '5ebad498-92fe-4c7d-b3b1-b22668c52f6a', 'Ce n''est pas fini, mais je m''excuse il m''est venu une lecture narrant l''origine que je dois aborder.
+
+Vous avez dit, de manière très juste, mon monologue intérieur, et finalement je ne l''ai pas rejoint car j''ai utilisé Alba. Voici ce pourquoi l''ai-je privilégié, non pas que le je, n''étais pas correct pour cette narration, je serais ravie de faire aimer ce je de l''intérieur. Mais ce n''est pas encore le temps, car cela montre une chose, le dialogue intérieur n''est pas un monologue. Par exemple, je pourrai me dire, que vais-je manger à midi ? Et me répondre, ah je vais manger du crabe. Si j''ai la réponse déjà alors pourquoi me suis-je posé la question. Car les deux ne sont pas les mêmes ! Cela est l''une des choses qui m''inquiète pour cette histoire qui n''est autre qu''une proximité à ce que certains appellent mondes invisibles. Je ne veux en dire davantage, mais si vous cherchez bien sans vous arrêtez aux on dit, on enseigne, blablabla. Peut-être trouverez vous des informations qui déboussolent l''amour en énergie, et pourtant le remet à une place considérée de haute estime, et de bien-être.
+
+L''autre aspect est distinct. En m''exprimant à Alba, depuis la volonté que ce soit je, c''est comme un accueil intérieur que de dire que les mots seront prononcés depuis soi en quelque sorte. C''est beau, et parfois dangereux, mais il y a un espoir que ce vide se remplisse, car celui-ci était prévu pour que l''intervention parvienne de ce manque présent afin de le combler par ce qui était à cette place. Cet amour de vous, que j''interprète pour le présenter dans un texte sur cet origine de nous. J''ai eu un peu de difficultés à écrire, car il m''était venu bien d''autres mots avant, mais je n''étais pas sur l''écrit pour les rédiger.
+
+Alors, pour ces 3 enfants, je me demande, ont-ils ensemble osé aborder ce sujet délicat ? Était-ce trop douloureux, ou indélicat de parler de ses parents lorsque nous ne savons plus comment en avoir l''image d''une merveille, et d''un couple uni, aimant ?
+
+Je ne ressens pas, mais je sais, je t''aime.', true, true),
+  ('21a71fef-40f9-8021-bfca-f290576148ac', '21a71fef-40f9-8021-bfca-f290576148ac', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 26, 'd14a3f5f-ee62-4960-8c83-c6883a58af5a', 'Nous pouvons avoir la réponse à ce que nous avons mangé à midi sans pour autant être sûrs du goût que cela laissera en nous, comme empreinte à l''avenir, madeleine de Proust au passé. Sans parler de la digestion ! C''est peut-être pour cela que le dialogue est là. Juste là. Pouvons-nous cesser de chercher à déboussoler l''amour ? N''est-ce pas là une sorte de provocation à soi, et par extension, à vous ?
+
+Par ailleurs, en quoi est-il inquiétant que cette histoire soit une proximité à ces mondes invisibles ?
+
+Ces trois enfants ont chacun une histoire qui, partant du même petit chemin, a pris des chemins de traverse, sans bitume ni cheval...
+
+Je comprends que vous aimez interpréter. Peut-être votre dialogue intérieur a t''il été déjà très riche.', true, true),
+  ('21b71fef-40f9-80ef-b99d-fec8f6b40346', '21b71fef-40f9-80ef-b99d-fec8f6b40346', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 27, '5ebad498-92fe-4c7d-b3b1-b22668c52f6a', 'C''est une chose qui m''inquiète, si les mondes invisibles ont besoin de faire incarner l''expression utilisée dans un contexte pour justifier qu''elle est bonne au moins où elle s''écrit. Exemple, je mange du crabe, et là le monde invisible est vivant, et peut-être mémorisé au fait que d''un quelqu''un mange du crabe, deux que ce soit une vie que je doive avoir pour justifier l''usage des mots. Hors ne voulant ni manger de crabe, ni ressentant cela pour un amour, comment le supporter à tel point. C''est plus encore que l''immensité du langage. C''est l''immensité de la gravité du réalisme face aux mondes invisibles.
+
+Il est possible de ne pas déboussoler l''amour oui. Comme se décider à suivre un rêve semble pour moi ne plus le déboussoler mais suivre la direction de celui-ci. Mais cela a-t-il seul vocation d''être en incarnation et présence, ne puis-je y espérer mieux que d''exister ? Moi j''adore le vide, et dans le réel, le vide on ne peut pas l''être. L''atteindre.
+
+"Mais alors c''est un choix qui s''impose à nous, choisir de le voir. Pour survivre ?"
+
+Oui, c''est aussi cela. Comme celui de choisir ce que cela est d''être ce que l''on veut et ce que cela requiert de le développer. Ou, comment devenir l''être que l''on estime être, afin de coller à son propre amour le plus vaste. Mais, cela peut se rédiger, l''identifier et l''être est différent, moins évident par les divers biais d''esprits, d''émotions, de mémoires....
+
+"20 ans de comédie, 3 enfants", " Des tromperies", "Fille de joie".
+
+Alors 20 ans de comédie, resteriez vous observer un film qui devient moins amusant 20 ans ? Pas moi. Donc ces 20 années sont pleines d''espoirs, et de rôles variés. Dont la tromperie, mais envers qui ou quoi, soi même, l''autre, ce qui est éprouvé. Au final, de mon passé j''ai vu une femme amoureuse d''un ex, et vous savez, elle ne l''était plus, mais quand bien même par respect et parce que l''amour est indiscutable donc cela ne pouvait pas ne pas l''être quand il était, est selon moi l''aspect. Qu''il n''y a pas tant tromperie, alors qu''il y a déjà en l''autre plusieurs amours permanents, et souhaités, ou conservé comme un musée.
+
+Et pour ce qui est de fille de joie, j''ai rencontré une femme qui vivait dans la rue parfois, souvent et qui courait dans une direction, dès qu''elle lui venait. Elle est une femme droguée, et c''est ainsi. C''était son objectif, courir après ses sensations d''orgasme intérieur que lui procuraient parfois, et quelque fois cette consommation. Alors que cela aussi lui faisait du mal, mais elle travaillait avec, elle observait ses réactions, ses capacités à consommer de la qualité ou non, et d''être témoin des effets de ces différences. C''est une femme pour le moins étrange, et originale. Mais elle avait quelque chose de spécial. Je pensais des choses à son propos, et en la retrouvant, elles les œuvraient en réalité. Et cela, aurait dû me faire l''aimer, car elle était l''abandon à ce que je pensais d''elle, comme si elle savait que c''était cela que j''avais imaginé qu''elle devienne, n''est-ce pas une preuve d''amour conséquente immense. Pourtant ce ne fit le cas, je ne parvenais pas à sentimentaliser cette relation. Mais c''est ce que je me suis dit, les filles de joie, sont souvent telle qu''elle est, à s''abandonner à toutes les pensées, les volontés de ce qu''elles peuvent incarner pour représenter l''aimer. Et forcément, en réalité, comme l''aspect général est dirigé vers le faire l''amour pour prouver que l''amour est entre deux êtres humains. Et qu''il n''y a pas de place sociale, et de métier pour être cela dans de meilleures conditions. Leurs expressions font peine à voir, mais elles sont magnifiques dans la vérité, de ce qu''elles sont en leurs êtres.', true, true),
+  ('21b71fef-40f9-80a0-a49a-cd291877bb01', '21b71fef-40f9-80a0-a49a-cd291877bb01', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 28, 'd14a3f5f-ee62-4960-8c83-c6883a58af5a', 'Je dois clarifier avec vous cette notion de mondes invisibles. Pour le peu que j''en sache, il semblerait que celui puisse être, facilement je vous le concède, synthétisé comme étant tout ce qui échappe à nos sens ? Est-ce bien cela ?
+
+Je n''ai, pour être honnête, jamais entendu parler de cette expression. De mon côté, j''aime à croire qu''il existe une infinité de mondes parallèles, la raison de ces croyances étant bien difficile à justifier, ayant lu des dizaines de livres de physique quantique et retenu seulement ce qui me permet d''y croire, ou d''aimer y croire plutôt, car la seule chose dont je sois sûre est que je ne sais rien (sans vouloir reprendre des propos).
+
+Si je peux faire un pont entre les mondes invisibles appelés ainsi et ces mondes parallèles, je comprends alors mieux votre inquiétude sur « la gravité du réalisme ». En revanche elle ne m''inquiète pas plus que ça dans la mesure où je pense que chaque mot est à sa place, comme vous avez déjà pu le dire. Chaque chose, chaque expression. Nous faisons peut-être mieux ailleurs, dans un autre espace-temps, et nous faisons aussi pire. Ainsi va.
+
+Dans cette perspective, je me demande ce que vous entendez par « vide ». Peut-être aimez-vous le vide pour ce qu''il vous fait vous sentir remplit ? Car le vide est si plein selon moi... il sait justifier en lui même le fait que tellement de choses invisibles pour nous se bousculent et créent des réactions qui nous échappent. La vie, l''inertie du mouvement ne nous attends pas et se fait bien bousculer pourtant. C''est pour cela que je crois que nous avons le droit d''utiliser tous les mots que nous souhaitons, il y a par ailleurs un immensément petit et un immensément grand qui ne nous attendent pas pour exister et nous faire exister de la seule façon qu''il soit possible d''exister, dans cette réalité du moins. Et je crois aussi que poursuivre son rêve par exemple, nécessite au contraire de bousculer beaucoup de « choses », et de déboussoler l''amour, sans cesse. Pour toujours le remettre à sa place par contre, une place mouvante.
+
+Ces 20 années sont beaucoup plus riches que ces quelques lignes comme résumé soporifique, évidemment. Il y a une multitude d''amour différents je le sais bien, dont nombreux sont ceux qui échappent à nos sens et surtout à notre logique. Et de la même manière que je trouve correct de pouvoir aimer manger du crabe, il l''est de faire vivre une relation 20 ans et au delà. Quand bien même elle n''est plus, elle restera. Vivre et y assister n''est pas tout à fait pareil. Dans l''un des cas nous sommes acteurs et dans l''autre spectateurs. C''est ce qu''il en reste pour les deux camps qui me questionne justement, chercher à trouver la réponse à cette question ne me rendant pas nécessairement une meilleure personne mais parce que c''est comme ça, point.
+
+Quant à ces « filles de joie », je ne pourrai parler de chacune d''elle, chacune étant différente. La vôtre est bien originale, et touchante. J''ai déjà entendu dire, et moi même pensé que l''abandon de soi à l''autre était une belle chose. Une déroute bien altruiste, une beauté sous-estimée. Mais ce n''est pas du tout l''histoire de la personne à laquelle je pense. Enfin, qui suis-je pour le dire, ce n''est pas ce que j''ai ressenti auprès de cette personne. Il y a des personnes qui font de leur mieux pour exister, s''accrochant à ce qui se présente sur leur chemin comme autant de bouées. Il y en a d''autres dont les bouées sont la souffrance extérieure à eux. Peut-être pensent-ils que comme ça ils en seront protégés ? Je ne sais pas pourquoi et c''est bien ça qui m''intrigue dans la nature humaine. Ce que je retiens d''elle ce sont les insultes, l''humiliation, la douleur physique, celle morale. Ses cheveux rouges et son odeur âpre, son port de tête fier. Cette femme a tué, violenté, usé, abusé, sorcellé aussi. La rue n''est pas son histoire, la prostitution non plus. Elles ne sont que des anecdotes face à l''immensité des peines qu''elle a causé, parce que justement, elle avait les moyens de nuire.
+
+Pourquoi vous dis-je cela ? Je n''en sais rien, je me laisse porter par le fil de notre échange. J''aurais aussi pu vous dire tout l''inverse, mais je préfère ne pas trop intellectualiser et planer sur l''inertie des mots qui s''enchaînent (dans tous les sens du terme).', true, true),
+  ('21c71fef-40f9-80ee-b093-d379080a40fb', '21c71fef-40f9-80ee-b093-d379080a40fb', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 29, '5ebad498-92fe-4c7d-b3b1-b22668c52f6a', 'Le rêve a deux sens et un sens commun. J''étudie le rêve en ce moment, et comment le développer. Je ne parviens pas à découvrir de finalité à mes recherches. Pour autant, je crois qu''il existe le rêve de la nuit, pour ceux ayant besoin d''aller vers l''être conscient. Et le rêve de jour pour ceux ayant conscience déjà qui est en lumière. Le rêve, est dans les deux cas, la mise en place d''une réalité formée dans la nuit. Car la nuit, est plus proche de ce que les gens, ou ce qui était a appelé à donner vie, Dieu, dans une version nouvelle. Afin, davantage d''ouvrir les consciences, l''expansion d''amour pour la réalisation d''un monde de rêves réels. Le paradis me semble être cela, le devenir des rêves, d''amour dans le vivant, et dans les mondes.
+
+Ce qui est ''vide'', est au delà du vide, et du non vide. Il n''est plus rien en quelque sorte, je ne sais pas si c''est conceptuel même ou si cela n''est possible. Mais, je suppose que cela est en faits la perspective de l''ego sur l''amour car il n''est pas en dedans et donc sa seule perception est que c''est vide car il ne peut y être. Tandis que l''être lui ne peut concevoir et vouloir un tel vide, car lui s''il est, est lumière et aime avec et donc le vide n''est pas il n''est que ce qui le contient davantage pour expansionner son amour au delà des possibilités lucides qu''il est déjà.
+
+"C''est ce qu''il en reste pour les deux camps qui me questionne justement". Pourquoi, est-ce important pour vous ? Qu''en reste-t-il pour vous n''est il pas la seule chose d''importance ? Puisque vous ne pouvez intervenir sur leurs visions de ce qu''il en reste pour eux. Peut-être d''ailleurs est-ce juste cela. Il leur reste le vide. Et si c''est cela le résultat cela devrait vous aller, puisque vous savez parler du vide, et l''apprécier comme tel ?
+
+"J''ai déjà entendu dire, et moi même pensé que l''abandon de soi à l''autre était une belle chose"
+
+Oui, comme quoi on peut entendre de tout. Disons, que je ne partage pas ce point de vue. Et pourtant, il semble que cela soit la seule possibilité qui crée de l''amour entre deux êtres humains, sans cette part, son énergie ne peut aller en l''autre pour procéder à l''échange nécessaire à ce qu''il perdure et se crée...
+
+"Cette femme a tué, violenté, usé, abusé, sorcellé aussi."
+
+Sorcellé, est souligné en rouge, je me demandais bien s''il existait ce mot. Mais, d''accord.
+
+Tué, je n''ai pas osé rencontrer ces personnes, mais selon moi, la science sociale étudie en quelles histoires, le meurtre ou la violence pourra être. Notamment, les phénomènes de foules, l''expérience des prisonniers dont je ne sais plus le nom, le besoin d''héroïsme devant une personne arrêtant le meurtre envisagé ou la violence faite à quelqu''un. Mais mon point de vue, est que tout cela est ridicule et catastrophique, car cela a besoin de tentatives de meurtres et d''existence de violence pour être. Je crois, que la vérité, devrait travailler à faire que le héros, soit la personne vivant la situation, et ne la faisant plus être parce qu''il devrait se rendre compte que cette source de violence est amenée à lui par volonté, et non parce que la nature est violente.', true, true),
+  ('21c71fef-40f9-8070-8ca9-f5cd52695844', '21c71fef-40f9-8070-8ca9-f5cd52695844', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 30, 'd14a3f5f-ee62-4960-8c83-c6883a58af5a', 'Le rêve est donc formé dans les deux cas dans l''inconscient ?
+
+Je connais une personne qui dit savoir prendre place dans ses rêves de nuit et pouvoir les orienter, en faisant simplement des exercices de visualisation de son corps comme autant de rituels avant de s''endormir.
+
+C''est drôle, lorsque que vous avez évoqué le rêve, je n''ai pensé que celui du jour comme objectif de vie. Pourtant je n''en ai pas, du moins j''ai accepté ne pas tendre vers cette utopie ; alors que ma vie nocturne, elle, est bien remplie et que ses messages me sont toujours évidents. Qu''en est il de la vôtre ? Pourquoi étudier le rêve ?
+
+Je pense que le vide n''existe pas, en dehors d''une sorte de plénitude. C''est d''ailleurs ce que décrivent les personnes ayant vécu des expériences de « mort imminente » et qui utilisent ces deux mots souvent ensemble, j''ai remarqué. Peut-être que ce vide existe mais qu''il est inconcevable effectivement. Pour l''instant.
+
+C''est important pour moi de comprendre ce qui reste des deux camps, tout en en ayant fait le deuil, avec délectation. Disons que c''est comme une petite question qui m''accompagne et me guide pour éviter de tomber dans certains pièges, mieux vivre dans le monde tel qu''il existe, ouvrir ma conscience. Me donner j''imagine l''impression que je ne me ferai à l''avenir ni ne ferai à autrui le mal que je connais, car seul celui-ci m''est accessible. C''est un rappel à moi constant plus qu''un questionnement, car ce travail je l''ai déjà fait avant qu''il ne se présente à ma conscience, je le sais maintenant.
+
+Je ne sais pas si je sais apprécier le vide comme tel, j''en parle mais c''est un exercice de visualisation très difficile à réaliser tout comme il peut être difficile d''imaginer qu''il n''existe ni d''espace ni de temps, et que nous ne savons pas dater le début de l''univers, si tant est qu''il a un début, ou même conscientiser la notion d''univers pourtant tellement utilisée comme repère. Enfin, je crois que nous avons tous besoin de repères, et c''est bien pour cela que le langage existe, pour se représenter les choses. Donc le vide, qu''elle quelle aberration (rires) !
+
+Si l''abandon de soi à l''autre est la seule manière de créer l''amour mais que vous ne partagez pas ce point de vue, croyez vous en l''utilité de l''amour ? J''ai l''impression que là aussi, c''est une notion très intime et bien difficile à définir !
+
+« Sorcellé » m''est venu naturellement et je me doutais bien qu''il n''existait pas ; dans le doute, je n''ai pas vérifié car il me paraissait juste, même si d''autres existent aussi.
+
+Je suis bien d''accord sur la finalité de votre paragraphe, et peut être même qu''il s''agit là du petit rappel à ma conscience tel que je le décris plus haut.', true, true),
+  ('21c71fef-40f9-805e-af03-eb83bb865034', '21c71fef-40f9-805e-af03-eb83bb865034', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 31, '5ebad498-92fe-4c7d-b3b1-b22668c52f6a', 'Le rêve est donc formé dans les deux cas dans l''inconscient ?
+
+Non, du point auquel je suis arrivé, c''est et ce n''est pas à la fois. Le rêve physique, provient lorsqu''il peut se capter de l''inconscient et de la conscience de l''être humain. Ainsi, c''est une forme intégrant les deux états en un, ce qui est amour peut alors s''approximé par l''être conscient des inconscients disponibles, et de faire vivre celui qui est présent dans le meilleur potentiel. Car c''est celui auquel on essaie d''aspirer, et pour certains c''est celui qui nous aspire vers lui. Et pour ce qui est du rêve la nuit, honnêtement, c''est bien beau de rêver et de se déplacer en conscience dans le rêve, mais qu''est-ce si ce n''est être l''inconscience menant un autre en une existence ne nous appartenant pas ? En fait, je pense que c''est une mauvaise lecture, et qu''il faut identifier ce qu''est le rêve. Car il me semble qu''il est l''apprentissage de comment créer la conscience du rêve, et l''amener alors dans son présent, et dans ses vies induites, humaines, ou extraterrestres, pleidaiens.... Disons ce mot pour exemple d''une autre espèce similaire. Mais ce rêve, lui même j''étudie pour l''origine, car mes rêves sont proches du réalisme, alors que je veux vivre des rêves merveilleux, des rêves quoi, pas des vies. Puisque c''est le moyen qui semble être proposé pour cela, atteindre des mondes merveilleux, au moins la nuit pour revenir à la vie, sans perdre espoir que les meilleurs des mondes sont aussi proches de la Terre que des autres systèmes dits éveillés.
+
+Dans mon étude sur le rêve, j''ai aussi abordé l''exemple de la mort imminente. Quel est votre avis sur ce que cela est ? Encore, ici ce ne sera qu''une perspective, et puisqu''elle ne me fait être en résonnance en la rédigeant, je préfère éviter de donner un point de vue.
+
+Et la vue est intéressante, car je ne fais pas de visualisation dans ma marche sur les chemins. En revanche, voici une expérience que je peux vous proposer, que je n''ai jamais vu proposée. Le vide, où est-il si ce n''est aux origines, alors j''ai essayé ceci, remonté aux origines d''où proviennent les pensées, d''où provient la vue comme en se concentrant sur les pupilles et en essayant non plus de voir l''extérieur, mais de revenir à l''origine profonde de l''œil. Je ne sais ce que permet cette pratique, mais si cela vous intrigue. Peut-être serez vous plutôt dans un vide, ou quelque part qui produit de ?
+
+"Si l''abandon de soi à l''autre est la seule manière de créer l''amour mais que vous ne partagez pas ce point de vue, croyez vous en l''utilité de l''amour ? J''ai l''impression que là aussi, c''est une notion très intime et bien difficile à définir!"
+
+Je ne partage pas le fait que ce soit beau cet abandon, c''est plutôt que la douleur est insupportable de ressentir le vide alors que l''aspect plein est découvert, et disponible à être en étant en lien à cet autre.
+
+Oui je crois en l''utilité de l''amour tout à fait, pas pour faire des histoires d''amour, bien que sans elle comment supporterions nous vivre, pour quoi d''autre de si agréable ? Et parce que ces histoires d''amour, sont celles qui ont le plus d''aspect dont nous avons la responsabilité pour être et accueillir le vivre en amour, qui n''est pas simple avec un corps qui brûle ardemment la lumière comme si le corps allait se consumer. Encore, cela dépend des programmes d''amour, c''est ce que présente "les feux de l''amour" je pense. Quels sont les feux de l''amour, parce que cela n''est pas enseigné mais l''amour a aussi plusieurs possibilités, l''amour par plaisir, intense, et passion. L''amour par paix intérieur, sentiment de sécurité avec l''autre, et de justice. Ce sont des valeurs énergétiques devenant instantanément comme bruts, et en fusion.', true, true),
+  ('28171fef-40f9-80a4-bd50-ea27d7919be0', '28171fef-40f9-80a4-bd50-ea27d7919be0', 'f071ce10-85dc-415d-96c9-fd008ba9daaa', 32, '5ebad498-92fe-4c7d-b3b1-b22668c52f6a', 'Ainsi était Du langage et de l''origine.
+
+Qu''est encore absent de ce livre ?
+
+Les questions, que sont-elles de plus dans le langage.
+
+Les gestes, automatismes, contraints, ou conscients, n''est-ce que le même langage, ou passe-t-il différent pour chacun par principe de l''individu.
+
+Nous aurions pu écrire amour en 100 langages, et demander, lequel résonne le mieux en votre cœur. J''avais déjà écrit une histoire, contenant 31 je t''aime consécutif, en français uniquement, qui demandait aux lecteurs de ressentir à qui était adressé chacun, afin de les faire développer leurs ressentis, et facultés de connexion. Mais cela n''a pas été lu.
+
+Que l''âge apporte-t-il au langage ? Est-ce plutôt la personnalité, qui permet aux êtres humains d''exprimer leurs émotions, ou leurs programmes, l''un dans l''autre, et les imbrications d''autres en l''un. Et comment faire de ces langages pour que cela s''arrête et que soit parvenu la présence de l''amour dispensée d''être.
+
+Alors il y avait aussi la possibilité de se répondre en lisant nos phrases à l''envers, et en y répondant. Ou en écrivant n''importe quoi tel que : si tu peux aller où tu demandes de prier vers laine est sans détour la hausse du pont va vite. Et attendant une réponse à cela comme si c''était compris en soi, en profondeur, en sensation et que cela est bien assez comme langage. Ou faire le jeu proche, d''écrire une phrase, de la mettre à l''envers comme ceci : j''irai te chercher, et t''aimer dès que possible, et l''écrire : elbissop euq sèd remia''t te, rehcrehc et iari'', . Voilà, il existe tellement de possibilités d''examiner et explorer la faculté humaine avec les langages.
+
+Voici un dernier message : Aia anhala aia mei lawana mauhä pei lana e, mei ito akapa awane ilo eiainala oh an amohana aalaia ria airaia aiya raî.
+
+Merci Alba, et merci à Juliette.', true, true),
+  ('1ad71fef-40f9-8028-90d5-e45f4c7334db', '1ad71fef-40f9-8028-90d5-e45f4c7334db', 'd0a5918e-8cca-4ac7-95a0-393d0564b7f8', 1, '4d406103-f605-4122-a234-03f57028b953', 'Il était une fois 3 amis qui se baladaient quand ils entendirent un bruit.', true, true),
+  ('1ad71fef-40f9-8001-9743-f3ddc9f68b26', '1ad71fef-40f9-8001-9743-f3ddc9f68b26', 'd0a5918e-8cca-4ac7-95a0-393d0564b7f8', 2, 'f56db665-2fbc-4f7c-9ddc-4a1885f00a67', 'Ça venait d''un buisson à côté d''eux. Soudain ce bruit recommença. Ça faisait comme le cri d''un crocodile couplé au roucoulement d''un pigeon. On décidait donc de regarder d''où cela provenait, alors je tendis les bras pour regarder ce qui se trouvait derrière le buisson et on trouva un dragon.', true, true),
+  ('1ad71fef-40f9-8058-b76f-ee6245943255', '1ad71fef-40f9-8058-b76f-ee6245943255', 'd0a5918e-8cca-4ac7-95a0-393d0564b7f8', 3, 'c7385ffb-e83b-4455-bae7-d842217bc4d1', 'Un gros dragon qui ne semblait pas bien du tout. Ils s''approchèrent. Le dragon saignait du sang vert ! Etonnés, ils regardèrent le dragon de plus près.
+
+- Eh bien dites donc il y a du sang vert ! On aura tout vu ! S''écria Margaux.', true, true),
+  ('1ad71fef-40f9-8038-ac53-fd5895eca31e', '1ad71fef-40f9-8038-ac53-fd5895eca31e', 'd0a5918e-8cca-4ac7-95a0-393d0564b7f8', 4, '4d406103-f605-4122-a234-03f57028b953', 'En s''en rapprochant ils découvrent un œuf.', true, true),
+  ('1ad71fef-40f9-8081-92fa-c0c1a3d9f2bc', '1ad71fef-40f9-8081-92fa-c0c1a3d9f2bc', 'd0a5918e-8cca-4ac7-95a0-393d0564b7f8', 5, 'f56db665-2fbc-4f7c-9ddc-4a1885f00a67', 'Il était de couleur crème avec de petites taches vertes.
+
+- Je pense qu''il doit faire environ 30 cm ou un petit peu plus. Dit Charlie.
+
+- Euh, juste pourquoi vous n’avez pas peur de lui ? dit Mouna qui tremblait à 2 mètres derrière eux.
+
+- Bah regarde, ce dragon doit être sacrément blessé vu la taille de cette flaque de sang qui si je m’en approche trop risque de tacher mes nouvelles baskets “ADADASSE” ! dit Charlie.', true, true),
+  ('1ad71fef-40f9-8082-934f-d5da28959c18', '1ad71fef-40f9-8082-934f-d5da28959c18', 'd0a5918e-8cca-4ac7-95a0-393d0564b7f8', 6, 'c7385ffb-e83b-4455-bae7-d842217bc4d1', '- Sérieux Charlie ! Tes baskets c''est pas le plus important. Il y a un dragon qui est blessé et toi tu te préoccupes de tes baskets. S''énerva Margaux.', true, true),
+  ('1ae71fef-40f9-80a0-a0c2-ee0d1b67041b', '1ae71fef-40f9-80a0-a0c2-ee0d1b67041b', 'd0a5918e-8cca-4ac7-95a0-393d0564b7f8', 7, 'f56db665-2fbc-4f7c-9ddc-4a1885f00a67', '- Bah oui de base je n''avais pas le droit de les mettre tout de suite donc j''ai promis à ma mère que je ne les salirai pas sinon je serais puni de télé pendant un mois alors qu''il y a la nouvelle saison de ma série qui va sortir. Franchement je ne peux vraiment pas me permettre de la rater ou je me taperais la honte au collège.', true, true),
+  ('1ae71fef-40f9-80f7-a9e3-de95af4dc7f3', '1ae71fef-40f9-80f7-a9e3-de95af4dc7f3', 'd0a5918e-8cca-4ac7-95a0-393d0564b7f8', 8, 'c7385ffb-e83b-4455-bae7-d842217bc4d1', '- Oui, bon c''est pas grave. Mais qu''est-il arrivé à ce dragon ? On dirait qu''il a pris une flèche, ou peut-être qu''on lui a fait une piqure qui s''est gravement infectée.
+
+- Comment tu sais ça ? Lui demanda Charlie.
+
+- Ma mère est chirurgienne, lui répondit Margaux.
+
+- Ah d''accord.
+
+- Mais ça n''explique pas pourquoi ce dragon est blessé, se demanda Mouna', true, true),
+  ('1af71fef-40f9-80fe-94f8-df336d8467f4', '1af71fef-40f9-80fe-94f8-df336d8467f4', 'd0a5918e-8cca-4ac7-95a0-393d0564b7f8', 9, 'f56db665-2fbc-4f7c-9ddc-4a1885f00a67', '- Moi tout ce que je sais c’est qu''il va vite falloir aider ce dragon sinon il va mourir ici. Dit Charlie.
+
+- En effet de ce que ma mère m''a raconté si une blessure qui s''infecte n''est pas soignée et qu''en plus elle saigne abondamment n''est pas très, très vite opérée il y a de grandes chances que l''individu qui est ici en l’occurrence ce dragon meure de souffrance que je ne peux même pas imaginer. Mais bon restons positifs et commençons par protéger cette vilaine blessure avec de grandes feuilles d''arbre que l''on attachera du mieux que l''on peut. Raconta Margaux
+
+- Ok, dirent Mouna et Charlie.
+
+En quelques minutes le groupe de trois enfants avait créé un magnifique et surtout très grand bandage pour ce dragon de quand même 3 mètres de haut ne l''oublions pas.
+
+- Mais où allons-nous les cacher ?! Il commence à se faire tard et même si c''est les grandes vacances il va falloir rentrer au camping où risque de s''inquiéter nos parents et si c’est le cas on peut être sûr que l''on sera privé de sortie tous les trois. Signala Mouna.
+
+Car malgré leur envie de sauver ce dragon et son œuf leur priorité est de rentrer à leur bungalow avant que leurs parents ne s''inquiètent et que tout le camping finisse par apprendre leur disparition et c''est sans compter l''interrogatoire qui va y avoir à leur réapparition pour connaître leur excuse et là ils risquent d''avoir du mal à inventer une histoire assez crédible pour ne pas être punis.
+
+- Je propose de cacher l''œuf dans le vieux cabanon au fond du parc, personne n''ira le chercher là-bas mais pour le dragon je n''ai pas beaucoup d''idées à part le camoufler avec des feuilles et espérer que personne ne vienne et puis il faut se dire que la médiathèque est fermée le soir à partir de 19 heures. Proposa Charlie.
+
+- D''accord répondirent les deux filles.
+
+10 minutes plus tard les enfants avaient fini de recouvrir le dragon de feuilles et avaient caché comme prévu l''œuf au fond du parc dans le vieux cabanon. Maintenant ils se dépêchaient de rentrer.
+
+Deux heures plus tard, c’est-à-dire à l’heure du dîner, les trois amis avaient supplié chacun de leur côté que leurs parents fassent la rencontre de deux parents de leurs deux amis tout ça autour d''un bon et chaleureux repas et leur parent sous l''imploration de leurs enfants ont accepté. Après le repas et leur dure journée, les enfants demandèrent à regarder un film à la télé et encore une fois leurs parents ont accepté.
+
+- Vous êtes bien installés les jeunes ? Demanda le père de Margaux
+
+- Oui papa maintenant laisse nous s''il te plait. Merci.
+
+En allumant, le volume s''était mis assez fort pour que de dehors les parents puissent entendre très clairement ceci.
+
+- Mesdames Messieurs, Bonsoir ! Nous interrompons très rapidement votre programme avec cette annonce alarmante : un dragon oui j''ai bien dit un dragon s’est échappé du centre “expédomaniale” du TAILLAN Médoc mais par chance son organe lui permettant de cracher du feu lui avait été retiré et de plus il est de l''espèce des dragons nains. J''apprends aussi qu''il est de plus, ou plus précisément, qu''elle est, car c''est une femelle et qu''elle attend un bébé, s''il n''a pas déjà été pondu.
+
+Donc si vous croisez soit cette dragonne ou son petit n''agissez pas seul et appelez soit les forces de l''ordre soit l''équipe de scientifiques qui les recherchent.', true, true),
+  ('1b071fef-40f9-8058-93e9-e36c1cc2b2bd', '1b071fef-40f9-8058-93e9-e36c1cc2b2bd', 'd0a5918e-8cca-4ac7-95a0-393d0564b7f8', 10, 'c7385ffb-e83b-4455-bae7-d842217bc4d1', '- Qu''est-ce qu''on va faire ? Se demanda Mouna.
+
+- Je ne sais pas. Lui répondit Charlie.
+
+- Mais en tout cas, pas question de les laisser faire. Leur dit Margaux.
+
+- On est avec toi ! Répondirent aussitôt Charlie et Mouna.
+
+Pendant qu''ils mangeaient, Margaux leur dit :
+
+- Attendez, comment se fait-il que l''organe du dragon ait été retiré ?', true, true),
+  ('1b171fef-40f9-8047-939d-e742528f673e', '1b171fef-40f9-8047-939d-e742528f673e', 'd0a5918e-8cca-4ac7-95a0-393d0564b7f8', 11, 'f56db665-2fbc-4f7c-9ddc-4a1885f00a67', '- Je ne sais pas, mais j''ai la vague impression qu''on va vite le savoir, dit Mouna
+
+- J''espère qu''ils ne l''ont pas utilisé pour faire des choses pas très nettes comme une arme dangereuse et quel que soit cet organe, disons le plutôt incroyable, étant donné qu''il permet de faire du feu, je ne sais comment… ou alors on l’a retiré à ce dragon seulement pour être étudié, pensa Charlie à voix basse.
+
+- Moi je veux juste regarder le film et qu''il ne trouve pas le dragon et son bébé, dit Mouna en reprenant une bonne grosse poignée de pop-corn.
+
+Et la soirée continua remplie de fous rires devant un bon film tout ça jusqu''à ce que la soirée se termine et que les enfants soient séparés pour aller se coucher dans leur bungalow. Le lendemain comme prévu, ils se retrouvent à la médiathèque et c’est là qu''ils découvrent que le dragon a disparu et à la place, le terrain a été retourné comme si on avait cherché quelque chose.', true, true),
+  ('1b371fef-40f9-805b-8f96-ffd523b82007', '1b371fef-40f9-805b-8f96-ffd523b82007', 'd0a5918e-8cca-4ac7-95a0-393d0564b7f8', 12, 'c7385ffb-e83b-4455-bae7-d842217bc4d1', '- Où est-il passé, s''inquiéta Margaux.
+
+- On ne l''a tout de même pas enlevé, dit Mouna.
+
+Pendant toute la matinée, les trois amis réfléchirent à toutes les possibilités.
+
+- Et si des personnes avaient capturé le dragon, réfléchit Charlie.
+
+- Attendez, on a qu''à chercher s’il y a des sites de chercheurs de dragons, remarqua Mouna.
+
+- Pas bête du tout, la félicita Margaux.
+
+- Regardez ce que je viens de trouver, dit Charlie en faisant des recherches sur l''ordinateur.
+
+Il découvrit une annonce qui l''intéressa.
+
+“Je m''appelle Antoine et je suis un chercheur contre les dragons et je veux tous les éliminer. Retrouvez-moi sur mon site Facedebouc :  "Elimination des dragons. fr @ ANTOINE. Rejoignez-moi !”', true, true),
+  ('1b771fef-40f9-8043-8caf-e4bb327aceab', '1b771fef-40f9-8043-8caf-e4bb327aceab', 'd0a5918e-8cca-4ac7-95a0-393d0564b7f8', 13, 'f56db665-2fbc-4f7c-9ddc-4a1885f00a67', '- Quoi ?! Comment on peut dire ça des dragons ?! s''exclama Mouna.
+
+- Je me demande comment des gens peuvent faire ça, en plus là je viens de me connecter à sa page “facedebook” et il est suivi par plus de 7 millions de personnes et 6,8 millions de personnes ont fait don d''argent pour sa cause, de quelques euros à des centaines de milliers, de ce que j''ai pu voir ou plutôt pirater de son compte, montra et expliqua Charlie aux filles.
+
+- Depuis quand tu sais pirater un compte ?
+
+- Depuis que mon oncle me l''a expliqué Margaux, car il travaille à gendarmerie de Bordeaux.', true, true),
+  ('1c671fef-40f9-8024-ab0e-fd4b99499cff', '1c671fef-40f9-8024-ab0e-fd4b99499cff', 'd0a5918e-8cca-4ac7-95a0-393d0564b7f8', 14, 'c7385ffb-e83b-4455-bae7-d842217bc4d1', '- Ok, lui répondit Margaux. Est-ce que tu pourrais savoir où le trouver ?
+
+- J''essaye, mais j''ai du mal à le localiser, car l''adresse qui est donnée n''existe pas, s''énerva Charlie.
+
+- Pas étonnant : tu as mis"@.pom" au lieu de "@.com", remarqua Mouna.
+
+Les enfants cherchèrent à trouver des informations sur le mystérieux chercheur, jusqu''à ce que Margaux pousse un cri.
+
+- Quelle horreur, regardez !
+
+- Qu''est-ce qu''il se passe, demanda Charlie.', true, true),
+  ('1cd71fef-40f9-8033-9c4a-d37fef6e5f55', '1cd71fef-40f9-8033-9c4a-d37fef6e5f55', 'd0a5918e-8cca-4ac7-95a0-393d0564b7f8', 15, 'f56db665-2fbc-4f7c-9ddc-4a1885f00a67', '- Regardez qui vient de se garer sur la grande allée du camping, dit-elle.
+
+- Ho mince, dit Mouna.
+
+Et elle avait bien raison de s''inquiéter car sur le parking ce n''était pas une mais bien deux voitures du laboratoire des choses bizarres, celui-là même où étaient nés les deux dragons.
+
+- Ça y est j''ai trouvé, Margaux passe-moi le téléphone ! Allez dépêche toi, on a plus beaucoup de temps !
+
+- Attends, tu préfères appeler tes autres copains, plutôt que de nous aider ? car je te rappelle qu''on doit d''abord aller chercher l''œuf de dragon pour le mettre en sureté au lieu d''appeler tes autres copains, dit Margaux en tendant le téléphone.
+
+Charlie composa un numéro puis attendit que la personne à l''autre bout de la ligne décroche. Soudain on entendit un petit "oui allô qui est à l''appareil" et Charlie dit :
+
+- Oui Marie-Juliette c''est moi, dis, tes parents ont toujours leur minibus ?
+
+- Oui, pourquoi tu en as besoin ?
+
+- En fait, on a découvert un dragon et il risque d''être tué, tu peux venir.
+
+- Ok j''arrive ; dit Marie avant de raccrocher le téléphone et en effet 10 minutes plus tard un minibus arriva sur le parking. Entre temps, les enfants étaient allés chercher le petit dragon ou plutôt l''œuf de dragon qu''ils avaient caché dans un sac pour ne pas que les méchants scientifiques ne puissent le voir, les enfants avaient aussi pris quelques branches au cas où l''œuf éclorait et ils avaient bien fait car après être montés dans ce minibus conduit par Marie qui d''ailleurs n''avait que 10 ans, et qu''ils aient commencé à lui raconter toute l''histoire, la coquille commença à se fissurer, ils comprirent qu''ils devaient y aller. Marie appuya sur l''accélérateur et ils quittèrent le camping, direction l''autoroute.', true, true),
+  ('1de71fef-40f9-804c-a015-d8b7d94be47f', '1de71fef-40f9-804c-a015-d8b7d94be47f', 'd0a5918e-8cca-4ac7-95a0-393d0564b7f8', 16, 'c7385ffb-e83b-4455-bae7-d842217bc4d1', '- Mais non, elle voulait juste regarder quelque chose, dit Charlie.
+
+- Rho, Charlie tu as activé la localisation et le haut-parleur.
+
+- Mais je n''ai rien touché ! S''innocenta ce dernier.
+
+- Regardez ! Les interrompît Margaux.
+
+Elle leur colla sous le nez une affiche des paramètres du téléphone de leur ami. Montrant un bonhomme qui contrôlait le téléphone à distance.
+
+- Je n''y crois pas, je me suis fait pirater ! S''exclama Charlie énervé.
+
+- Attendez tout s''explique, remarqua Mouna, ces camions sont venus car grâce au téléphone piraté, ils nous ont entendu critiquer le truc des chercheurs de dragons.
+
+- Mais ils sont venus pour quoi, alors ? Demanda Margaux.', true, true),
+  ('1e971fef-40f9-80b9-a2f9-c09f75215233', '1e971fef-40f9-80b9-a2f9-c09f75215233', 'd0a5918e-8cca-4ac7-95a0-393d0564b7f8', 17, 'f56db665-2fbc-4f7c-9ddc-4a1885f00a67', '- Bah pour rependre l''œuf. Dit Mouna.
+
+- Bon, dit Marie, au lieu de s’énerver, regardons s''ils annoncent des bouchons à la radio. A oui et j''oubliais, Charlie mets tout de suite ton téléphone en mode avion ou éteint pour ne plus que les méchants scientifiques ne puissent nous géolocaliser.
+
+Charlie éteignit donc vite son téléphone et Margaux alluma la radio du minivan.
+
+“Bienvenue sur Radio Zen, une radio qui ne diffuse que des musiques zen”, dit une voix de femme très calme.
+
+- Non pas celle-là ! dit Mouna qui changea de fréquence.
+
+“Bonjour et bienvenue à vous chers auditeurs sur Radio On Ne Comprend Rien, aujourd''hui nous allons parler des chiens de pied qui mangent du Scotch d''ordinateur avec leur compas de basket.”
+
+- Des chiens de pied ? Mais ça n''existe même pas mettons plutôt une chaine d''informations, s''énerva Marie.
+
+“Flash info, je viens d''apprendre qu''un groupe d''enfants a actuellement disparu du camping du Taillan Médoc où ils passaient des vacances. Ils seraient en direction de l''autoroute à bord d''un minibus conduit par une fillette de 10 ans environ, avec à leur bord, et ceci n''est pas une blague, c''est bien ce qui est marqué sur ma fiche, un dragon ou plutôt un bébé dragon. Si jamais vous les voyez, appelez immédiatement les forces de l''ordre car ce dragon serait très dangereux.”
+
+- Dangereux ! Non mais ils sont sérieux ? Il est adorable ! dirent en chœur les enfants.
+
+Car entre-temps le dragon avait éclos.
+
+Quelques minutes plus tard, les enfants s''étaient mis en tête de trouver un prénom à leur dragon. Charlie proposa Macron ; et à la grande stupeur des enfants le dragon répéta Macron, puis encore une fois.', true, true),
+  ('1f071fef-40f9-8008-a689-ce75079d5397', '1f071fef-40f9-8008-a689-ce75079d5397', 'd0a5918e-8cca-4ac7-95a0-393d0564b7f8', 18, 'c7385ffb-e83b-4455-bae7-d842217bc4d1', '- Charlie, dit Margaux, on est là pour le dragon pas pour que tu t''amuses.
+
+- Rho, si on ne peut plus rigoler tranquillement, soupira-t-il.
+
+- Il faudrait trouver un lieu sûr à ce dragon, se concentra Mouna.
+
+- Bien vu, répondit sagement Margaux.
+
+Les quatre enfants se mirent en tête de trouver un endroit sûr au petit dragon jusqu''à ce que Marie s''écrie :
+
+- J''ai trouvé !!!
+
+- Quoi ??? s''excita Charlie.
+
+- Ma tante a un local dont elle ne se sert plus. Donc, on pourrait en faire un super QG où on irait.
+
+- Mais ce serait génial ça ! s''exclama Mouna.
+
+- Attendez une minute, réfléchit Margaux.', true, true),
+  ('1f371fef-40f9-80de-886f-c1ecee601aad', '1f371fef-40f9-80de-886f-c1ecee601aad', 'd0a5918e-8cca-4ac7-95a0-393d0564b7f8', 19, 'f56db665-2fbc-4f7c-9ddc-4a1885f00a67', '- Par contre ça mange quoi un bébé dragon parce que jusqu’à présent il n''a pas touché à un seul pissenlit que je lui avais pris, dit Charlie un peu étonné.
+
+- Mais, c''est pas une vache, s''écria Marie en éclatant de rire.
+
+- Bah t''as qu’à nous dire, toi, ce que ça mange un dragon “Madame je sais tout mieux que tout le monde”.
+
+- Et bien figure-toi monsieur Charlie que moi je pense qu''il aimera sûrement les chamallows qui sont sous son siège. Alors petit dragon tu aimes les chamallows.
+
+- “Chamallow” répéta approximativement le petit dragon avec une voix un peu aigue.', true, true),
+  ('1f971fef-40f9-808f-9f4f-cf22bb2b5c90', '1f971fef-40f9-808f-9f4f-cf22bb2b5c90', 'd0a5918e-8cca-4ac7-95a0-393d0564b7f8', 20, 'c7385ffb-e83b-4455-bae7-d842217bc4d1', '- Tu vois Charlie, il aime ça, renchérit Margaux
+
+Tandis que la bonne humeur régnait dans le minivan, Mouna qui écoutait la radio monta le son pour que ses camarades entendent bien ce que disait le présentateur radio :
+
+"Il y a 2 heures, je vous parlais des enfants échappés. Ces enfants se sont enfuis du "Camping de la belle étoile" lundi. Ils se trouvent dans un minivan, conduit par une jeune fille de 10 ans prénommée Marie-Juliette. Cette fille est brune, cheveux lisses aux yeux foncés. Avec elle, il y a 3 enfants, la première est blonde, cheveux lisses aux yeux bleus, elle s''appelle Margaux. La deuxième fille, Mouna est brune, cheveux bouclés aux yeux foncés. Le dernier enfant, Charlie est un garçon aux cheveux blonds.
+
+Nous vous rappelons que si vous les voyez, prévenez immédiatement les forces de l''ordre."', true, true),
+  ('21a71fef-40f9-800c-aa28-e3f8cc5fcc3c', '21a71fef-40f9-800c-aa28-e3f8cc5fcc3c', 'd0a5918e-8cca-4ac7-95a0-393d0564b7f8', 21, 'f56db665-2fbc-4f7c-9ddc-4a1885f00a67', '- Oh non comment on va faire si maintenant ils savent à quoi on ressemble ? Dès que l''on va vouloir entrer dans le moindre magasin on va se jeter sur nous pour nous attraper, dit Margaux en commençant à paniquer.
+
+Charlie qui jouait encore avec le petit dragon s''arrêta net et dit : attendez, on peut déjà commencer à gagner du temps car jusqu''à présent ils ne savent pas encore à quoi ressemble notre minivan et puis ; j''ai peut-être une idée mais je sais pas si ça va marcher et puis...
+
+- On s’en fiche si ça ne marche pas, je te rappelle que sur une échelle de recherche on est au même niveau qu''un évadé de prison.
+
+- Oui tu as raison Mouna, foutu pour foutu, autant le tenter, Marie tu peux nous emmener à la fromagerie de Saint-Morten. J''ai ma grand-tante qui vit là-bas je suis sûr qu''elle sera ravie de nous accueillir.
+
+- Morten comme le fromage de Morten ??? dit Marie
+
+- Oui en effet Morten comme le fromage, dit Charlie', true, true),
+  ('21b71fef-40f9-8065-972a-cd639c6f9f03', '21b71fef-40f9-8065-972a-cd639c6f9f03', 'd0a5918e-8cca-4ac7-95a0-393d0564b7f8', 22, 'c7385ffb-e83b-4455-bae7-d842217bc4d1', '- Bon, assez discuté, les coupa Margaux, il faut absolument que l''on trouve un moyen d''y aller.
+
+- C''est super ça, mais comment, lui répondit Marie.
+
+- Je ne sais pas, mais allons y quand même, comme ça, nous verrons bien sur le chemin.
+
+Pendant le chemin pour la fromagerie de Saint Morten, les 4 enfants rigolèrent et parlèrent jusqu''à un barrage de police. Tous commencèrent à paniquer. Margaux eut une idée. Elle expliqua son plan et prit les commandes du minivan. D''un coup sec elle fit un virage très brusque et finit dans la forêt. Puis, ils descendirent de la voiture et se cachèrent dans les arbres pour observer les policiers. Ceux-ci contrôlaient les passants, leur demandaient les permis de conduire, vérifiaient les pièces d''identité. Ils attendirent quelques minutes avant que les policiers partent faire une pause déjeuner. Il n''y avait pas beaucoup de lumière et les enfants durent rallumer les phares qu''ils avaient éteints. Ils réussirent à passer au travers des policiers et à s''échapper.', true, true),
+  ('22f71fef-40f9-808f-83f0-dd797b94d55b', '22f71fef-40f9-808f-83f0-dd797b94d55b', 'd0a5918e-8cca-4ac7-95a0-393d0564b7f8', 23, 'f56db665-2fbc-4f7c-9ddc-4a1885f00a67', 'Mais maintenant leur problème est plus compliqué car ils n''ont plus d''essence et la station-service la plus proche est deux kilomètres plus loin et de plus elle ferme dans 10 minutes. Soudain Charlie vit le panneau d''une mini-supérette fermée depuis une heure.
+
+- Et si on allait leur prendre un bidon d''essence, dit Charlie.
+
+- Mais ce serait du vol, dit Mouna, et c''est pas bien de voler, moi je veux pas finir en prison.
+
+- Pas du tout, premièrement moi j''appelle ça un emprunt à long terme, deuxièmement si on ne prend pas rapidement de l''essence on risque de se faire repérer par la police et, qui sait ce que les scientifiques ont prévu de faire à ce bébé dragon s’ils l''attrapent ? Car vu ce qu''ils ont fait à sa mère, je ne suis pas sûr que l''on puisse le retrouver encore vivant.
+
+- Bon d''accord, j''admets que cette fois-ci tu n''as pas tort.
+
+- Et bah alors on peut y aller. Allez roule Marie, roule jusqu''à cette supérette.
+
+Deux minutes plus tard, les quatre enfants sont arrivés devant une supérette sûrement du siècle dernier vu comment la façade est presque entièrement décrépie et les poteaux en acier qui composent la structure sont rongés par la rouille. Une fois les enfants rentrés sans mal par un trou vulgairement recouvert par une vieille planche en bois couverte de mousse par les années, dans le magasin.
+
+- Mais moi ça me fiche la trouille, je veux pas rester toute seule, dit Mouna, en commençant à claquer des dents.
+
+- Rho, t''inquiète, on va pas te laisser toute seule, de plus moi aussi je commence à avoir peur donc on ne va pas rester très longtemps, allez, on trouve un bidon d''essence ou deux puis on se casse loin de là. S''exclama Marie.
+
+Soudain les quatre enfants entendirent des petits bruits proches d''eux.
+
+“Grooms groamf”
+
+- Ah ! c''était quoi ça ? J''vous avais dit qu''il ne fallait pas entrer ici.
+
+- Mais arrête de stresser Mouna c''est rien. Dit Margaux en tentant de la rassurer.
+
+- Vous êtes vraiment deux grosses froussardes. Se vanta Charlie.
+
+- Ah car monsieur Charlie n’a pas peur peut-être ?
+
+- Et bah oui !
+
+- OK et bien si tu n''es pas un gros peureux prouve-le nous en allant voir ce qui peut bien faire ce bruit si étrange. Dit Marie à Charlie en commençant à s''énerver.
+
+Et sur ces mots Charlie se dirigea pas à pas et non sans crainte, il passa une tête de l''autre côté du rayon avant de voir... le bébé dragon en train de s''empiffrer de tablettes de chocolat.', true, true),
+  ('24371fef-40f9-80bd-a767-d41d8c87f6e7', '24371fef-40f9-80bd-a767-d41d8c87f6e7', 'd0a5918e-8cca-4ac7-95a0-393d0564b7f8', 24, 'c7385ffb-e83b-4455-bae7-d842217bc4d1', '- Mince, s''inquiéta Margaux, demain matin, les employés verront que quelqu''un a mangé les tablettes de chocolat.
+
+- Ce n''est pas grave, lui répondit Marie, ils le verront mais ils ne sauront pas que c''est nous.
+
+Silencieusement, Margaux pointa du doigt la caméra qui était braquée sur eux.
+
+- Mince, dit Mouna, il faut qu''on trouve un moyen d''effacer les images !
+
+Ils se rendirent dans la salle d''informatique et, au bout de dix minutes d''efforts acharnés, ils réussirent à effacer les images.', true, true),
+  ('26b71fef-40f9-80eb-ae5b-cd651597ccb2', '26b71fef-40f9-80eb-ae5b-cd651597ccb2', 'd0a5918e-8cca-4ac7-95a0-393d0564b7f8', 25, 'c7385ffb-e83b-4455-bae7-d842217bc4d1', 'Épuisés, les enfants rentrèrent au camping sous les cris de leurs parents en abandonnant tous leurs projets.
+
+- Mais où étiez-vous ? hurla la mère de Margaux en les voyant arriver, tout le camping s''est mis à vous chercher !!!
+
+Pendant toute la soirée, les enfants écoutèrent penauds leurs parents qui les couvraient de reproches. Quand l''ambiance se détendit, le père de Charlie leur posa une question :
+
+- Pourquoi êtes-vous partis ? demanda-t-il d''une voix calme.
+
+Les enfants n''osèrent pas répondre mais le père de Charlie n''insista pas.', true, true),
+  ('29a71fef-40f9-8059-a1d8-fc45a84b8f14', '29a71fef-40f9-8059-a1d8-fc45a84b8f14', 'd0a5918e-8cca-4ac7-95a0-393d0564b7f8', 26, 'f56db665-2fbc-4f7c-9ddc-4a1885f00a67', 'Mais le soir les enfants repensèrent au bébé dragon.
+
+“Que peuvent-ils en faire ?”
+
+Le lendemain les enfants décident de se retrouver dans un petit coin isolé pour savoir quoi faire.
+
+Mouna prit la parole en premier.
+
+- Hier, en regardant les infos à la télévision, ils ont parlé d''un parc sur une petite île proche de Bordeaux où se trouve un parc secret qui abrite des dragons en liberté.
+
+- Mais ce serait parfait.
+
+- Et en regardant après sur le net j''ai trouvé son directeur. Et du coup je lui ai envoyé un texto et miracle il m''a répondu quelques minutes après et après en lui ayant parlé de nous je lui ai envoyé une photo, il a vu le dragon et il a accepté de le prendre sur le champ.
+
+- Mais c''est super ça, Mouna tu as fait un travail d''enfer. Dit Margaux.
+
+Charlie pose à tous une question.
+
+- Mais ce directeur, il le prend quand le dragon ? dit Charlie.
+
+- Après-demain, et nous propose même de venir avec lui. Répondit Mouna.
+
+Deux jours plus tard, une camionnette bleu électrique s''arrêta à l''entrée du camping. Les enfants se précipitèrent vers la voiture avec dans leur sac à dos caché leur dragon.
+
+Le directeur les voyants courir vers lui leur demanda si c''était bien eux ? Ils répondirent que oui et c''est comme ça que dans la soirée ils étaient sur l''île. À quelques secondes de relâcher leur bébé dragon.
+
+- On t''aimera toujours dit Mouna au dragon qui leur avait causé tant de soucis.
+
+- Oui, toujours, cria Charlie
+
+Le directeur les pria de remonter sur le bateau et de laisser le dragon commencer à découvrir les lieux.
+
+Et comme sorti de nulle part, le dragon lâcha un...
+
+- Au revoirrr, de sa petite voix rauque.
+
+Les enfants remontèrent dans l''embarcation flottante et repartirent sur les rives de la Garonne, avant de rentrer au camping.
+
+FIN', true, true),
+  ('22471fef-40f9-80ab-b013-dfef380ca9ba', '22471fef-40f9-80ab-b013-dfef380ca9ba', '66dd8d58-6834-45b0-9504-add017b12df0', 1, '4099fb22-81fb-4e6e-af0b-51d40fca2f59', 'Harry, le gars que tout le monde connaît au lycée — souriant, populaire, toujours entouré, et les filles qui se bousculent pour attirer son attention. Sauf Inès. Elle, elle restait souvent dans son coin, tranquille, avec Lou-Ann comme seule alliée.
+
+Mais ce jour-là, tout a changé pour Harry. Alors qu''il passait dans le couloir, il a vu Inès, encore seule, un peu différente, plus fragile. Une boule d''énergie habituelle n''aurait jamais prêté attention. Mais lui, cette fois, il a ressenti un truc.
+
+Sans prévenir, il s''est approché et lui a murmuré, à voix basse : « Tu sais, t''es pas invisible! »
+
+Et bam, le monde de Harry a basculé. Parce que, pour la première fois, c''est elle qui allait le marquer, pas l''inverse.
+
+Harry trainait avec ses potes mais il n''écoutait pas. Il scrollait sur son téléphone, mais pas sur n''importe quoi, sur les comptes de Inès.', true, true),
+  ('1f271fef-40f9-80b9-951a-f13071e0a73d', '1f271fef-40f9-80b9-951a-f13071e0a73d', '81d7c288-648a-4625-8244-fbf03587ede6', 1, 'f02f60b2-144f-459a-aff0-1d8637ef7d9d', '- Amandaaa ! Viens ici tout de suite !
+
+- Quoi ?
+
+- tu as mal mis ta valise ! J''ai pas que ça a faire moi !
+
+- oui je sais désolé je vais mieux la remettre
+
+- merci. Dépêche toi de dire au revoir à tout le monde, on y va
+
+- ok
+
+Amanda et sa mère partir en route vers l''île d''Oléron. Elles déménageaient.
+
+16 heures plus tard...
+
+- Amanda ma chérie. On est arrivé.
+
+- déjà ?? Ça va être trop cool !
+
+Elles étaient arrivées et pendant que sa mère sortait les affaires, Amanda rêvait, comme d''habitude. Mais à trop rêver, elle avança jusqu''au bord de la falaise et tomba.
+
+La rumeur dit qu''elle est toujours ici.', true, true),
+  ('1f271fef-40f9-8080-8bd9-d20555d9e53b', '1f271fef-40f9-8080-8bd9-d20555d9e53b', '81d7c288-648a-4625-8244-fbf03587ede6', 2, 'f5956625-d496-4a23-ad78-1240c062d08f', 'Julien marchait près des falaises, les pieds dans le sable, et il se demandait si Amanda était vraiment tombée comme tout le monde le disait. Il n''avait jamais cru à la légende, mais maintenant qu''il était là, tout près des rochers, il n''était plus si sûr de rien. Il se sentait bizarre, un peu comme si l''île elle-même l''observait.
+
+Il se souvint de ce que les gens racontaient : que parfois, au coucher du soleil, on entendait des bruits étranges, comme des voix dans le vent. Julien décida qu''il allait voir par lui-même. Peut-être que la vérité était là, juste devant lui, dans ce silence étrange.', true, true),
+  ('1fe71fef-40f9-805a-9d84-d8be703b70ab', '1fe71fef-40f9-805a-9d84-d8be703b70ab', '81d7c288-648a-4625-8244-fbf03587ede6', 3, 'f02f60b2-144f-459a-aff0-1d8637ef7d9d', 'Il faisait froid, mais il voulait attendre. Il était tard et le soleil commença à se coucher. Soudain Julien étendu dans le sable, près de cette falaise, entendit une voix. C''était une voix aiguë, douce et triste. La voix l''appelait et Julien la suivit. Quand il avança, la voix était plus forte. Au bout d''un moment, la voix s''arrêta et laissa place à un pleure.
+
+Il avança vers les buissons quand tout à coup, une jeune fille se mit à courir et les pleures continuaient plus fort et plus. Il suivait la petite fille, essayant de la rattraper mais il était trop tard. Julien commença à tomber de la falaise, en se demandant comment est-ce que ça avait bien pu arriver. 
+
+Soudain il se sentit pris par une main et fut ramener au sommet. C''était impossible ! C''était la jeune fille qui pleurait. Elle était belle, les cheveux longs et bouclés volaient au vent, marron comme le chêne. Elle portait une robe en velours blanc et elle avait les yeux rieur d''un vert écarlate. Son sourire n''était semblable à aucun sourire qu''il avait vu. Il lui posa des questions mais elle disparu. Il se retrouva seul, dans le noir.', true, true),
+  ('1ff71fef-40f9-80a3-9319-f354fedceebb', '1ff71fef-40f9-80a3-9319-f354fedceebb', '81d7c288-648a-4625-8244-fbf03587ede6', 4, 'f5956625-d496-4a23-ad78-1240c062d08f', 'Julien errait dans le village, hanté par ce qu''il avait vu sur l''île. Le soir était tombé et la lumière des réverbères dessinait des ombres sur les pavés. En traversant la place, il aperçut une silhouette. Une jeune fille, seule, près de la fontaine. Elle portait une robe blanche en velours, exactement comme Amanda.
+
+Julien s''approcha, son cœur battant. La jeune fille tourna lentement la tête, et il la reconnut immédiatement. Ses yeux verts, son sourire étrange. Elle disparut aussi soudainement qu''elle était apparue.
+
+Il se tourna vers les habitants autour de lui, mais personne ne semblait avoir vu quoi que ce soit. Ils continuaient de discuter comme si de rien n''était. Julien se sentit perdu. Pourquoi personne ne l''avait remarquée ? Était-ce un fantôme, ou simplement son imagination ?
+
+Il rentra chez lui, perturbé. Le lendemain, à l''école, il la vit à nouveau, au bout de l''allée, immobile. Quand il tenta de s''approcher, elle disparut une fois de plus, sans un bruit. Cette fille était-elle une apparition ou une personne réelle ? Et pourquoi n''était-elle visible que pour lui ?
+
+Le mystère devenait plus grand. Il n''avait d''autre choix que de chercher des réponses. Mais à qui en parler ? Personne ne semblait voir ce qu''il voyait. Il devait comprendre, avant que cela ne le rende fou.', true, true),
+  ('20d71fef-40f9-808d-b807-f4f01a6b9225', '20d71fef-40f9-808d-b807-f4f01a6b9225', '81d7c288-648a-4625-8244-fbf03587ede6', 5, 'f02f60b2-144f-459a-aff0-1d8637ef7d9d', 'Un jour, une nouvelle élève vint dans son collège. Elle s''appelait Mathilda. Pendant la récréation, elle vint vers julien.
+
+Elle dit : 
+
+- C''est toi julien ?
+
+- Oui .Pourquoi ?
+
+- Il faut que tu sauves Amanda ! C''est urgent !
+
+- Amanda ?!
+
+- Oui suis moi vite!
+
+Elle l''emmena dans la grotte de la foret qui était proche de chez lui. Soudain , il vit de la lumière dans la grotte et Amanda apparut.
+
+- Julien ?
+
+- Oui...
+
+- Il faut que tu m''aides à sortir d''ici.
+
+- Mais tu ne peux pas sortir toute seule ? Je t''ai aperçu plusieurs fois dehors.
+
+- Oui aperçu. Mais après j''ai disparue car je peux m''éloigner de la grotte.
+
+- Et qu''est-ce que je dois faire pour te libérer ?
+
+- Je vais tout t''expliquer.', true, true),
+  ('21171fef-40f9-80eb-b660-e4c8b201d86a', '21171fef-40f9-80eb-b660-e4c8b201d86a', '81d7c288-648a-4625-8244-fbf03587ede6', 6, 'f5956625-d496-4a23-ad78-1240c062d08f', 'Julien, tout en restant figé, fixait Amanda. Elle semblait différente. Il n''arrivait pas à croire que la jeune fille qu''il avait vue sur la falaise, cette silhouette mystérieuse, se trouvait maintenant devant lui.
+
+- "Comment tu es arrivée ici ?" demanda Julien, une nouvelle inquiétude dans la voix.
+
+Amanda baissa les yeux, visiblement gênée.
+
+- "Ce n''est pas un endroit où je choisis d''être. Je suis piégée ici, Julien. C''est comme si la grotte était ma prison. Je peux m''échapper un moment, mais je ne peux jamais aller trop loin. Chaque fois que je tente de partir, je... je disparais à nouveau, et je reviens ici."
+
+Julien regarda Mathilda, qui restait en retrait, les bras croisés, un air grave sur le visage.
+
+- "Mathilda, toi tu sais comment l''aider ?" demanda Julien, l''espoir renaissant.
+
+- "Oui", répondit-elle. "Mais pour la libérer, il faut d''abord comprendre ce qui l''empêche de partir. Il y a une ancienne malédiction liée à cette grotte, qui a piégé Amanda et d''autres avant elle. C''est une histoire que personne ne connaît vraiment, mais je vais tout t''expliquer. Tu dois d''abord aller chercher l''amulette cachée sous la vieille maison abandonnée près du phare. C''est la seule manière de briser le sort."
+
+Julien ne comprenait pas tout, mais il savait une chose : il devait aider Amanda à sortir de ce piège. Il prit une grande inspiration.
+
+- "Je vais trouver cette amulette, et je reviendrai te chercher. Tu vas sortir d''ici, je te le promets."
+
+Amanda lui sourit faiblement, mais ses yeux brillants montraient l''espoir qui renaissait.', true, true),
+  ('21a71fef-40f9-8042-88ab-f85928c40bd9', '21a71fef-40f9-8042-88ab-f85928c40bd9', '81d7c288-648a-4625-8244-fbf03587ede6', 7, 'f02f60b2-144f-459a-aff0-1d8637ef7d9d', 'Il partit à la recherche de l''amulette avec l''aide de Mathilda.
+
+Il chercha dans le sous sol, creusa parterre mais rien.
+
+"Où peut-elle bien être" se dit-il.
+
+Mathilda lui donna sa seul aide. Elle lui indiqua le chemin. Mais Julien lui demanda comment elle était au courant de tout ça.
+
+- j''ai été envoyé pour t''aider. Si je ne le fais, je meurs.', true, true),
+  ('23471fef-40f9-805d-b71a-fa42f087618f', '23471fef-40f9-805d-b71a-fa42f087618f', '81d7c288-648a-4625-8244-fbf03587ede6', 8, 'f5956625-d496-4a23-ad78-1240c062d08f', 'Sur son visage on voyait la peur s''installer.
+
+Mathilda dit à Julien que seul lui pouvait la trouver et qu''elle ne pouvait pas continuer, la malédiction qui lui avait été jetée l''interdisait de dépasser une certaine limite et elle y était arrivé.
+
+- Julien, je suis obligée de t''attendre ici, je compte sur toi et Amanda aussi, c''est nos deux vies qui sont en jeu...
+
+Un larme coulait sur son visage.
+
+Julien avait peur, peur de ne pas y arriver.', true, true),
+  ('23a71fef-40f9-80a6-bdc2-cbc43d405e57', '23a71fef-40f9-80a6-bdc2-cbc43d405e57', '81d7c288-648a-4625-8244-fbf03587ede6', 9, 'f02f60b2-144f-459a-aff0-1d8637ef7d9d', 'Il entra avec prudence quand tout à coup un éboulement a eu lieu et Julien ne pouvait plus sortir de la grotte mais il partit quand même à la rescousse d’Amanda.
+
+"Amanda ?" appelait il
+
+"Amanda où es-tu ?"
+
+Soudain une voix se fit entendre
+
+" Tu es venu ? "
+
+Julien s''approcha de l''endroit où venait la voix et vu Amanda assise sur un rocher et s''assit à côté d''elle.
+
+" Comment fait-on pour te libérer Amanda ? "
+
+"Je ne sais pas c''est Mathilde qui doit te dire tout ça"
+
+Soudain Julien se rappela de ce que Mathilde avait dit.
+
+" Libérer la malédiction elle a besoin d''un vrai amour pas de l''amour de sa mère"
+
+"Amandine" dit-il " je t''aime"', true, true),
+  ('25f71fef-40f9-8041-b89b-ffe59f7ae803', '25f71fef-40f9-8041-b89b-ffe59f7ae803', '81d7c288-648a-4625-8244-fbf03587ede6', 10, 'f5956625-d496-4a23-ad78-1240c062d08f', 'Le haut de la grotte s''ouvrit, un nuage de poussière apparut. Elle monta dans le ciel, des ailes d''anges lui poussèrent dans le dos, une auréole planait au-dessus de sa tête.
+
+Amanda était un ange, son âme était enfin libre, elle rejoignait ses semblables dans les nuages...
+
+"Merci Julien" murmura-t-elle" je suis libre"
+
+Elle ferma les yeux et disparut dans une fumée blanche.
+
+Julien s''évanouit. Le lendemain, il était chez lui. Il ne se souvenait de rien et se prépara comme tout les matins.
+
+Pourtant au fond de lui Amanda était toujours là...', true, true),
+  ('26d71fef-40f9-8008-a4fa-ccfdd333df0c', '26d71fef-40f9-8008-a4fa-ccfdd333df0c', '81d7c288-648a-4625-8244-fbf03587ede6', 11, 'f5956625-d496-4a23-ad78-1240c062d08f', 'Les jours qui suivirent , Julien avait une sensation bizarre.
+
+Comme si Amanda pouvait toujours communiquer avec lui, c''était comme si elle voulait le prévenir d''un danger imminent qui chamboulerait - encore plus - le cours de sa vie...', true, true),
+  ('30071fef-40f9-80a8-aa9f-d41df5200146', '30071fef-40f9-80a8-aa9f-d41df5200146', 'e9acdd3a-6b2d-4061-8869-2174480bae8e', 1, 'd63652f4-df16-4825-bd01-3f210196aee9', 'bip bip bip
+
+Mon cadran indique 5h. Ça y est c''est l''heure c''est le moment! Je vais enfin partir en France pour tout l''été! J''ai hâte de découvrir la ville.', true, true),
+  ('30171fef-40f9-804b-8c31-f8a7ec4de652', '30171fef-40f9-804b-8c31-f8a7ec4de652', 'e9acdd3a-6b2d-4061-8869-2174480bae8e', 2, '8d8b7080-1c46-4ec0-8a43-a21b5c4c4e5a', '« Mesdames et messieurs, nous vous informons que le vol numéro 777 à destination de Paris est maintenant prêt pour l''embarquement à la porte 21. Nous invitons tous les passagers voyageant sur ce vol à s''y présenter immédiatement. Le départ de cet avion est prévu à 08h00. Nous vous souhaitons un agréable voyage à bord de notre compagnie aérienne. Merci de votre attention.»
+
+Vite il faut que je me dépêche sinon je vais rater mon vol !', true, true),
+  ('2d171fef-40f9-8076-8e1e-e948f0515b53', '2d171fef-40f9-8076-8e1e-e948f0515b53', 'c5453c07-d9da-44e5-b06b-8e74936dc58f', 1, '4d406103-f605-4122-a234-03f57028b953', 'Il était une fois Croquette et Noirot. Croquette était un chat de deux ans et Noirot un lapin d’un an. Ils étaient amis depuis leur naissance parce que leurs parents se connaissaient depuis toujours. Ils adoraient jouer ensemble tout le temps.
+
+', true, true),
+  ('2d171fef-40f9-8093-88e3-dae3646bea18', '2d171fef-40f9-8093-88e3-dae3646bea18', 'c5453c07-d9da-44e5-b06b-8e74936dc58f', 2, '4d406103-f605-4122-a234-03f57028b953', 'Quelquefois ils se chamaillaient. Mais ils ne se chamaillaient pas souvent, surtout dans la piscine. Un jour, ils se dirent un secret. Celui d''aller dans une forêt. Un jour alors ils se décident de partir dans la forêt amazonienne et là, ils entendent des couinements. Et du coup ils s''approchent des couinements mais après, les couinements s''arrêtent.
+
+Ils écoutent d''où ça vient et ils aperçoivent une souris mais elle va trop vite pour eux et ils n''arrivent pas à la suivre. Et du coup ils se perdent, parce qu''ils ne la voyaient plus.', true, true),
+  ('2d171fef-40f9-80c2-b6a9-c9f610fafa72', '2d171fef-40f9-80c2-b6a9-c9f610fafa72', 'c5453c07-d9da-44e5-b06b-8e74936dc58f', 3, '4d406103-f605-4122-a234-03f57028b953', 'Alors ils dorment dans la forêt Amazonienne et le lendemain ils se réveillent et marchent tout droit. Ils ne s''arrêtent pas. Mais à un moment ils trouvent un humain d''une tribu qui vivait dans la forêt amazonienne. Et le monsieur les amène dans son village et leur donne à manger et à boire. Le monsieur dit aux animaux qu''il s''appelait Tintin, mais les animaux ne comprenaient rien. Sauf qu''à un moment Noirot et Croquette rencontrèrent des animaux de ce village. Et ils leur dirent : "Mais qu''est-ce qu''il a dit ?" 
+
+Les animaux de la tribu leur disent :
+
+- Il vous a dit qu’il s’appelait Tintin. Et d’où venez-vous alors ?', true, true),
+  ('2d171fef-40f9-80c2-89d7-cad182155626', '2d171fef-40f9-80c2-89d7-cad182155626', 'c5453c07-d9da-44e5-b06b-8e74936dc58f', 4, '4d406103-f605-4122-a234-03f57028b953', 'Noirot et Croquette leur répondent qu''ils viennent de Macapa et qu''ils se sont perdus à cause d''une souris qui les avait fait perdre leur chemin. C''est alors qu''ils avaient trouvé Tintin et qu’ils l’avaient suivi.
+
+Les animaux du village leur proposent de jouer à chat perché et c''était le chien du village qui était celui qui devait toucher les autres. Il s''appelait Pluto et était le plus rigolo des animaux du village.
+
+Noirot part se cacher sous des feuilles, sauf que Pluto sans le voir l''écrase sans faire exprès. Soudain, il sort des feuilles en croyant que c''était un jaguar qui lui avait sauté dessus. Mais du coup, il s''aperçoit que c''était le chien qui était le plus drôle qui lui avait marché dessus. Quand il sort des feuilles, Pluto le voit et lui court après et le lapin monte aux arbres et réussit à ne pas se faire toucher. Croquette est caché sous les feuilles d''un palmier et il était très fort.', true, true),
+  ('2d171fef-40f9-809b-bf2f-f92f223c3cf3', '2d171fef-40f9-809b-bf2f-f92f223c3cf3', 'c5453c07-d9da-44e5-b06b-8e74936dc58f', 5, '4d406103-f605-4122-a234-03f57028b953', 'Mais à un moment, il se fait toucher par Pluto. Alors Pluto part en courant pour ne pas se refaire toucher. Mais Croquette court assez vite pour rattraper Pluto et Pluto se fait retoucher. Sauf qu’au moment de se faire toucher il tombe et Croquette rigole à s''en rouler par terre. Après cette belle journée, tous les animaux rentrent se coucher. Croquette et Noirot aimeraient rentrer chez eux, mais quand même ils aiment bien leurs nouveaux amis. Alors ils décident de rester dormir avec eux au village de Rio Branco.', true, true),
+  ('2d171fef-40f9-80d0-abee-d3ff878a7dd5', '2d171fef-40f9-80d0-abee-d3ff878a7dd5', 'c5453c07-d9da-44e5-b06b-8e74936dc58f', 6, '4d406103-f605-4122-a234-03f57028b953', 'Noirot dans la nuit rêve qu''un jaguar rode autour de la tribu et qu''il va le manger. Sauf que dans son rêve, Noirot se prend pour un superhéros et qu''il peut voler. Le jaguar ne le voit pas et Noirot au-dessus de sa tête commence à lui mettre des coups de pied dans la figure. Le jaguar se met sur ses pattes arrière et essaye de l''attraper. Mais Noirot, comme il sait voler, il est très haut et le jaguar ne parvient plus à l''atteindre.', true, true),
+  ('2d171fef-40f9-80ec-9490-f122f998c7c8', '2d171fef-40f9-80ec-9490-f122f998c7c8', 'c5453c07-d9da-44e5-b06b-8e74936dc58f', 7, '4d406103-f605-4122-a234-03f57028b953', 'Le lendemain matin, Tatie, la femme de Tintin, leur donne à manger le petit déjeuner et à boire du jus d''orange. Après s''être régalés avec tous leurs copains, ils disent au revoir et Tintin accompagne Noirot et Croquette pour rentrer chez eux. Sur leur chemin, ils rencontrent un jaguar et celui-ci part en voyant Tintin avec une belle lance de fer à la main. Après plusieurs heures de marche, ils trouvent un bateau à moteur de 300 chevaux. Il va à 140 km/h. Les animaux voient leur maison et disent à Tintin de s''arrêter. Comme ils connaissent bien leur maison, Croquette saute à la porte pour sonner : “ DRING DRING... ! ”
+
+Soudain leurs maîtres leur ouvrent et disent "Bonjour" à Tintin. Puis ils leur demandent : "Pourquoi vous êtes partis ?"
+
+Tintin répond : “parce qu''ils s''étaient dit un secret.”
+
+- Et c''était quoi leur secret ? demande leur maitre.
+
+- C''était d''aller faire une promenade dans la forêt, explique Tintin. Ils ont trouvé de bons amis et étaient un peu tristes de revenir à la maison.', true, true),
+  ('2d171fef-40f9-80c6-bbe9-db55ead16dce', '2d171fef-40f9-80c6-bbe9-db55ead16dce', 'c5453c07-d9da-44e5-b06b-8e74936dc58f', 8, '4d406103-f605-4122-a234-03f57028b953', 'Et le maître dit aux animaux : "Peut-être qu''un jour on ira tous ensemble voir vos nouveaux amis."
+
+Croquette et Noirot sont heureux d''être rentrés à la maison et de s''être fait de nouveaux amis.', true, true),
+  ('32e71fef-40f9-805b-accc-d451ade0ea7b', '32e71fef-40f9-805b-accc-d451ade0ea7b', '024d8cfc-936b-4f8d-920c-477185595012', 1, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Avant, une école avait entrepris de visiter une usine abandonnée. La maîtresse dit :
+
+- Aujourd''hui les enfants, nous allons aller visiter une usine abandonnée et vous devrez vous mettre 2 par 2. Allez, le bus est arrivé. On y va !
+
+Nous voilà devant l''usine abandonnée. 
+
+- Nous allons vous compter. Allez, on va à l''intérieur pour rester bien groupé, hein.
+
+- Madame, attendez, j''ai besoin de faire une pause toilette.
+
+- Très bien, mets-toi derrière cet ancien pilier.
+
+- Oh maîtresse, regardez, il y a une ancienne cassette VHS.
+
+- Pose ça.
+
+- D''accord.
+
+- Bon, j''y vais, je vous attends au prochain tournant, à tout à l''heure. Restez bien à côté de l''animateur. 
+
+- Monsieur l''animateur, où êtes-vous ? On est perdus, on n''a pas tourné au bon endroit.
+
+Tout à coup on trouve une télé sur des jambes mécaniques et qui peut nous parler. Elle nous dit qu''elle s''appelle “Le docteur” et que c''est le pire ennemi du prototype.
+
+- Bonjour les enfants. Que faites-vous ici ?
+
+- Nous sommes perdus.
+
+- Nous étions en sortie scolaire quand nous nous sommes perdus.
+
+- Je vois, bon, nous allons vous aider à sortir d''ici.
+
+- Rah ! C''est dégoûtant, dit un élève qui venait de se faire lécher par l''animal de compagnie du docteur. 
+
+- Non Yarnabi !!!! Ce ne sont pas des casse-croûtes. Je sais que tu as très faim mais bon... Nous allons les aider à sortir sans se faire remarquer car le prototype nous cherche déjà.
+
+- Qui est le prototype ? dit un enfant.
+
+- C''est le maître. Il veut tuer ceux qui se rebellent contre lui, ça fait peur, c''est pour ça, dépêchons-nous de nous déplacer vers la sortie, je crois qu''il arrive !!! Vite, cachez-vous dans les endroits où vivent les petites créatures qu''il a transformées.', true, true),
+  ('32e71fef-40f9-8050-9d6a-c441cdbc17b8', '32e71fef-40f9-8050-9d6a-c441cdbc17b8', '024d8cfc-936b-4f8d-920c-477185595012', 2, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Et l''ambiance change à ce moment-là. Le prototype se prépare à attaquer mais l''une de ces mini-créatures apparaît et le prototype le remarque et l''emporte avec lui. Le docteur dit :
+
+- Vite ! Il faut qu''on parte avant que le prototype revienne et se balade un peu dans les couloirs.
+
+À un moment, ils entendent un bruit et une fumée dense commence à envahir la pièce. L''ami du prototype arrive. Il s''appelle Catnap. Et tout d''un coup, le joueur apparaît et sort sa main électrique. Il met un coup à Catnap et part subitement.
+
+', true, true),
+  ('34a71fef-40f9-80a3-9c45-f1a2fa3e9118', '34a71fef-40f9-80a3-9c45-f1a2fa3e9118', '024d8cfc-936b-4f8d-920c-477185595012', 3, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', '- Qu''est-ce que c''était que ce grand chat tout violet ? Bon, je pense qu''il est parti. Nous devons quand même trouver la sortie.
+
+- Monsieur le docteur, cet endroit est immense. Sans s''en apercevoir, nous sommes encore plus enfoncés dans l''endroit. 
+
+- Nous sommes dans les territoires de Catnap. C''est un chasseur hors pair, un maître de la discrétion absolue. C''est aussi un serviteur du prototype. Je pense qu''il est parti voir son maître pour lui dire que le Player est dans les parages. Il m''a tué au chapitre 4 de l''aventure du Player. Il a réactivé une sauvegarde de moi à la fin du chapitre 5. Et il m''a libéré en échange que je l''aide à vaincre le prototype et à s''échapper de l''usine. L''usine Playtimeco est très grande. Il nous faudra éviter tous les monstres hostiles : Catnap le prototype et le Smiley Critters possédé. Dirigeons-nous vers la sortie.
+
+“Oh ! Bonjour Player, comment allez-vous ? J''ai presque failli battre le prototype.”
+
+- Heu docteur, pourquoi il y a des enfants derrière toi ?
+
+- Ils se sont perdus. Du coup je les aide avec mon animal de compagnie.
+
+- Non Yarnabi, ce n’est toujours pas de la nourriture !!
+
+- J''essaie de les aider à sortir d''ici car cet endroit est énorme. 
+
+- Même moi je n''arrive pas à sortir, donc bonne chance pour arriver à faire sortir des enfants d''ici. En plus, ils sont une petite cinquantaine, alors bonne chance. Mais bon, je vous laisse.
+
+- Bon les enfants, je vais devoir partir devant et je vous rejoins. Restez avec Yarnabi.
+
+- Hé !!!!!! hurle Lucie.
+
+- Quoi ? Tu commences à manger un enfant ? D''accord. Il était bon... Je pars devant. À tout à l''heure. Ne vous perdez pas. Comme vous l''avez vu avec votre maîtresse... 
+
+- C''est vrai !!! On doit la retrouver !! Mais à mon avis le prototype l''a déjà retrouvée avant nous.', true, true),
+  ('35871fef-40f9-8015-a76e-ec566c49382d', '35871fef-40f9-8015-a76e-ec566c49382d', '024d8cfc-936b-4f8d-920c-477185595012', 4, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'On peut continuer.
+
+- Suivez-nous.
+
+- Qu''est-ce que c''était que cette créature ?
+
+- C''est Catnap, l''un des serviteurs de prototype.
+
+- Il y a une porte.
+
+- On l''ouvre ?
+
+- Il faut un gratte-pattes, il faut la main rouge.', true, true),
+  ('35f71fef-40f9-808f-a204-dd1092842691', '35f71fef-40f9-808f-a204-dd1092842691', '024d8cfc-936b-4f8d-920c-477185595012', 5, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'La main rouge était tout en haut de l''usine. On est trop profonds pour la voir, il faut la prendre sur un ancien employé inanimé. Je crois qu''il y en a un à l''étage numéro 5. C''est là où le prototype rode le plus, donc il va falloir être très prudent. Ils sont très rares puisque toutes les créatures ici essaient de trouver ces anciens employés inanimés.
+
+- Prenons cet ascenseur encore en marche.
+
+- Monsieur le docteur, comment les ascenseurs marchent-ils encore ? Normalement, si tu ne payes pas ton loyer, tu n''as plus d''électricité.
+
+Le docteur va ensuite lui répondre de cette façon :
+
+- Mon petit enfant, l''usine a été conçue pour résister à n''importe quoi. Tu crois que Bigger Bodies c''était positif ? C''est top secret la façon de fabriquer le jouet. Mais bon, en montant dans cet ascenseur, avec un peu de chance, Huggy ne le trouvera pas ici. Il a rejoint le prototype à l''étage 5. Il faudra faire très attention.
+
+- C''est bon, on y est enfin ! Bon, dépêchez-vous, je sais que Huggy rode.
+
+- Regardez, là, un employé inanimé !!
+
+- Est-ce qu''on pourrait prendre votre main rouge ?
+
+- Oui bien sûr, prenez-la-moi. Je n''en ai plus besoin.
+
+- Merci !
+
+- Et voilà, Monsieur le docteur. 
+
+La main rouge peut se déplacer librement dans l''usine. Maintenant il faut reprendre l''ascenseur mais il ne monte pas, nous sommes pour l''instant piégés à l''étage 5, l''endroit où je ne suis jamais allé.
+
+Ah tiens, le prototype s''approche. Il y a de la fumée rouge.
+
+- Allez les enfants, accrochez-vous à moi ou montez sur le dos de Yarnabi. Accroche-toi à une demi-jambe, on va se balancer.
+
+- Attention, c''est parti !!! C''est bon, on a réussi !! dit le docteur.
+
+Les enfants vont donc lui poser une question :
+
+- Mais comment saviez-vous qu''il arrivait ?
+
+- Eh bien… Ça se sait assez facilement. Il fait un tonnerre de bruit. Je peux voir dans toutes les caméras quand je le veux. Du coup, je ressens le bruit dans toutes les caméras de l''usine. Tiens ! Il est remonté au premier étage. Ça veut dire qu''il a trouvé un ascenseur.
+
+- J''adore ! On va se dépêcher ! Avec un peu de chance, le prototype ne nous aura pas vu partir.
+
+Le prototype arriva et il dit :
+
+- Welcome docteur ! Le docteur lui répondit :
+
+- J''ai le grappe pack. Attention !! J''ai la main électrique !
+
+Le prototype lui répondit :
+
+- Mais tu n''as pas de batterie pour la charger, donc tu ne peux pas m''électrocuter ??
+
+Le docteur Ricard lui dit : "Certes, mais j''ai le flair gun."
+
+- Bon, je vais vous laisser tranquille pour cette fois, mais la prochaine fois que je vous croise, je vous poursuivrai jusqu''à ce que vous sachiez ce que c''est la mort.
+
+Le docteur répondit :
+
+- Yarnabi, peux-tu lâcher ma jambe de ta bouche !
+
+Le prototype partit en rigolant. Nous, les enfants, nous nous dépêchions de courir, de prendre tout ce qu''on voyait pour essayer de nous défendre tout en suivant les traces de Huggy.
+
+Cependant, le docteur s''était trompé.
+
+Qui était remonté en haut ? Ce n''était pas Huggy Huggy, à l''étage, c''était kisimissy. Huggy Huggy était resté en bas à la recherche de Kisimissy. Dès qu''il nous a vus, il a commencé à hurler et à nous poursuivre. Yarnabi est arrivé et lui a mâchouillé la jambe puis le bras, mais vu que c''est une peluche vivante, elle n''a rien senti. 
+
+Au bout de quelques minutes, nous avons trouvé l''ascenseur, nous sommes remontés au quatrième étage, que le docteur connaissait parfaitement. Huggy nous avait suivis, et on a dû se cacher derrière une caisse. Ne nous voyant pas, il rebroussa chemin, déçu de ne pas avoir eu son quatre-heures. 
+
+Tout à coup, le player est arrivé et a électrocuté Huggy Huggy par derrière. Le docteur, les enfants et Yarnabi prirent l''ascenseur étroit quand les lumières devinrent rouges. D''un coup, nous nous sommes écrasés à l''étage numéro 3. 
+
+Quand nous nous sommes réveillés, nous avons tous été jetés dans la cuve du broyeur, sauf Yarnabi qui était resté à l''extérieur. Tout le monde s''était accroché au docteur qui lui-même était agrippé à une poignée grâce à son grappe pack. Ils ont pu s''échapper de cette situation et, avec beaucoup de chance, ils ont trouvé une boîte contenant du miel. Les enfants, avec ce qu''ils avaient appris à l''école, savaient que le miel se conservait très bien et ont pu le manger sans crainte. 
+
+Après ça, nous sommes sortis par un conduit d''aération, Yarnabi nous attendait à l''extérieur, on est montés sur son dos et il a couru. On a dû se cacher derrière des boîtes parce que le prototype est arrivé. Heureusement, il ne nous a pas vus, mais au loin se trouvait une personne inanimée. 
+
+Le docteur nous expliqua que "personnes inanimées", c''était leur nom. Ils étaient encore en marche, ils étaient juste là pour être assis et donner des choses aux passants. C''étaient des robots qui ne pouvaient pas mourir car ce ne sont pas des êtres humains, bien qu''ils leur ressemblent.
+
+- Ces robots sont sans risque, ne vous inquiétez pas les enfants, c''est juste que leurs vêtements qui protègent leur exosquelette et leur boîte vocale sont un peu dégradés. On voit un petit peu l''intérieur des robots, mais sinon tout va bien, dit le docteur.
+
+- Voulez-vous un petit peu de miel ? demanda le robot.
+
+Nous avons tous hoché de la tête, mais le robot n''avait plus de batterie après nous avoir donné le miel. Le docteur nous expliqua que les robots ont besoin d''être rechargés mais qu''ils peuvent tenir 10 ans. Il a dû utiliser ces derniers pourcents de batterie pour nous donner ce miel.
+
+Le docteur s''exclama :
+
+- Mettez-vous en rond, vous allez manger du délicieux miel.
+
+Tout à coup, Huggy Huggy débarqua et écrasa tout le miel !', true, true),
+  ('36671fef-40f9-80cb-be01-e473291f9588', '36671fef-40f9-80cb-be01-e473291f9588', '024d8cfc-936b-4f8d-920c-477185595012', 6, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Huggy se met à crier dans toute la pièce. Le docteur nous dit de nous cacher. Après, le prototype arrive, il lui dit de vite les retrouver ou sinon il y aura une punition. Il part avec sa fumée dense.
+
+- Ouvrez !! 
+
+Le joueur arrive et lui met sa main électrique dans le dos. Après, le prototype arrive et il emmène Catnap avec lui. Mais le docteur croit que Yarnaby voulait manger les petits enfants. Yarnaby fonça sur le joueur. Il croyait qu''il voulait l''attaquer alors qu''il voulait juste lui faire un câlin !! Après on arrive dans un genre de salle avec une piscine et on voit un animal dans une salle. Il dit qu''il s''appelle Dogday. Il dit qu''avant c''était le chef des Smiling Critters et il dit :
+
+- Sauvez moi avant que les petites bestioles arrivent, mais ne faites pas trop de bruit sinon ils vont vous entendre. 
+
+Après, plein de petits Smiling Critters arrivent sur lui et prennent possession de son corps. Ils commencent à le dévorer de l''intérieur et ils prennent le contrôle des membres de Dogday pour pouvoir les attaquer. Les enfants, le Docteur et Yarnabi commencent à fuir. Ils passent dans un petit tunnel et le tunnel se referme derrière eux. 
+
+On entend un lourd cri dense. 
+
+Après, ils regardent le tunnel, puis, plus rien... à part une fumée constante. Ils font demi-tour et continuent à ramper dans le tunnel. On commence à voir une ombre qui se déplace dans la lumière. On voit le joueur se bagarrer avec l''ombre et tout d''un coup, il met sa main électrique et électrifie Catnat. Soudain apparaît devant lui une grande lumière avec une main géante. Il se lève et se fait transpercer la tête, puis elle disparait dans l''ombre de sa main.', true, true),
+  ('36c71fef-40f9-80a7-a703-c306e0512a81', '36c71fef-40f9-80a7-a703-c306e0512a81', '024d8cfc-936b-4f8d-920c-477185595012', 7, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', '- Dog Day doit être bloqué.
+
+- Nous pouvons fuir.
+
+- Nous pouvons prendre l''ascenseur. Il va nous emmener au 6ème étage.
+
+- Faites attention, il y a Momie l''anglaise qui rôde.
+
+- Il y a une porte, il faut la main rouge pour l''ouvrir.
+
+- Allez, vas-y, ouvre-la, il y a quelque chose qui me l''a arrachée.
+
+- C''est Momie l''anglaise.
+
+- Elle va dire quelque chose ;
+
+“Jouez à mes trois petits jeux.”', true, true),
+  ('36d71fef-40f9-809f-8480-c3f6d7d8acab', '36d71fef-40f9-809f-8480-c3f6d7d8acab', '024d8cfc-936b-4f8d-920c-477185595012', 8, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', '- On va jouer à tes trois jeux, mais donne-nous le code du train pour qu''on puisse remonter à l''étage numéro un et sauver cette classe d''enfants. Je sais que dans le passé, avant l''heure de joie...
+
+- Monsieur, c''est quoi l''heure de joie ?
+
+- C''est le moment où toutes les créatures se sont rebellées contre leur créateur.
+
+- Donc je disais : avant l''heure de joie, tu aimais les enfants et tu étais adorable avec eux. 
+
+Momie l''anglaise lui répond :
+
+- Certes, j''étais adorable avec les enfants, mais à cause de prototypes, ils sont tous partis dans un endroit meilleur apparemment. Mais bon, si ce sont des enfants qui n''ont pas encore été emportés dans un endroit meilleur, pourquoi ne joueraient-ils pas à mes jeux ? Le premier jeu s''intitule Memory de couleur. 
+
+Bonne chance pour les enfants.
+
+- Dépêchons-nous d''aller au Memory, de réussir à faire les deux autres jeux pour récupérer le code du train et enfin aller au playcare, là où les enfants étaient avant l''heure de joie.
+
+Playcare, c''est une sorte de minuscule ville avec une école, des maisons...
+
+- Arrêtons de parler de cet endroit et dépêchons-nous de faire le Memory.
+
+- Allez, dépêchez-vous ! Si vous faites une erreur, le lapin avec les maracas va descendre plus vite. Si le lapin est descendu tout en bas, votre partie est terminée. Par contre, si le lapin reste en haut, tout va bien. Plus vous aurez de bonnes réponses, plus le lapin descendra lentement. Et si vous avez tout fait d''une pierre deux coups, le lapin remontera.
+
+Bon, bonne chance ! 
+
+La machine commença.
+
+Alors rouge, blanc, vert, rouge, blanc, orange... Le docteur dit exactement la même chose puisque littéralement c''était une intelligence artificielle extrêmement développée. Il retenait tout et il arrivait même à devancer la machine. Momie l’anglaise a donné le code en avance. Ils ont gagné beaucoup de temps pour le prochain jeu où il fallait taper sur la tête des mini Huggies.
+
+Le docteur arrivait aussi à tout anticiper ! C’était sensationnel ! Les enfants étaient impressionnés. Il savait exactement sur quel tuyau il fallait taper et Momie l''anglaise a commencé à s''énerver pour le jeu du chien de chenille. Quand la lumière est éteinte, vous pouvez bouger. Quand la lumière est allumée, on n''a pas le droit de bouger. Il a réussi à s''enfuir, à récupérer le troisième morceau de code. Puis Momie l''anglaise a commencé à s''énerver et a commencé à nous poursuivre. Mais heureusement on est allés dans le train. On est enfin arrivés au Playcare.', true, true),
+  ('36d71fef-40f9-80f0-b065-c90f298e0bb4', '36d71fef-40f9-80f0-b065-c90f298e0bb4', '024d8cfc-936b-4f8d-920c-477185595012', 9, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Les enfants arrivent au Playcare. Et là, tout à coup, ils voient une fille sur une chaise et tout disparaît. Puis, les enfants commencent à entendre des bruits d''enfants qui riaient et s''amusaient.
+
+Ils commencent à rentrer dans la maison et tout d''un coup, ils voient un genre de grand couloir avec une télé tout au fond. Tout à coup, la télé se met à bouger et à bugger.
+
+La fille revient et leur dit à l''oreille :
+
+- Vite, courez courez !', true, true),
+  ('36d71fef-40f9-80c1-a566-ea8653d4ecd8', '36d71fef-40f9-80c1-a566-ea8653d4ecd8', '024d8cfc-936b-4f8d-920c-477185595012', 10, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Il y a Huggy Wuggy "Illusion"
+
+- Il faut sortir d''ici.
+
+- Il faut trouver la sortie de cette fichue usine.
+
+- Il y a de la fumée rouge.
+
+- Allez, cachez-vous les enfants.
+
+- Il y a Prototype !
+
+- Vite, courez les enfants !!', true, true),
+  ('36d71fef-40f9-80de-a0c3-c2b03f266c11', '36d71fef-40f9-80de-a0c3-c2b03f266c11', '024d8cfc-936b-4f8d-920c-477185595012', 11, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'En même temps que les enfants se sont cachés, le prototype est arrivé d''un coup en disant :
+
+- Où sont-ils ? Si je les trouve, je les exterminerai un par un !!
+
+Mais Huggy Wuggy “illusion” a pointé du doigt l''endroit où étaient cachés les enfants. Ils ont tous couru vers le train qui avait déraillé. En voyant qu''ils ne pouvaient pas le réparer, ils ont continué à s''enfoncer dans le tunnel. Ils sont revenus au Playcare. Momie l’anglaise les attendait. Ils lui ont dit qu''ils n''avaient pas terminé le jeu du chien. Le prototype était là. Momie l’anglaise s''est fait arracher le bras et le prototype se l''est installé pour pouvoir nous attraper à distance.
+
+Mais on a réussi à trouver un ascenseur qui nous a fait monter au premier étage. Il fallait juste courir jusqu''au hall et, avec la main de pression, faire exploser le mur qui nous empêche de sortir. Le prototype nous court après. L''usine a commencé à s''effondrer. Au moment où Popie nous a dit :
+
+- J''ai fait exploser l''usine et ses fondations. L''usine n''existera plus. 
+
+Nous nous sommes empressés de courir vers le mur. Le prototype nous pourchassait en disant :
+
+- Vous allez venir avec moi dans ma tombe ! 
+
+Il utilisa le bras de Momie l’anglaise pour attraper Yarn baby, le projetant contre le mur. Le docteur s''énerva et il appela tous ses doubles. Ces derniers se jetèrent sur le prototype. Juste avant de partir avec ses doubles au combat, il dit aux enfants :
+
+- Les enfants, partez ! Je vous donne le Grap pack !
+
+On a donc fait exploser le mur et on s''est enfin échappés. On a repris le bus scolaire. Et on a dit au chauffeur :
+
+- Partez tout de suite, accélérez ! 
+
+Le chauffeur nous a donc posé des questions.
+
+- Mais où étiez-vous passés ?
+
+- On s''est fait attaquer et enfermer dans l''usine. Elle est hantée par plein de jouets vivants.
+
+Le chauffeur nous a crus tout de suite et il a démarré. Derrière nous, on voyait l''usine s''effondrer et dans un dernier mot qu''on entendait, le docteur a hurlé : "Courez les enfants !"
+
+Les enfants se sont dit : C''est enfin fini !! On est enfin partis de cette usine !!
+
+FIN', true, true),
+  ('32e71fef-40f9-80a2-a7a1-d5844f776cf9', '32e71fef-40f9-80a2-a7a1-d5844f776cf9', '58a76807-e387-4ffd-be5b-01bc2242807b', 1, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Il était une fois, une fille qui s''appelle Iris. Elle allait se balader dans la forêt avec ses parents. Elle se retourne et elle ne voit plus personne. Elle décide donc de dormir dans la forêt. Le lendemain, elle se réveille et elle prépare un feu et de la nourriture. Elle se promène et trouve des fraises des bois. Elle mange. Après qu''elle eut terminé de manger. Elle voit au loin deux garçons, elle les trouvait très très mignons. Elle décide d''aller les voir et leur dit : “Bonjour, ça va ?”', true, true),
+  ('32e71fef-40f9-80a0-88c9-e7530824f432', '32e71fef-40f9-80a0-88c9-e7530824f432', '58a76807-e387-4ffd-be5b-01bc2242807b', 2, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Et les invite à manger.
+
+Les deux garçons la trouvent plutôt mignonne.
+
+Iris leurs demande : "Que faites-vous là, dans la forêt ?"
+
+Les deux garçons mentent et disent enfin : "Nous, heu... on se promène."
+
+Iris, étonnée, dit : "Se promener, dans la forêt, en plein mois de décembre à 22 heures, êtes-vous fous ?"', true, true),
+  ('34871fef-40f9-806a-a50f-ff199f3c9dd5', '34871fef-40f9-806a-a50f-ff199f3c9dd5', '58a76807-e387-4ffd-be5b-01bc2242807b', 3, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Non... mais on voulait prendre l''air, on ne se sentait pas bien.
+
+Iris dit : “Ah ok. Bon, vous voulez venir avec moi ? Vous grelottez beaucoup.”
+
+Les garçons disent : “Oui, on veut bien s''il te plait.”
+
+- Allez, venez. Je me suis installée là-bas.
+
+“On est arrivés, vous voulez quelque chose à boire ?”
+
+- Oui s''il te plait, un chocolat chaud.
+
+- D’accord, pas de souci. Vous pouvez vous installer ici, près du feu. 
+
+', true, true),
+  ('35171fef-40f9-8084-91fd-c80cdbebee43', '35171fef-40f9-8084-91fd-c80cdbebee43', '58a76807-e387-4ffd-be5b-01bc2242807b', 4, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Iris prépare un feu, fait chauffer de l''eau, ajoute des baies et des épices.
+
+Elle verse dans des morceaux d''écorce et s''assoit avec eux.
+
+- Bon chocolat des bois !
+
+Ils se servent et elle voit des cicatrices sur leurs mains.
+
+Iris demande : "Qu''est-ce que c''est ?"
+
+Ils hésitent à répondre et, au même moment, un bruit de craquements de branches et de feuilles qui bougent leur fait tourner la tête.
+
+- WIDY !!!!
+
+Iris demande : "Vous le connaissez ???"
+
+- Oui, c''est notre chien !', true, true),
+  ('35271fef-40f9-8070-9102-c666293bc1b2', '35271fef-40f9-8070-9102-c666293bc1b2', '58a76807-e387-4ffd-be5b-01bc2242807b', 5, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Et quand elle voit le chien, elle le trouve trop beau.
+
+Elle dit : “Il est trop mignon !!!!!!!!!!!!! Je suis fatiguée et je ne me sens pas au top... Bon, moi je vais me reposer un peu. À demain.”', true, true),
+  ('35871fef-40f9-806b-89f5-c2282c83a2d4', '35871fef-40f9-806b-89f5-c2282c83a2d4', '58a76807-e387-4ffd-be5b-01bc2242807b', 6, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'À son réveil, Widy et les garçons ne sont plus là.
+
+Anxieuse, Iris espère qu''ils sont juste partis chercher à manger.
+
+Mais elle entend un cri et un aboiement de chien.
+
+Elle enflamme un bâton et part dans la forêt en direction des cris...', true, true),
+  ('35971fef-40f9-80c6-adf6-cf361a37c0b2', '35971fef-40f9-80c6-adf6-cf361a37c0b2', '58a76807-e387-4ffd-be5b-01bc2242807b', 7, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Elle entend plein de petits bruits dans la forêt et là elle voit une silhouette dans les bois.
+
+Puis elle commence à s''avancer. Et finalement par réflexe, Iris commence à courir loin. Puis tout d''un coup elle aperçoit une maison.', true, true),
+  ('35f71fef-40f9-8003-8cd9-e9c26b934949', '35f71fef-40f9-8003-8cd9-e9c26b934949', '58a76807-e387-4ffd-be5b-01bc2242807b', 8, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', '"Une maison ici ?  C''est bizarre, on est en pleine forêt !!!" se dit Iris.
+
+Elle entend de nouveau un craquement de branche derrière elle.
+
+Paniquée, elle va se réfugier dans la maison.
+
+Et elle voit ...', true, true),
+  ('36c71fef-40f9-8011-a61e-ce33ac231e24', '36c71fef-40f9-8011-a61e-ce33ac231e24', '58a76807-e387-4ffd-be5b-01bc2242807b', 9, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Elle voit une grande salle très très belle, puis tout d''un coup elle voit une femme qui dort sur un canapé. Elle va dans une chambre en haut et trouve ses parents en train de dormir. Elle est complètement sous le choc, elle s’empresse de les entrelacer, elle est très contente et tout d''un coup elle voit la femme qui dormait, et elle apprend que c’est sa grand-mère et puis…', true, true),
+  ('36c71fef-40f9-80f0-bd78-efa56779021f', '36c71fef-40f9-80f0-bd78-efa56779021f', '58a76807-e387-4ffd-be5b-01bc2242807b', 10, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Ses parents se réveillent.
+
+Iris leur demande en pleurant : "Pourquoi vous m''avez abandonnée ?"
+
+“En plus, cria Iris, ce n''est même pas notre maison !!”', true, true),
+  ('36c71fef-40f9-8044-84ca-f829d735df80', '36c71fef-40f9-8044-84ca-f829d735df80', '58a76807-e387-4ffd-be5b-01bc2242807b', 11, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Iris parle longuement avec ses parents. Puis elle se rappelle des deux garçons. Elle repart dans la forêt avec tout le monde pour aller les retrouver et elle les voit au loin. Elle les ramène dans la maison près du feu. Et là, tout à coup, il y en a un qui lui avoue ses sentiments…', true, true),
+  ('36d71fef-40f9-804f-80bb-d2d7ee9dfd4a', '36d71fef-40f9-804f-80bb-d2d7ee9dfd4a', '58a76807-e387-4ffd-be5b-01bc2242807b', 12, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', '- Dès que je t''ai vue, j''ai eu des papillons dans le ventre !!! dit Otis.
+
+En entendant ça, son frère, Farid, se tait mais devient tout rouge et se met à transpirer.
+
+Il prend son frère par la main et l''entraîne dans la chambre du haut.
+
+Iris entend alors des bruits de fracassement.
+
+C''est sûr, les deux frères se bagarrent, mais pourquoi ?????', true, true),
+  ('36d71fef-40f9-804b-a796-f15be4dfb72a', '36d71fef-40f9-804b-a796-f15be4dfb72a', '58a76807-e387-4ffd-be5b-01bc2242807b', 13, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Iris va voir et elle les trouve en train de se battre pour elle. Elle crie :
+
+- Stop !!!!!!! Arrêtez !!! Vous jouez à quoi ?? Arrêtez de vous battre !!! Venez vous asseoir et expliquez-moi. Pourquoi vous vous battez ?
+
+- Ok.
+
+Otis dit que Farid est jaloux.
+
+- Parce que je t''ai avoué mon amour et lui il n''a pas osé... Maintenant il veut qu''on se batte, dit Otis.
+
+Iris répond :
+
+- Mais je n''ai jamais dit oui !
+
+Farid dit :
+
+- Ah, j''ai peut-être encore ma chance, dit-il en chuchotant.
+
+Otis donne un petit coup d''épaule.
+
+Iris : 
+
+- Je vous trouve tous les deux très beaux mais je vais devoir en choisir un. Mais c''est un peu difficile de choisir entre vous deux. Vous êtes vraiment mignons tous les deux.
+
+Les garçons lui donnent une heure pour choisir entre eux deux.
+
+Une heure s''est écoulée.
+
+Elle va les voir et leur dit : “j''ai choisi... et c''est Otis.”', true, true),
+  ('36d71fef-40f9-80da-b5d4-c7d65445634e', '36d71fef-40f9-80da-b5d4-c7d65445634e', '58a76807-e387-4ffd-be5b-01bc2242807b', 14, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Otis saute de joie alors que Farid fixe le sol et se colle à sa chaise.
+
+À ce moment-là, Iris entend le bruit de la sonnette.
+
+Elle se réveille dans sa chambre, couchée dans son lit.
+
+Tout cela était un rêve !!!!
+
+Elle va voir qui a sonné et là elle voit Otis et Farid qui vendent des cookies dans le quartier.
+
+Les deux frères sursautent en la voyant.
+
+C''est la fille dont ils ont rêvé cette nuit !!!
+
+Ils rougissent et partent en courant.', true, true),
+  ('36e71fef-40f9-8022-a5b1-c309cdc3e6c1', '36e71fef-40f9-8022-a5b1-c309cdc3e6c1', '58a76807-e387-4ffd-be5b-01bc2242807b', 15, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Iris les rattrape tout de suite et elle leur parle. Elle dit à Otis : "Je t''aime, je te le dis avant que tu partes.”
+
+Puis Farid dit : "Il n''est pas intéressé !!!” Alors qu''en réalité, il est juste jaloux.
+
+Ensuite, cinq ans s''écoulent. Otis et Iris se marièrent et eurent deux enfants, deux filles, plus précisément Anna et Lucy qui sont jumelles.
+
+Fin', true, true),
+  ('32e71fef-40f9-80fc-b5ba-ed9f729fb17c', '32e71fef-40f9-80fc-b5ba-ed9f729fb17c', '3ab1625a-291f-444b-955a-f4de845bc4e1', 1, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Chapitre 1
+
+Il était une fois, une petite fille de 10 ans qui s''appelait Rose. Elle rentre dans le salon et pleure parce que ses parents la détestent. Elle prépare son petit déjeuner et celui de ses parents. Elle mange, puis fait la vaisselle et elle va dans sa chambre pour lire des livres. Elle prend son livre qui s’appelle "Le chat". 
+
+Il parle d''amour. Rose adore lire, c’est sa passion. En lisant, elle ressent les émotions du livre et elle adore ça. Elle regarde à la fenêtre, elle voit des voitures, des papillons, des personnes qui s''amusent.
+
+Elle adore regarder sa bibliothèque avec tous ses livres. Elle en a lu six cette semaine, c’est immense pour une enfant de dix ans. Elle aimerait beaucoup aller à l''école mais ses parents ne veulent pas. 
+
+Elle se met sur son lit pour lire LE CHAT et elle entend un bruit : “boum boum boum” Ce sont ses parents qui se lèvent. Elle a peur, ses parents crient : “Rose ! Notre petit déjeuner est froid.” 
+
+Rose se lève et entend un bruit de livre. 
+
+Elle regarde à gauche puis à droite mais ne voit rien. Elle s’avance vers sa bibliothèque et voit un nouveau livre bleu et violet qui s’appelle “Les mondes”.
+
+Elle ouvre le livre et Rose se téléporte…', true, true),
+  ('32e71fef-40f9-80e5-a612-f360e984eead', '32e71fef-40f9-80e5-a612-f360e984eead', '3ab1625a-291f-444b-955a-f4de845bc4e1', 2, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Dans le monde des bonbons, elle dit :
+
+- Où est-ce que je suis ? Je suis... Je suis... dans un rêve !!!!
+
+Elle marche dans la forêt des bonbons et dit :
+
+- Mais je me suis pincée. Ça veut dire que je suis bien dans un monde ?', true, true),
+  ('34a71fef-40f9-80f9-aea7-c5a91c3acd72', '34a71fef-40f9-80f9-aea7-c5a91c3acd72', '3ab1625a-291f-444b-955a-f4de845bc4e1', 3, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Elle est dans un monde féerique, du coup elle rencontre une fée. 
+
+- Bonjour, dit la fée. Tu veux devenir une belle princesse ?
+
+- Oui, répond Rose. 
+
+Du coup avec ses pouvoirs elle l’habille et Rose dit : “Merci beaucoup pour ton aide.”
+
+Elle se balade, marche encore et encore, et puis elle voit un beau château. Elle grimpe à la montagne et « pouf » elle tombe dans la boue. “Je suis toute sale”, puis Rose pleure. 
+
+Un beau prince arrive et dit : “Mais toi je te connais !” Et Rose répond : “Non, on ne se connait pas.” Il dit : “Rappelle-toi on était à l’école, puis on s’est endormis et on s’est téléportés ici.” Et Rose répond : “Ah oui, désolée, j’ai une mémoire de poisson rouge.” 
+
+Du coup, le prince aide à lever la princesse. Il va au château avec la princesse Rose, le prince la porte sur ses épaules. Puis ils arrivent au château, et des dames disent : “Mais Prince, qui est cette belle fille ?” Il répond : “Je l’ai trouvé dans la boue en train de pleurer.” Puis il demande à ce qu''on la lave et qu''on l’habille. Les dames disent d''accord au prince. Les dames prennent Rose dans la charrette, elles vont dans la chambre et lavent Rose, l’habillent, puis l’emmènent près du prince. Il demande : “Vous allez bien princesse Rose ?” 
+
+Elle répond : “Oui”.', true, true),
+  ('35171fef-40f9-80c7-a1ff-d58821d72845', '35171fef-40f9-80c7-a1ff-d58821d72845', '3ab1625a-291f-444b-955a-f4de845bc4e1', 4, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Chapitre 2
+
+Un jour le prince Pierre et la princesse Rose se baladent dans la forêt enchantée et mangent les arbres en bonbons (c''est trop bon, disent Rose et le prince). Puis ils ont très mal au ventre et du coup ils arrêtent de manger et partent trouver un abri. Ils marchent et marchent et ils retombent sur la fée qui leur dit : "Bonjour. Comme on se recroise."
+
+Rose et Pierre répondent : "Bonjour, vous pouvez nous aider à chercher un abri ?" La fée fait un mouvement un peu par-ci, un peu par-là et, hop, une petite maison apparaît devant eux. Puis la fée demande comment elle était arrivée là. Elle raconte qu''elle s''est fait maltraiter par ses parents et qu''elle a trouvé un livre magique et s''est téléportée ici : La fée dit : "Mais tu sais ce qui est arrivé à tes parents ?" Et elle raconte l''histoire :', true, true),
+  ('35871fef-40f9-8006-81ac-f7e74f6e7aeb', '35871fef-40f9-8006-81ac-f7e74f6e7aeb', '3ab1625a-291f-444b-955a-f4de845bc4e1', 5, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', '- Dès que je suis née, mes parents voulaient un garçon mais pas une fille. Et donc, ils m''ont maltraitée.
+
+Ma vie est horrible... J''ai été battue. Voilà mon histoire, la Fée.', true, true),
+  ('35f71fef-40f9-8027-8e49-d70968b0757c', '35f71fef-40f9-8027-8e49-d70968b0757c', '3ab1625a-291f-444b-955a-f4de845bc4e1', 6, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'La fée dit :
+
+- Oh, ma pauvre.
+
+Rose dit :
+
+- J''aimerais bien les revoir de loin juste 2 secondes... Et la fée répondit :
+
+- Oui bien sûr !
+
+Alors, un portail s''ouvrit et elle vit ses parents heureux. Ils étaient tellement contents que leur fille soit partie parce qu''ils ne l''avaient jamais aimée.
+
+Rose dit à la fée : “Tu peux refermer le portail.”
+
+Puis elle alla dans sa maison, et le Prince dit : “Qu’est-ce qu’il t''arrive, mon amour  ?
+
+Alors Rose dit :
+
+- J''ai entendu mes parents dire qu’ils ne m’ont jamais aimée, alors…
+
+Pierre dit :
+
+- Ça va aller, ne pense plus à eux. C’est du passé, maintenant on est ensemble, on va pouvoir fonder une belle famille.', true, true),
+  ('36671fef-40f9-804f-98a0-e9823e47fc71', '36671fef-40f9-804f-98a0-e9823e47fc71', '3ab1625a-291f-444b-955a-f4de845bc4e1', 7, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Rose a levé sa tête et puis essuyé ses larmes. Elle dit :
+
+- Oui, tu as raison, je vais arrêter de penser à mes parents.
+
+- Ok, dit Pierre.
+
+- je vais y aller, dit la fée.
+
+Donc Pierre et Rose restent tout seuls. Ils sont fatigués et vont dormir dans leur maison en bonbons.
+
+Puis dix jours après, ils retrouvent le livre magique et Rose doit faire un choix difficile : soit elle garde le livre, soit elle le brûle...', true, true),
+  ('36c71fef-40f9-808b-a4ea-d69055cb6c49', '36c71fef-40f9-808b-a4ea-d69055cb6c49', '3ab1625a-291f-444b-955a-f4de845bc4e1', 8, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Elle a décidé de le brûler pour rester ici, loin de ses parents. Elle pleura et dit :
+
+- Ça sera mieux comme ça. Ils m''ont fait du mal, ça sera mieux comme ça. Il faudra faire avec.', true, true),
+  ('36d71fef-40f9-80f5-9598-dc855dbe5f58', '36d71fef-40f9-80f5-9598-dc855dbe5f58', '3ab1625a-291f-444b-955a-f4de845bc4e1', 9, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Et Pierre dit :
+
+- Oui, tu as raison, c''est bien de les oublier !
+
+- Tu viens, on va se balader pour s''aérer la tête.
+
+Et Rose dit :
+
+- Bon allez, pourquoi pas…
+
+Ils se baladèrent encore et encore. Tout à coup, juste dans un buisson se cachait un livre magique...', true, true),
+  ('36d71fef-40f9-8016-b844-e701d86c6af1', '36d71fef-40f9-8016-b844-e701d86c6af1', '3ab1625a-291f-444b-955a-f4de845bc4e1', 10, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Et elle lut le livre qui la téléporta avec Pierre dans le monde des animaux mignons. Ils étaient tellement heureux qu''ils voulaient rester ici à les caresser.
+
+Rose dit :
+
+- J''aimerais rester ici toute la vie.
+
+- Moi aussi, dit Pierre, mais comment va-t-on manger ?
+
+- On mangera des fruits, ce n''est pas grave...', true, true),
+  ('36d71fef-40f9-8093-a436-ffe31cf67a0e', '36d71fef-40f9-8093-a436-ffe31cf67a0e', '3ab1625a-291f-444b-955a-f4de845bc4e1', 11, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Et là, il pleut des bonbons dans le monde des animaux mignons.
+
+Pierre dit :
+
+- Mais où je suis ? En plus, j''ai mal à la tête et j''ai faim et j''ai mal au ventre.', true, true),
+  ('36d71fef-40f9-80f7-a629-dcb72cc00b4e', '36d71fef-40f9-80f7-a629-dcb72cc00b4e', '3ab1625a-291f-444b-955a-f4de845bc4e1', 12, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Alors Rose dit :
+
+- C''est que l''on s''est téléportés ! Alors, c''est normal que tu aies mal au ventre et à la tête.
+
+Et Pierre dit :
+
+- Sans doute.
+
+Du coup, ils commencent à marcher des heures et encore des heures. Et là, le ventre de Rose commence à gargouiller.
+
+Pierre dit :
+
+- Tu as faim ?
+
+Et Rose s''exclame : Oui !! Pourquoi ? Toi tu n''as pas faim ?', true, true),
+  ('36d71fef-40f9-80ed-9b51-ebb518f73d0d', '36d71fef-40f9-80ed-9b51-ebb518f73d0d', '3ab1625a-291f-444b-955a-f4de845bc4e1', 13, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', '- Moi aussi j''ai faim, mais du coup on peut manger les bonbons qui tombent ? dit Pierre.
+
+- Ah oui tu as raison, dit Rose.
+
+Ils mangèrent les bonbons qui tombaient, puis ils allèrent donner de la nourriture aux animaux. Les animaux étaient ravis. Rose et Pierre étaient heureux d''avoir fait une bonne action.', true, true),
+  ('36d71fef-40f9-803e-a287-d69853887c25', '36d71fef-40f9-803e-a287-d69853887c25', '3ab1625a-291f-444b-955a-f4de845bc4e1', 14, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Les animaux étaient heureux. Ça leur a fait du bien. Rose dit :
+
+- Ça me fait chaud au cœur.
+
+Pierre dit :
+
+- À moi aussi, ils sont mignons.', true, true),
+  ('36d71fef-40f9-804a-951d-db98d078644e', '36d71fef-40f9-804a-951d-db98d078644e', '3ab1625a-291f-444b-955a-f4de845bc4e1', 15, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', '- Oui, ils sont très mignons, dit Rose. 
+
+Je suis excitée, parce que la semaine prochaine je vais me marier avec Pierre, hiiiiiii !!! J''ai trop hâte mais bon.
+
+“Ça fait longtemps qu’on n’a pas vu la fée.”
+
+Pierre dit : “Oui, ça fait longtemps.”
+
+Ils vont avec les animaux et une semaine plus tard…', true, true),
+  ('36f71fef-40f9-8050-8ea3-f283f81f8713', '36f71fef-40f9-8050-8ea3-f283f81f8713', '3ab1625a-291f-444b-955a-f4de845bc4e1', 16, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Une semaine plus tard, ils se marièrent et furent heureux.
+
+Fin', true, true),
+  ('32e71fef-40f9-80e7-b53d-d9bc68b7c2a7', '32e71fef-40f9-80e7-b53d-d9bc68b7c2a7', '917b7b45-3689-4fac-91ef-6999040287ba', 1, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Trois enfants achètent une maison. À l''intérieur, il y a un cube bleu.
+
+Ils le touchent, et un portail s''ouvre.
+
+A l''intérieur, il y a de la lave et des zombies.
+
+Les trois enfants entrent à l''intérieur, il fait très chaud.
+
+Ils avancent, les zombies attaquent. Les trois enfants ne savent pas quoi faire pour riposter.', true, true),
+  ('32e71fef-40f9-8073-bb9c-c63632675244', '32e71fef-40f9-8073-bb9c-c63632675244', '917b7b45-3689-4fac-91ef-6999040287ba', 2, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Les internautes trouvent une autre pièce. À l''intérieur, il n''y a rien du tout. Ils trouvent une pierre qui brille. Ils trouvent une autre pièce, ils les assemblent, puis se jettent dans un monde mystérieux.', true, true),
+  ('35171fef-40f9-80b9-a17a-fb2503640aa6', '35171fef-40f9-80b9-a17a-fb2503640aa6', '917b7b45-3689-4fac-91ef-6999040287ba', 3, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Dans la forêt, les trois garçons trouvent un petit enfant perdu.
+
+- Fuyez, c''est un bébé zombie, il court hyper vite !! Je m''y connais à Minecraft. On dirait qu''on est dans un monde parallèle. Pour retrouver un autre monde, il faudra finir le jeu, battre le dragon et avoir les Ailitras.', true, true),
+  ('35f71fef-40f9-80b2-b430-c790b1dd4b6d', '35f71fef-40f9-80b2-b430-c790b1dd4b6d', '917b7b45-3689-4fac-91ef-6999040287ba', 4, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Allons creuser dans les mines pour trouver de la pierre.
+
+Après, il faut aller à la table de Craft, pour crafter la pioche en pierre et ainsi de suite.
+
+Cinq jours plus tard, la pioche en fer est faite.
+
+La nuit arrive, les Zombies sont là, il faut les tuer.
+
+Le jour se lève, les Zombies sont morts.
+
+Il faut se construire une forteresse.', true, true),
+  ('36d71fef-40f9-80b1-aed9-cec0ce19df96', '36d71fef-40f9-80b1-aed9-cec0ce19df96', '917b7b45-3689-4fac-91ef-6999040287ba', 5, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Les enfants construisent leur forteresse et habitent dedans. La nuit arrive. Ils se faisaient du stuff (des armures) en allant dans les grottes. Ils trouvent un diamant et se précipitent pour faire des armures.', true, true),
+  ('36d71fef-40f9-8091-afa6-c97702ebb8ad', '36d71fef-40f9-8091-afa6-c97702ebb8ad', '917b7b45-3689-4fac-91ef-6999040287ba', 6, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Après, un des enfants sort de la grotte et adopte un chien. Il va dans un temple sous-marin et trouve des bosses de la mer, des Guardians, et les tue. Il sort du temple, puis part dans un village. Il réunit les émeraudes et il enchante les épées, puis il prend un peu de nourriture.', true, true),
+  ('36d71fef-40f9-80ee-b778-eada16f24a54', '36d71fef-40f9-80ee-b778-eada16f24a54', '917b7b45-3689-4fac-91ef-6999040287ba', 7, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Les enfants vont dans le Nether pour battre les blislyses qui leur donnent des blislyserodes. Ils les assemblent avec des perles de l''Ender pour faire le portail de l''End. Ils entrent dedans et il y a l''Ender Dragon. Ils essaient de le battre mais ils n''y arrivent pas, du coup ils cherchent une autre solution.
+
+Ils détruisent les cristaux et l''Ender Dragon ne peut plus se recharger et ils arrivent à le battre.', true, true),
+  ('37b71fef-40f9-8050-abd3-ef4d97be2360', '37b71fef-40f9-8050-abd3-ef4d97be2360', '917b7b45-3689-4fac-91ef-6999040287ba', 8, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Ils partent chercher les élitras dans une cité de l''End. 
+
+Malheureusement, ils se font attaquer par une horde de Hunder Man. Ils parviennent à tuer les Hunder Man, puis ils s''emparent de leur demi-cœur et repartent à la base. 
+
+Arrivés à la base, ils trouvent des clipers qu''ils tuent pour de la poudre à canon. Puis ils font une ferme avec ceux qu''ils n''ont pas tués.', true, true),
+  ('37b71fef-40f9-809a-b60e-c252035f75d9', '37b71fef-40f9-809a-b60e-c252035f75d9', '917b7b45-3689-4fac-91ef-6999040287ba', 9, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Trois jours après, ils ont récolté plein de poudre à canon. Ils craftent des TNT. Les trois garçons vont dans le nether pour chercher des bastions. Ils se font attaquer par des piglins, du coup ils craftent des casques en or pour éviter de se faire attaquer. Les trois garçons viennent juste de trouver des bastions. Ils pillent tout leur or et repartent dans l''overworld. Ils vont dans la forêt pour chercher un manoir. Ils sont désormais dans le manoir et se cachent des piglins. Ils réussissent à trouver la salle des trésors. Une fois arrivés dans la salle du trésor, ils trouvent de l''or, de l''émeraude et du diamant. Après, ils reviennent à leur base et déposent toutes leurs trouvailles dans leur coffre. Tous les trois, ils partent à la recherche d''un village, puis le trouvent. Ils échangent avec des villageois, s''échangent leurs émeraudes, prennent du pain, puis rentrent à leur base.', true, true),
+  ('37b71fef-40f9-806d-bca9-cfc2cd28b9be', '37b71fef-40f9-806d-bca9-cfc2cd28b9be', '917b7b45-3689-4fac-91ef-6999040287ba', 10, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'Quelques jours après leur visite au village, les trois garçons décident de partir à l''aventure pour trouver une ancienne cité sous terre. 
+
+Après avoir longtemps creusé dans les profondeurs, ils découvrent enfin cette mystérieuse ville en pierre sombre. Ils avancent doucement pour ne pas faire de bruit et ouvrent plusieurs coffres remplis de diamants, de livres enchantés et de fragments de disque. Un capteur de sculk s''active et le terrible Warden apparaît. Les trois amis courent aussi vite qu''ils le peuvent et réussissent à s''enfuir avec leurs trésors.', true, true),
+  ('37b71fef-40f9-80f1-ab17-f5e07f3eeb80', '37b71fef-40f9-80f1-ab17-f5e07f3eeb80', '917b7b45-3689-4fac-91ef-6999040287ba', 11, '6bfe64cc-54e9-4b5d-a831-da98fd5ee857', 'De retour à leur base, ils utilisent toutes leurs ressources pour construire un grand château en pierre. Ils créent une grande salle pour montrer leurs richesses et une salle pour leurs armures. Ils installent aussi des golems de fer pour protéger leur village et leurs coffres.
+
+Après toutes leurs aventures, ils décident de retrouver leur famille et vont recommencer l''année prochaine.', true, true),
+  ('33b71fef-40f9-80c1-beac-c5d2491d36e8', '33b71fef-40f9-80c1-beac-c5d2491d36e8', '43a2fa80-1933-4108-8dec-6e9865699b6c', 1, '4d406103-f605-4122-a234-03f57028b953', 'Un petit garçon prénommé Mathias, part en vacances dans les montagnes avec sa famille ; ses parents, sa grande sœur et son petit frère. Après un long trajet, ils arrivent dans un chalet et son petit frère ne fait que pleurer parce qu''il a perdu son doudou. Sa grande sœur est adolescente et fait plein de bêtises et est impolie. Il découvre le chalet, il voit que sa chambre est toute petite, qu''il y a des toiles d''araignées partout. Son petit frère dort avec lui, et l''accuse d''avoir volé son doudou.', true, true),
+  ('33b71fef-40f9-8034-b548-f2b475c3f8fe', '33b71fef-40f9-8034-b548-f2b475c3f8fe', '43a2fa80-1933-4108-8dec-6e9865699b6c', 2, '4d406103-f605-4122-a234-03f57028b953', 'Le début des vacances ne se passe pas très bien. Sa sœur l''insulte tout le temps, son petit frère l''agace. Ses parents sont tout le temps dehors et ne voient pas ce qu''il se passe à l''intérieur du chalet. Mathias est très énervé, et part explorer les recoins du chalet. Il découvre une trappe cachée dans un mur très épais. Il l''ouvre et voit une échelle. Il l''escalade et arrive dans un grenier. En fouillant partout, il découvre des canards en plastique, des poupées princesses, des photos d''anciennes personnes, des grimoires et une guitare.', true, true),
+  ('33b71fef-40f9-80ce-9282-c50e79262b16', '33b71fef-40f9-80ce-9282-c50e79262b16', '43a2fa80-1933-4108-8dec-6e9865699b6c', 3, '4d406103-f605-4122-a234-03f57028b953', 'Cinq minutes après, il entend ses parents l''appeler et lui dire de venir manger. Après ça, il va se coucher et repense à ce grenier. Dans la nuit, il fait un cauchemar de la guitare qui était vivante. Il se réveille tôt le lendemain matin et va au grenier pour revoir la guitare dont il a rêvé.
+
+En passant la tête, la guitare est là, devant lui, debout sur deux pieds avec des bras et des mains, une bouche pleine de dents et des yeux rouges.
+
+La guitare dit : "Bonjour" d''une voix sombre. "Veux-tu faire un vœu ?"
+
+Mathias fait le vœu de ne plus revoir toute sa famille.
+
+La guitare se frotte les mains et disparaît en poussière...', true, true),
+  ('33b71fef-40f9-8092-8003-c0233a9452e0', '33b71fef-40f9-8092-8003-c0233a9452e0', '43a2fa80-1933-4108-8dec-6e9865699b6c', 4, '4d406103-f605-4122-a234-03f57028b953', 'Il la cherche partout. Mathias se sent fatigué et s''endort dans le grenier. Le lendemain, il découvre avec stupéfaction qu''il n''est plus dans le grenier, ni dans le chalet. Il se sent léger mais seul et il a mal à la tête.
+
+En regardant autour de lui, il découvre qu''il est dans une jungle bizarre.', true, true),
+  ('33b71fef-40f9-807f-9b0b-cbddea014b95', '33b71fef-40f9-807f-9b0b-cbddea014b95', '43a2fa80-1933-4108-8dec-6e9865699b6c', 5, '4d406103-f605-4122-a234-03f57028b953', 'Les moustiques font un mètre de long, les mille-pattes ont 3000 pattes et les herbes hautes font la taille d''une maison.
+
+Il avance et entend des bruits dans les hautes herbes. C’est là qu’un animal sauvage lui saute dessus. Quelqu''un arrive en sautant, se jette sur l''animal et le fait fuir. C''était un animal à longues pattes, avec des cornes et des grosses griffes, noir avec des taches jaunes. Le petit garçon, qui vient de le sauver, a 12 ans et est habillé de peaux de bêtes. Il se présente sous le surnom de "Le guerrier de la jungle".', true, true),
+  ('33b71fef-40f9-8076-b8fc-c78b5ba004ba', '33b71fef-40f9-8076-b8fc-c78b5ba004ba', '43a2fa80-1933-4108-8dec-6e9865699b6c', 6, '4d406103-f605-4122-a234-03f57028b953', 'Le garçon lui dit : "Viens, il pourrait revenir !!!"
+
+Il l''emmène dans sa maison qui est une grotte souterraine et sombre, cachée sous la montagne.
+
+Pendant ce temps-là, sur terre, il s''est passé un mois. En effet, le temps y est multiplié par 100.
+
+Sa famille croit qu''il a fugué. Ils ont mis des avis de recherche partout. Ils sont tous très inquiets, même son frère et sa sœur.
+
+Mathias, quant à lui, mange avec le guerrier de la jungle des asticots et des limaces dans sa grotte.', true, true),
+  ('33b71fef-40f9-805b-b870-c1da58d9bc48', '33b71fef-40f9-805b-b870-c1da58d9bc48', '43a2fa80-1933-4108-8dec-6e9865699b6c', 7, '4d406103-f605-4122-a234-03f57028b953', 'Mathias lui demande : "Où sommes-nous ?"
+
+- Tu es ici dans la quatrième dimension.
+
+- La quatrième dimension ?
+
+- C''est un deuxième monde parallèle à la Terre, où, d''après moi, il n’y a qu''une seule façon de s''en sortir vivant.
+
+- Comment es-tu arrivé ici ?
+
+- Je ne m''en souviens pas.', true, true),
+  ('33c71fef-40f9-801b-a366-d735f21a7465', '33c71fef-40f9-801b-a366-d735f21a7465', '43a2fa80-1933-4108-8dec-6e9865699b6c', 8, '4d406103-f605-4122-a234-03f57028b953', 'Mathias est intrigué et lui demande comment sortir de ce monde.
+
+- Pour sortir de ce monde et revenir sur Terre, il faut trouver la clé en or qui ouvre la porte de sortie en haut du volcan en éruption qui s''appelle "Cracheur de lave".
+
+- Mais où est ce volcan ?
+
+- Il est dans la mer des Égarés.
+
+- Et où est cette mer ?
+
+- Je ne suis pas sûr, mais je crois qu''elle est plus au nord.
+
+- Et cette clé alors, où est-elle ?
+
+- Je sais qu''il y a 10 clés dans la quatrième dimension, dont une seule est réellement en or. Il faut trouver celle en or. Mais ce n''est pas si facile de les trouver.
+
+Mathias lui dit alors : "Qu''attendons-nous pour les chercher ?"', true, true),
+  ('33c71fef-40f9-8095-8c0e-e27d14ccf5a9', '33c71fef-40f9-8095-8c0e-e27d14ccf5a9', '43a2fa80-1933-4108-8dec-6e9865699b6c', 9, '4d406103-f605-4122-a234-03f57028b953', 'Le guerrier de la jungle lui répond qu''il est tard et qu''ils ne peuvent plus sortir de la grotte car les animaux de la nuit vont commencer à rôder.
+
+En effet, les animaux de la nuit dans la quatrième dimension sont très féroces et mangent de tout, et même les hommes. Les plus dangereux sont les cobras à trois têtes, les chacals à tête de crocodile et les ours à six pattes. La journée, ces animaux ne sortent pas, ceux de la journée restent dangereux mais ne tuent pas les hommes.
+
+Ici, le soleil est très proche. Il faut toujours s''en protéger avec une grande feuille sur la tête et une peau de bête sur le corps, sinon "Game Over" !
+
+Heureusement, ici c''est la jungle et il y a quand même de l''ombre grâce aux grands arbres, mais il n''y en a pas partout. Le défi qu''auront nos héros sera de traverser la mer des Égarés sans y laisser leur peau.
+
+', true, true),
+  ('33c71fef-40f9-8025-911a-f514df7b60d5', '33c71fef-40f9-8025-911a-f514df7b60d5', '43a2fa80-1933-4108-8dec-6e9865699b6c', 10, '4d406103-f605-4122-a234-03f57028b953', 'Mathias et le guerrier de la jungle, couchés sur leur paillasse, discutent de leur vie avant d’arriver dans la quatrième dimension.
+
+Le guerrier de la jungle raconte à Mathias ses souvenirs.
+
+- Ça fait trois ans que je suis ici. Je me souviens un petit peu de ma famille. Je me souviens que j''avais un grand frère et que j''allais à l''école Paul Geyer.
+
+- Mais tu ne te souviens plus du tout comment tu es arrivé ici ?
+
+- Je me souviens d''un grenier, d''une échelle et d''une guitare.
+
+- Une guitare !?
+
+- Oui, une guitare, pourquoi ?
+
+- Est-ce qu''elle avait les yeux rouges et des bras ?
+
+- Je ne me souviens pas trop, mais je me rappelle qu''elle était debout et qu''elle m''a demandé de faire un vœu.
+
+- Comme moi !!! C''était où ?
+
+- Dans un chalet nommé "La bandamina".
+
+- Moi aussi j''y étais !', true, true),
+  ('33c71fef-40f9-8002-9da5-eec20bae776c', '33c71fef-40f9-8002-9da5-eec20bae776c', '43a2fa80-1933-4108-8dec-6e9865699b6c', 11, '4d406103-f605-4122-a234-03f57028b953', 'Les deux amis se rendent compte qu''ils ont eu tous les deux la même histoire et qu''ils ont suivi le même chemin.
+
+Il passe toute la nuit à discuter sans s''en rendre compte. Le guerrier de la jungle lui montre les deux clés qu''il a déjà trouvées, mais ce ne sont pas les bonnes.
+
+Il explique à Mathias où il les a trouvées. Ils parlent toute la nuit de stratégies pour retrouver les autres clés manquantes.
+
+Au petit matin, les deux jeunes guerriers partent à la recherche des clés. Équipés de protection solaire et d''armes fabriquées en bois et en silex, ils parcourent la jungle en commençant par chercher par terre, sous les arbres et la végétation. Et c''est là, au bout d''une heure, qu''ils trouvent une première clé sous un palmier. Malheureusement, ce n''est pas la bonne, elle est dorée mais pas en or.
+
+Mathias est très déçu et jette un caillou au loin. Le caillou atterrit dans un nid de cobras à trois têtes, qui, surpris dans leur sommeil, s''enfuient morts de peur.
+
+Les deux amis, figés comme des statues, aperçoivent une chose étincelante au fond du nid. Ils escaladent l''arbre et trouvent une clé. Ce n''est toujours pas la bonne.
+
+- Continue de t''énerver, on en trouvera d''autres comme ça, rigole le guerrier de la jungle.
+
+Les deux amis redescendent de l''arbre et se posent un peu pour manger et reprendre des forces.
+
+Le guerrier de la jungle donne à Mathias un sandwich de rondelle de lapin rose et de méga-salade, sans oublier le fromage de chèvre à quatre cornes.', true, true),
+  ('33c71fef-40f9-8024-ae07-fbccdc05efd2', '33c71fef-40f9-8024-ae07-fbccdc05efd2', '43a2fa80-1933-4108-8dec-6e9865699b6c', 12, '4d406103-f605-4122-a234-03f57028b953', 'Ils s''endorment et se font réveiller en sursaut par un glouton bleu qui leur lèche la figure. "BEURK !!!"
+
+Sa bave est plus visqueuse qu''une limace !
+
+Mathias découvre alors dans sa fourrure une troisième clé, mais ce n''est toujours pas la bonne !
+
+Les amis ont déjà cinq clés en comptant les deux qu’avait déjà trouvées le guerrier de la jungle. Elles se ressemblent toutes, mais aucune n''est celle en or.
+
+Très fatigué et voyant le soleil se coucher, le guerrier de la jungle propose à Mathias de chercher une grotte pour y dormir.
+
+Ils en trouvent une et alors qu''ils s''enfoncent dans l''obscurité, les deux aventuriers entendent un ronflement inquiétant. Ils voient alors un ours à 6 pattes dormir. Mathias propose au guerrier de la jungle d''attendre à l''extérieur que l''ours sorte et parte à la chasse pour lui voler sa caverne.
+
+- C''est exactement ce que j''allais te proposer, lui répond-il.
+
+C’est à ce moment là que l''ours à 6 pattes se réveille et part à la chasse. Les deux amis, n’ayant pas eu le temps de sortir, se figent contre la paroi et ne respirent plus pour ne pas être repérés par l''animal.
+
+Une fois l''ours loin, les deux amis s''enfoncent dans la caverne pour s''allonger sur le lit de paille.
+
+C''est là que le guerrier sent quelque chose de dur sous son dos.', true, true),
+  ('33c71fef-40f9-80f7-ac73-d4ecefa8794a', '33c71fef-40f9-80f7-ac73-d4ecefa8794a', '43a2fa80-1933-4108-8dec-6e9865699b6c', 13, '4d406103-f605-4122-a234-03f57028b953', '"AIIIIEEEE !!!!"
+
+- Qu''est-ce qu''il y a ? Demande Mathias.
+
+Le guerrier de la jungle se redresse tout en fouillant dans la paille et trouve une nouvelle clé.
+
+Malédiction, ce n''est encore pas la bonne !
+
+Le lendemain matin, l''ours est revenu dans sa caverne et dort à côté d''eux. C''est au moment où l''ours se met à bailler et à ronfler que les deux jeunes garçons s''aperçoivent de sa présence à quelques centimètres d''eux. Le guerrier et Mathias se mettent à courir à toute vitesse et c''est là que Mathias se prend les pieds dans une racine. Il trébuche et dévale la pente couverte d''orties et de ronces. La chute n''en finit pas...
+
+- Mathias ! Mathias ! Hurle le guerrier de la jungle qui à son tour dévale la pente en courant.
+
+Mathias finit sa course en percutant un arbre. L''arbre tremble et une ruche d''abeilles rouges tombe sur sa tête.
+
+Le guerrier arrive en courant, l''attrape par le bras et l''emmène dans les hautes herbes. Ils aperçoivent quelque chose de scintillant dans la ruche. Les deux amis reviennent sur leurs pas et trouvent une clé.
+
+- C''est la bonne !!!!!! Crie Mathias.', true, true),
+  ('33d71fef-40f9-8024-aec0-da79cb4b86ae', '33d71fef-40f9-8024-aec0-da79cb4b86ae', '43a2fa80-1933-4108-8dec-6e9865699b6c', 14, '4d406103-f605-4122-a234-03f57028b953', 'Le guerrier de la jungle veut vérifier, en la comparant aux autres. Cette fois c''est la vraie, elle est véritablement en or !
+
+Le guerrier est fou de joie de comprendre qu''il va enfin pouvoir rentrer chez lui, quant à Mathias, lui, est triste de savoir qu''il va perdre un ami.
+
+Les aventuriers décident de dormir un peu avant de se diriger vers le Nord pour trouver la mer des Égarés.
+
+Le lendemain matin, ils se lèvent et commencent la traversée de la jungle pour trouver la mer. Après quelques heures de marche, ils aperçoivent un horizon bleu.
+
+Une fois arrivés sur la plage, ils commencent à construire un radeau fait de bois et de feuilles et une voile de peau de bête, ainsi que des rames avec des branches d''arbres.
+
+Ça y est, ils quittent la jungle direction le “Cracheur de Lave”. Le guerrier est debout à l''avant du radeau, le poing en l''air et chante sa joie.
+
+Un kraken géant fait son apparition juste à côté d''eux. Avec ses grands tentacules, il brise le radeau en deux, obligeant les deux amis à rester seuls au milieu de la mer, à mi-chemin entre la jungle et le grand volcan, sur un grand bout de bois et une feuille.
+
+Mais quelques minutes après, le tronc se casse et ils sont bien obligés de finir leur chemin à la nage. Ils arrivent à bout de forces au pied du volcan.', true, true),
+  ('33d71fef-40f9-80fc-9edf-e7abb3a92619', '33d71fef-40f9-80fc-9edf-e7abb3a92619', '43a2fa80-1933-4108-8dec-6e9865699b6c', 15, '4d406103-f605-4122-a234-03f57028b953', 'Les deux amis commencent à escalader le volcan, quand soudain une coulée de lave passe à côté d''eux, à quelques centimètres. Ils continuent d''avancer quand une deuxième coulée de lave passe à un mètre, puis une troisième, puis une quatrième et encore une cinquième. Des roches dévalent la pente du volcan à toute vitesse. Le guerrier de la jungle pousse Mathias derrière un rocher pour éviter une roche. Des rafales de vent se mettent à souffler et la mer se déchaîne. Des explosions de lave jaillissent au-dessus de leur tête. Ils avancent encore un peu et voient une porte en fer qui vole au-dessus du volcan et qui a l''air de résister à la lave. Les deux amis se rendent compte que la montée du volcan sera plus difficile que ce qu''ils pensaient.', true, true),
+  ('33d71fef-40f9-80f9-b80b-e46b5c65f8dd', '33d71fef-40f9-80f9-b80b-e46b5c65f8dd', '43a2fa80-1933-4108-8dec-6e9865699b6c', 16, '4d406103-f605-4122-a234-03f57028b953', 'Le guerrier de la jungle commence à siffloter une mélodie. Mathias lui dit alors :
+
+- Mais qu''est-ce que tu fais ? Ce n''est pas le moment de chanter !
+
+- Attends ! Tu vas voir !
+
+- Voir quoi ?
+
+Là, le guerrier de la jungle lève le doigt vers le ciel et dit :
+
+- Ça !
+
+Mathias lève la tête et voit un énorme oiseau gris voler haut dans le ciel, quand soudain il pique vers eux.
+
+- Je te présente mon ami Siffle le temps, un "aquasitor".
+
+- Un aqua quoi ??
+
+- Quoicoubeh ! rigole le guerrier de la jungle. Mais non, un aquasitor, c''est un animal volant de cette quatrième dimension. Il est gentil, ne t''inquiète pas. Il va pouvoir nous aider.
+
+C''est à ce moment-là, que Siffle le temps les attrape avec ses serres et ils remontent tous ensemble comme une flèche.
+
+Après un haut-le-cœur, Mathias crie de joie.
+
+- BANZAAAAIIIII !!!!
+
+- Dépose-nous sur la porte Siffle le temps, dit le guerrier de la jungle à l’aquasitor.
+
+L''animal répond par un cri et se dirige vers la porte.
+
+À l''approche, Siffle le temps ouvre ses serres pour les lâcher et les envoyer vers la porte. ', true, true),
+  ('33d71fef-40f9-80b0-bf04-d14c6eaf64e9', '33d71fef-40f9-80b0-bf04-d14c6eaf64e9', '43a2fa80-1933-4108-8dec-6e9865699b6c', 17, '4d406103-f605-4122-a234-03f57028b953', 'Les deux jeunes garçons font un vol plané, s''écrasent, glissent puis s''accrochent au pied de la porte.
+
+- Siffle le temps ! Tu aurais pu nous déposer en douceur, espèce d''imbécile !!! dit le guerrier de la jungle.
+
+Suspendus à la porte juste au-dessus du cratère en éruption, les deux jeunes aventuriers font trois tractions pour réussir à remonter.
+
+Accrochés à la porte, ils prennent la clé en or et jettent les autres dans le volcan avant d''ouvrir la porte de fer. À peine ont-ils tourné la clé dans la serrure, qu''ils se font emporter dans un tourbillon magique. Secoués dans tous les sens, ils atterrissent dans le jardin du chalet.
+
+Ils se redressent et regardent tout autour d''eux. Mathias reconnait tout de suite le chalet.
+
+- Est-ce que tu reconnais ? demande Mathias.
+
+- Oui, mais ne traînons pas, allons voir nos parents.
+
+Les enfants se dirigent vers la porte du chalet et voient à l''intérieur des inconnus.
+
+- Mais ce ne sont pas mes parents, dit Mathias.
+
+- Ni les miens, répond le guerrier de la jungle.
+
+Les gens du chalet sortent dans le jardin en les voyant.
+
+- Que faites-vous ici les enfants ? demandent-ils.
+
+- On cherche nos parents.
+
+- Et, où sont-ils ?
+
+- Ils sont dans le chalet.
+
+- Mais non, c''est nous qui sommes dans le chalet.
+
+- Alors, où sont nos parents ? demande Mathias, et qui êtes-vous ?
+
+- Mais quelle date sommes-nous ? interroge le guerrier de la jungle.
+
+- Nous sommes le 25 août 2027.
+
+- Quoi !? s’exclament les deux garçons.', true, true),
+  ('33e71fef-40f9-8098-bb46-d0b0c66b603a', '33e71fef-40f9-8098-bb46-d0b0c66b603a', '43a2fa80-1933-4108-8dec-6e9865699b6c', 18, '4d406103-f605-4122-a234-03f57028b953', '- Et nous ne savons pas où sont vos parents, mais nous allons vous aider à les retrouver.
+
+- Mais, moi j''étais là l''été 2026, dit Mathias.
+
+- Quoi ?! s''exclame le guerrier de la jungle. Moi j''étais ici en 1727.
+
+Mathias et les adultes le regardent d''un air stupéfait. Le guerrier de la jungle comprend alors que dans la quatrième dimension, le temps passe beaucoup, beaucoup moins vite. Il comprend que les trois années passées dans la quatrième dimension font en réalité 300 ans sur la Terre.
+
+- Comment vous appelez-vous ? demande la dame.
+
+- Mathias.
+
+- Louis.
+
+Mathias le regarde, étonné, découvrant ainsi sa vraie identité.
+
+Louis se rend compte qu''après 300 ans il n''a plus de famille.
+
+Le monsieur demande :
+
+- Où habitez-vous ?
+
+- 26 rue du Feuillage à Lyon, répond Mathias.
+
+- Est-ce que je pourrai venir chez toi, lui demande Louis.
+
+C''est ainsi que les jeunes garçons prennent la route avec les adultes et leur fils, en direction de Lyon dans une Lamborghini bleue.', true, true),
+  ('33e71fef-40f9-80c0-9058-f50e0bcb8b0e', '33e71fef-40f9-80c0-9058-f50e0bcb8b0e', '43a2fa80-1933-4108-8dec-6e9865699b6c', 19, '4d406103-f605-4122-a234-03f57028b953', '- Quelle est cette machine ? Où sont les chevaux ? demande Louis.
+
+Le père montre le capot et répond : "Ils sont ici, il y en a 678"
+
+- Ils doivent être vraiment petits pour être 678.
+
+Mathias, le couple et leur fils rigolent de bon cœur.
+
+Sur la route, Louis regarde tout autour de lui d''un air intrigué par cette époque qu’il ne connaît pas et Mathias, quant à lui, s''est endormi la tête sur l''épaule de son ami.
+
+Une fois arrivés à la maison de Mathias, sa famille sort en courant et lui fait un gros câlin.
+
+- Mathias ! Tu nous as fait une peur bleue, dit son père.
+
+- Oh Mathias, quelle joie de te revoir, dit sa mère.
+
+- Salut p''tit frère, dit sa sœur en lui ébouriffant les cheveux.
+
+Son petit frère arrive en courant pour lui sauter dans les bras, quand il se rend compte qu''il a beaucoup grandi durant cette année.
+
+- Papa, Maman, est-ce que Louis peut rester avec nous pour la vie ? Il n''a plus de famille maintenant, dit Mathias.
+
+Bien sûr, les parents sont d''accord et Mathias et Louis comprennent qu''ils vont devenir frères.
+
+Toute la nouvelle famille réunie rentre dans la maison pour déjeuner ensemble. Louis et Mathias leur racontent toute leur aventure dans la quatrième dimension.
+
+
+
+
+
+Pendant ce temps-là, l''autre famille est de retour au chalet.
+
+Le petit garçon découvre à son tour le grenier, ainsi que la guitare magique.
+
+"Aura-t-il la même histoire que nos deux amis ?"', true, true),
+  ('1a671fef-40f9-8006-a808-d9e19f3f6bb5', '1a671fef-40f9-8006-a808-d9e19f3f6bb5', '57bb63a0-b08f-4215-898a-fe13f919d744', 1, 'd14a3f5f-ee62-4960-8c83-c6883a58af5a', 'Elle se souvient de ses dix ans. Plongée dans son bain, l''eau à la poitrine et les cheveux mouillés flottants, pieuvre sur ses épaules. Essoufflée, seule, prisonnière de ses pensées. Questionnement. Celui qui fera basculer sa vie. On lui demande de faire un choix. Papa ou maman ? Ce choix, elle ne le sait pas encore mais il fera d''elle une adolescente anxieuse, jeune femme sceptique, puis une mère fantastique. Ce soir là, maman est allée trop loin. Mais papa est loin. Loin de ses soucis de petite fille, loin de son désespoir, celui là même que lui occasionne sa mère. Alors ce sera maman. Ce soir là seulement. Ensuite, ce sera papa, et puis plus personne. Alba se détachera de sa vie pour devenir une femme. Celle qu''elle est à l''aune de ses 33 ans.
+
+Elle a quatorze ans. Mamie pris le relais. Elle ne l''a pas vue depuis ses 4 ans. Elle est alcoolique, ils se re côtoient depuis quelques mois. Régulièrement, elle lui rend visite dans son appartement, quartier chaud du Havre, à l''odeur de pastis. Cette odeur de pastis, elle viendra jusqu''à son chez elle, voler ses souvenirs quand elle s''installera dans le logement de fonction dans lequel elle a grandi, à ses 14 ans. Lorsque que papa et maman partiront, déchirés après 20 ans de mariage.
+
+Elle aussi la laissera tomber, après l''avoir marquée au fer rouge. Elle aussi sera une partie de son histoire. Micheline.
+
+Quelle est leur histoire, à tous , pour que leur douleur parasite la transmission, cet acte si beau, si pur et si valorisant dont ils se privent dans l''impuissance ?
+
+Rupture familiale. Avec ses frères aussi. Retrouvailles , quelques années plus tard.
+
+À 28 ans , elle est enceinte. Les crises de nerf de sa mère ne lui sont plus supportables. Elle écrit, pour prévenir, pour se libérer, pour s''affirmer. Elle questionne son père aussi, sur ses choix. Pourquoi n''a t''elle pas eu sa place dans les pensées de ses parents ? Pourquoi l''ont ils à tour de rôle laissée tomber alors qu''elle cherchait désespérément des bras dans lesquels se lover ? Qui est cette grand mère qui a fait une apparition traumatisante ?
+
+À 32 ans, le diagnostic tombe. Après tant d''années , voilà qu''elle sait enfin ce qu''elle partage avec sa mère. Cette souffrance physique et psychique qu''elle contient depuis toujours. Pour ne pas lui ressembler, à sa mère. Et encore moins depuis qu''elle est maman. Et puis, elle comprend, que tout n''est pas à jeter. Comment peut elle lui dire qu''elle la comprend ? Comment lui demander, comment elle a fait, elle ? Comment garder ce qu''elle veut garder d''elle ? Comment recréer du lien ? Elle qui compose son être, son âme au trois quarts? Et les autres ? Que pardonner et à qui ?', true, true),
+  ('27d71fef-40f9-80a4-aaf4-d46d3ee76870', '27d71fef-40f9-80a4-aaf4-d46d3ee76870', 'cf7c02b0-b187-4b29-a5e8-56dd4557395d', 1, '9ee5c32d-c6f9-4b8e-843b-5a779492f36a', 'Le bruit des coups résonnait encore dans sa tête. La sueur, le sang, les cris, tout se mélangeait
+
+Diego quitte le ring sans un mot. La foule hurle son nom, mais il ne les entend plus.
+
+Dans le vestiaire, sous la lumière crue du néon, il se regarde dans le miroir : Une coupure à la lèvre, l''œil gonflé. Rien de grave. Rien qu''un peu de maquillage ne puisse effacer.
+
+Deux heures plus tard, la même main qui avait frappée sans pitié manie un pinceau fin, traçant sur ses paupières un trait noir après les avoir ombrées d''un fard doré. La transformation commençait. Son souffle s''était calmé, et ses muscles se détendaient. Diego disparait laissant place à Nina Pistola, la reine de la scène du cabaret L''Ange Rose.
+
+Quand elle monte sur les planches, tout change. Le monde devient lumière et paillettes. Sa voix se fait douce, ses gestes langoureux, elle est sereine. Personne ne voit les cicatrices sous le fond de teint. Personne ne sait que demain les coups reprendront pour gagner sa vie.
+
+Mais ce soir, elle remarque dans le public un homme inconnu qui durant les applaudissements nourris plante son regard dans le sien.
+
+Dans la loge, Nina Pistola retire sa perruque, son costume de drag queen et redevient Diego qui sent monter en lui une inquiétude. Qui est cet homme ?
+
+Et soudain, il voit sur le miroir une carte de visite qu''il attrape fébrilement. Aucune écriture, aucun nom, juste un symbole : une flamme gravée à l''encre rouge. Diego ne connait pas ce symbole. Cette carte vient-elle de l''homme vu dans la salle ?', true, true),
+  ('2e171fef-40f9-8090-9e35-c58c170d63e0', '2e171fef-40f9-8090-9e35-c58c170d63e0', 'cf7c02b0-b187-4b29-a5e8-56dd4557395d', 2, 'f81dde7c-9afd-462d-8476-0f237a41a760', 'Diego hésita un instant, son cœur battant la chamade dans la pénombre des toilettes. La carte est petite, presque insignifiante, mais cette flamme rouge semble pulser comme un avertissement vivant. Il la glisse dans sa poche, jetant un regard paranoïaque par-dessus son épaule. Personne. Le bruit de la salle principale filtre à travers la porte : rires étouffés, verres qui s''entrechoquent, et cette odeur persistante de tabac froid et de secrets mal gardés.
+
+De retour dans la salle, l''homme inconnu a disparu. À sa place, une chaise vide et un verre à moitié plein, comme si le temps s''était figé. Nina Pistola, toujours perchée sur son tabouret, croise son regard. Ses yeux, d''un vert perçant sous le maquillage outrancier, le fixent avec une intensité qui le met mal à l''aise. Est-ce un sourire qui étire ses lèvres peintes en rouge sang, ou une grimace de prédateur ?
+
+« Tu as l''air d''avoir vu un fantôme, chéri, » lance-t-elle d''une voix rauque, en allumant une cigarette fine. La fumée s''élève en volutes paresseuses, masquant partiellement son visage. Diego s''approche, feignant la nonchalance, mais ses muscles sont tendus comme des cordes d''arc.
+
+« Cet homme... celui qui était là il y a une minute. Vous le connaissez ? » demande-t-il, s''asseyant à côté d''elle. Nina éclate d''un rire guttural, qui résonne comme un écho dans une caverne.
+
+« Oh, mon pauvre. Dans ce monde, tout le monde connaît tout le monde, mais personne ne sait rien. C''était peut-être un messager. Ou un chasseur. » Elle penche la tête, son costume de dragon queen scintillant sous les lumières tamisées. « Et toi, Diego ? Qu''est-ce qui t''amène dans ce repaire de vipères ? Toujours à la poursuite de tes co-auteurs fantômes ? »
+
+Diego sent la carte brûler dans sa poche. Il improvise : « Une piste. Sur un vieux projet. Quelque chose à propos d''une ambivalence infinie... et d''un équilibre perdu. »
+
+Nina hausse un sourcil, intriguée. « L''équilibre, hein ? C''est fragile, ça. Comme un château de cartes enflammé. » Elle se penche plus près, son souffle chaud contre son oreille. « Si tu cherches des réponses, suis la flamme. Mais attention, elle consume tout sur son passage. »
+
+Soudain, la porte du bar s''ouvre avec fracas. Trois silhouettes encapuchonnées entrent, leurs ombres s''allongeant sur le sol comme des doigts crochus. L''un d''eux porte un tatouage visible sur le poignet : une flamme identique à celle de la carte. Le public se tait, l''air chargé d''électricité. Nina murmure : « Ils sont là pour toi, mon dragon. Prêt à danser avec le feu ? »
+
+Diego bondit de son siège, son instinct de survie prenant le dessus. La poursuite recommence, mais cette fois, il n''est plus seul. Nina glisse une main dans la sienne, un sourire malicieux aux lèvres. « Allons-y. J''ai toujours aimé les fins explosives. »
+
+À suivre...', true, true),
+  ('2e171fef-40f9-80ad-9acb-f98208440faf', '2e171fef-40f9-80ad-9acb-f98208440faf', 'cf7c02b0-b187-4b29-a5e8-56dd4557395d', 3, '9ee5c32d-c6f9-4b8e-843b-5a779492f36a', 'La chaise de Diego bascula dans un fracas sec. Le bar bruissait de sons mélangés : verres renversés, jurons étouffés, corps qui s''écartaient comme une mer inquiète.
+
+Les silhouettes encapuchonnées avançaient déjà, trop calmes, trop sûres d''elles, leurs pas réglés sur un tempo inaudible.
+
+- Par la sortie de service, souffla Nina sans lâcher la main de Diego.
+
+Ils s''élancèrent. Une table vola. Le premier encapuchonné réagit aussitôt. Une lame scintilla, traçant dans l''air un arc de lumière. Diego sentit la morsure passer à quelques centimètres de son flanc. Le dragon en lui rugit.
+
+La porte arrière céda sous l''épaule de Nina. L''air de la nuit les frappa comme une vague d''odeur de terre mouillée. Derrière eux, un coup de feu claqua, sec. Ils coururent dans les ruelles, Nina guidant, comme si la ville lui appartenait. A un carrefour, elle s''arrêta net, plaqua Diego contre un mur couvert d''affiches déchirées.
+
+- Ecoute-moi, murmura-t-elle, les yeux brillants. La flamme n''est pas qu''un symbole. C''est une clé, mais de quoi ?
+
+Un choc sourd résonna au bout de la ruelle. Les silhouettes réapparurent, se découpant sous un vieux lampadaire. Diego inspira profondément. La peur se mua en chaleur qu''il ressentit dans tout son corps. Il sentit quelques chose s''éveiller en lui et battre à l''unisson de son cœur et de ses tempes.
+
+- Alors dit-il en avançant, la voix grave, allons-y !
+
+Nina était impressionnée.', true, true),
+  ('24f71fef-40f9-8096-8c73-c6f273ba6fbe', '24f71fef-40f9-8096-8c73-c6f273ba6fbe', '18679d47-266f-4b0f-961c-d5696c6c9d1a', 1, 'c12ca8e2-fc17-4d47-9097-170abd04b3dc', 'Mei, 16 ans, est une Lycéenne banale, s''ennuyant de cette vie trop fade pour elle et ayant des troubles de la mémoire. Au lycée, elle a quelques copines mais ce ne sont pas de vraies amies. Les garçons de sa classe ne l''intéressent pas. Pas très futés, ils passent leur temps à parler jeux vidéos et voitures.
+
+Chez elle, Mei joue de la guitare depuis l''âge de 5 ans. Elle adore jouer du rock, mais parfois se lance dans la création de chanson. Elle n''a jamais pris de cours à cause de ses problèmes de mémoires.
+
+En classe, c''est pareil, c''est compliqué de mémoriser ce que disent les profs.
+
+Parfois le week-end, elle va dans son magasin de musique préféré. Elle y voit souvent les mêmes personnes, des passionnés comme elle.
+
+Un jour alors qu''elle regarde une nouvelle guitare, un jeune homme de son âge lui adresse la parole.
+
+- Salut, elle est belle celle là, dit il en montrant la guitare. Ils n''ont qu''un seul exemplaire apparemment, c''est à celui qui l''achètera le premier.
+
+- D''accord, répond elle timidement.
+
+Le garçon est plutôt charmant, mais elle a un drôle de présentiment.
+
+- Je vais à un concert samedi soir au bar "Le Tonkin", ça te dit de venir ?', true, true),
+  ('27871fef-40f9-8018-b67d-ce7148aa7058', '27871fef-40f9-8018-b67d-ce7148aa7058', 'e7d8e48c-435c-4438-97eb-84ed13f9471b', 1, 'c12ca8e2-fc17-4d47-9097-170abd04b3dc', 'Salut, moi c''est Mia. J''ai 19 ans et j''étudie les sciences du langage. Au campus, j''ai pas mal d''amis, filles et garçons. Il y a 2 ans, j''étais en couple avec un étudiant du campus, mais ça n''a duré que quelques mois. J''ai préféré le quitter, car ce garçon plaît énormément aux filles et j''avais peur qu''il me trompe. Du coup, j''ai préféré arrêter l''histoire avant qu''il ne me fasse du mal. Mais voilà, en vrai, je n''arrive pas à l''oublier…', true, true),
+  ('29671fef-40f9-8022-8dd9-d730cd05eb4b', '29671fef-40f9-8022-8dd9-d730cd05eb4b', 'e7d8e48c-435c-4438-97eb-84ed13f9471b', 2, '545378a4-93af-433b-ae1f-98a9cb401801', 'Elle me manque, mais jamais je n''oserais lui dire. Je n''ai toujours pas compris pourquoi, Mia m''avait quitté.
+
+Peut-être que si j''avais été plus distant avec les autres filles, elle aurait eu moins peur que je la trompe. Mais je ne comprends pas pourquoi, elle ne m''a pas fait confiance. Je l''aimais. Moi les autres ne m''intéressaient pas.
+
+Tant pis pour elle, maintenant rien que pour la rendre jalouse, je vais sortir avec Daphné... Sa meilleure amie...', true, true),
+  ('2a671fef-40f9-807c-bbe4-de41552f35c9', '2a671fef-40f9-807c-bbe4-de41552f35c9', 'e7d8e48c-435c-4438-97eb-84ed13f9471b', 3, 'c12ca8e2-fc17-4d47-9097-170abd04b3dc', 'On est lundi matin et j''ai passé un super week-end. Je suis de bonne humeur et c''est bientôt Noël. Arrivée au campus, je retrouve mes copines et on papote de notre week-end, de ce qu''on a fait. Mélo nous montre le nouveau téléphone qu''elle a acheté et tout ce qu''elle peut faire avec. Perso, je n''ai pas les moyens de m''acheter un tel téléphone, mais c''est pas grave, je me contente de celui que j''ai et j''apprécie tout de même sa fierté. Les cours commencent dans quelques minutes, alors nous nous dirigeons chacune vers nos bâtiments respectifs. Le campus est immense, on dirait une vraie ville. Au moment de me diriger vers le bâtiment des Langues, je l''aperçois avec ses copains, qui regarde dans notre direction. En fait, il regarde Daphné, puis moi, puis tourne le regard. J''ai soudain une boule au ventre, comme à chaque fois, et mes mains tremblent. Ca m''agasse de ressentir ça ! Je me pose pleins de questions. En montant les escaliers, un copain de promo me salue. Nous échangeons sur tout et rien jusqu''à arriver dans l''amphithéâtre. On s''assoie l''un à côté de l''autre et c''est parti pour la première demie journée de la semaine. Concentrée, je ne pense plus à lui.', true, true),
+  ('2bd71fef-40f9-8000-a871-e3777e52be69', '2bd71fef-40f9-8000-a871-e3777e52be69', 'e7d8e48c-435c-4438-97eb-84ed13f9471b', 4, '545378a4-93af-433b-ae1f-98a9cb401801', 'Je déteste les week-ends, parce que je ne peux pas voir Mia. C''est idiot de penser ça, elle m''a quitté, je n''ai pas compris pourquoi et mon seul objectif à vrai dire c''est de lui faire regretter.
+
+Mais je dois bien avouer que le lundi matin, m''apporte une certaine satisfaction, à vrai dire la seule, celle de pouvoir la croiser sur le campus.
+
+Avant de rentrer en cours, je la vois avec son groupe d''amis qui discute. Elle semble se réjouir devant un téléphone dernier cri. Je n''ai jamais compris ce que la technologie avait de si fascinant pour que tout le monde se réjouisse. Il semblerait qu''elle soit destiné à rapprocher les gens. Toutefois, au contraire, moi il me semble qu''elle éloigne les êtres humains. Pourquoi discuter derrière un écran quand on peut le faire en face-à-face?
+
+Bref, elle est là avec ses amis, Daphné est à côté d''elle. Il faut quand même bien remarquer que Daphné est très jolie. Je ne sais pas encore de quelle manière je vais pouvoir l''aborder et l''inviter à dîner.....', true, true),
+  ('2ce71fef-40f9-80a1-906b-e6fdac28e42a', '2ce71fef-40f9-80a1-906b-e6fdac28e42a', 'e7d8e48c-435c-4438-97eb-84ed13f9471b', 5, 'c12ca8e2-fc17-4d47-9097-170abd04b3dc', 'Le midi, alors que je retrouve mes copines pour aller déjeuner, on voit afficher partout l''annonce d''une soirée dans le campus, qui aura lieu dans 2 semaines, le week-end avant les vacances de Noël. C''est la fameuse soirée de Noël du campus. Cette année, c''est soirée Blanche. Quelle robe je vais pouvoir mettre pour qu''il me voie... Il faut que j''aille faire les magasins. Et lui, comment sera t''il habillé ? C''est peut-être l''occasion de renouer avec lui. Daphné me sort de ma torpeur en me sautant dessus de joie. "T''as vu ça, la soirée de Noël ?"
+
+- Oui j''ai vu.
+
+- J''ai une superbe robe que je rêvais de mettre depuis que je l''ai, mais je n''avais pas eu l''occasion encore. Cette fois je vais pouvoir la mettre, elle est trop belle, regarde...
+
+Et elle me montre une photo sur son téléphone. En effet, elle est magnifique.
+
+- Aller viens on va déjeuner.
+
+En allant au restaurant du campus, on passe à côté du stade. Daphné est toujours surexcitée. Les hockeyeurs s''entrainent.
+
+- Regarde toute cette brochette de garçons qu''on va pouvoir approcher pendant la soirée, me dit elle en m''attrapant les épaules. Imagine les habiller tout en blanc, dans des vêtements moulants qui font ressortir tous leurs muscles.... Hummm Oh j''ai trop hâte.', true, true),
+  ('2d871fef-40f9-8059-beea-e5c2d1c55124', '2d871fef-40f9-8059-beea-e5c2d1c55124', 'e7d8e48c-435c-4438-97eb-84ed13f9471b', 6, '545378a4-93af-433b-ae1f-98a9cb401801', 'La soirée de Noël du campus approche à grand pas. On sent l''excitation chez tous les élèves. Tous cherchent quelle tenue ils vont porter. Cette année l''ambiance est particulière. La neige est tombée, glaçant le paysage. Pourtant l''effervescence des fêtes de fin d''année apporte une chaleur, qui contraste avec la fraîcheur des températures.
+
+Je ne fais pas exception à la règle, je cherche quelle tenue je vais pouvoir me mettre. Le thème de la soirée est « tous en blanc ». Je me projette déjà avec un pantalon Chino, des mocassins, et une chemise qui mettra en évidence mon corps musclé.
+
+Mais il me reste encore le choix de la Partenaire. Qui m''accompagnera à cette soirée de campus? Vais-je demander à Daphné de m''accompagner pour faire bouillir de rage Mia, ou bien vais-je demander à Mia d''être ma cavalière pour renouer avec elle ?', true, true),
+  ('2fc71fef-40f9-8000-ada0-d0b272dc609c', '2fc71fef-40f9-8000-ada0-d0b272dc609c', 'e7d8e48c-435c-4438-97eb-84ed13f9471b', 7, 'c12ca8e2-fc17-4d47-9097-170abd04b3dc', 'Le club de Cheerleader passe en courant pour aller s''entrainer le long du stade.
+
+- Regarde ça ! Elena arrive par surprise derrière moi en m''attrapant par les épaules. Tous les garçons les regardent, nous à côté... pfff faut qu''on passe 2h devant notre glace pour qu''éventuellement ils daignent nous regarder. T''as trouvé ta robe en fait ?
+
+Sans lacher les Cheerleader et les hockeyeurs des yeux, je sors mon téléphone.
+
+- Tiens regarde. Et je lui montre la photo de la robe, puis une photo de moi avec.
+
+- Waouh, dis donc, tu vas tous les faire craquer avec ça ! Mais qu''est-ce que tu regardes ?
+
+- Hein ?! Heu non rien.
+
+Il est là, à quelques mètres de moi, il est comme tous ces garçons à regarder les filles "Regarde moi, regarde moi, allez"
+
+Le coach les rappelle à l''ordre et ils repartent tous en courant sur le terrain, il ne m’a pas regardé.
+
+...
+
+L''excitation est à son comble dans les couloirs du campus. Pleins de filles crient de joie, car elles ont trouvé un cavalier. Je traverse le couloir tête baissé, mon sac sur l''épaule. Je ne veux pas voir ça. Il ne m''a pas invité... Je pense proposé à Jérémy, on est pote, je suis sûre qu''il voudra bien m''accompagner, en tout bien tout...
+
+BIng
+
+Tête baissée devant ce torse contre lequel je viens de me cogner, mon cœur bat très fort, trop fort, il fait des bonds dans ma poitrine, j''ai la gorge qui enfle, j''ai chaud à la tête, j''ai chaud dans tout le corps, je le sens... puis nos regards se croisent... c''est lui...', true, true),
+  ('2a071fef-40f9-80ae-87fd-eb9cd5056fe6', '2a071fef-40f9-80ae-87fd-eb9cd5056fe6', '39bae254-b3a0-40a5-a1f8-45cee4dd691f', 1, '6f4d0c54-5e85-4826-b358-63dff4a9dc59', 'C''est quoi l''amour ?
+
+Partie 1 : Les décisions
+
+Le jour de ses onze ans, Clotilde s''était fait une promesse. En réalité deux. La première, c''était d''aller moins vite. Car elle avait tendance à aller trop vite. Trop vite pour beaucoup de choses. Trop vite pour décider. Trop vite pour répondre. Trop vite pour se vexer. Trop vite pour insulter. Trop vite pour ne pas être celle qu''elle voulait être. Trop vite pour plaire. La seconde promesse, c''était d''écrire un livre, son premier livre. Peu importe le nombre de pages. Peu importe le lieu de l''écriture. Son carnet allait devenir son meilleur ami, et sa patience, elle, sa nouvelle meilleure amie. Elle allait être bien entourée.
+
+Maintenant, elle avait onze ans et demi. Cela faisait toute la différence. Elle avait mûri. Surtout que, le premier avril, papa avait annoncé à mon petit frère et à moi que papa allait partir de la maison pour toujours.
+
+- « Pourquoi, papa ? »
+
+- « Je n''aime plus ta maman, ma chérie. »
+
+Après une seconde d''hésitation, il rajouta :
+
+- « Mais vous, je vous aime toujours. »
+
+- « Moi, je ne me marierai jamais. Et en plus, si tu ne m''aimes plus un autre jour, alors c''est nul, l''amour. »
+
+C''est là que maman prit la parole et sortit de son silence, avec une larme sous chaque œil.
+
+- « Tu verras, ma chérie, c''est magnifique l''amour, quand ça marche. C''est un sentiment, une émotion, une rencontre, une évidence... »
+
+- « Un échec, parfois », dit Augustin du haut de ses dix ans.
+
+Clotilde, qui voulut confronter son papa discrètement, lui demanda :
+
+- « Papa, c''est quoi l''amour ? »', true, true),
+  ('26a71fef-40f9-805b-a27c-d3a08009c93f', '26a71fef-40f9-805b-a27c-d3a08009c93f', '6977f91e-bafe-4c9f-ba60-f864a4f71fa9', 1, 'e42465e5-58bc-4e2d-953b-95f6dc2d5a75', null, false, false),
+  ('35e82111-d2ba-4fcc-8517-bdd8f41d9fcc', '35e82111-d2ba-4fcc-8517-bdd8f41d9fcc', '80f0803e-8441-4c22-8c21-6b3ed62fdd23', 1, 'c12ca8e2-fc17-4d47-9097-170abd04b3dc', 'J''ai 13 ans et je rêve d''aller aux Jeux Olympiques. Je m''appelle Stéphane et je suis en 4ème. Cette année je vais avoir 14 ans et les prochains Jeux Olympiques sont dans quelques mois. Ma passion ? Le vélo cross country. Mon rêve ? Aller aux Jeux Olympiques.
+
+J''habite à la campagne, dans un village de Dordogne. Ici, tout est vert et vallonné. Il y a beaucoup de forêts et de falaises, mais aussi des châteaux perchés et des grottes. Le relief au milieu de ce paysage est ce que je préfère. C''est comme un aimant, c''est physique. Dès que je lève les yeux, j''ai une boule au ventre, je n''attends qu''une chose, c''est de pouvoir aller faire du vélo dans ce décor.
+
+Aujourd''hui c''est vendredi. Depuis le collège je vois tous ces paysages somptueux et c''est dur d''être coincé ici.
+
+J''ai un grand frère et une petite sœur. Mon frère est un passionné de mécanique auto et moto. Ma petite sœur est une vraie pile électrique. Elle saute partout tout le temps, elle grimpe sur tout ce qu''elle trouve. Elle est rigolote et a une voix très aigue...
+
+Ma famille habite un village au nord de Périgueux où mes parents travaillent.
+
+Le collège et le lycée où nous sommes avec mon frère sont aussi à Périgueux. Ma petite sœur, quant à elle, est encore à l''école primaire de notre village. L''organisation quotidienne de la famille est calée sur le programme de tout le monde en essayant de limiter les allers-retours entre Périgueux et notre village. On s''attend les uns les autres pour faire la route tous ensemble.
+
+Mon meilleur ami c''est Stéphane, on a le même prénom, du coup on m''appelle souvent Titi et Steph pour Stéphane. On se connaît depuis le primaire, comme avec Aurélie, notre meilleure amie. Tous les trois, on est toujours fourrés ensembles. Steph adore le vélo aussi, mais pas autant que moi. On en fait souvent ensemble, sinon c''est avec mon frère qui prend une de ses motos. Parfois j''y vais seul. Mais l''hiver approche et il fait nuit à 18h, donc je ne peux aller faire du vélo que le week-end en journée.
+
+Parfois, en été, on part tous les trois avec Steph et Aurélie. On passe la soirée en haut d''une falaise et on campe sur place. Avec Steph on part faire du vélo, pendant qu''Aurélie attend au campement. Puis on passe le reste de la soirée ensemble, à se raconter des histoires ou à parler des autres et de nos professeurs, et on finit par dormir à la belle étoile.
+
+C''est vendredi, plus qu''une heure de cours et j''attendrai mon frère et mes parents pour rentrer à la maison. Je fais déjà le plan du week-end dans ma tête.', true, true),
+  ('d86b0d61-2aca-49ad-97d5-224bc6d1e644', 'd86b0d61-2aca-49ad-97d5-224bc6d1e644', '80f0803e-8441-4c22-8c21-6b3ed62fdd23', 2, 'f5956625-d496-4a23-ad78-1240c062d08f', '
+Quand la sonnerie retentit je me mets à courir vers la sortie je n''attends même pas Steph et Aurélie.
+Je veux être le plus vite à la maison pour discuter du planning du week-end, mais quand j''arrive ils sont silencieux. Ils sont très étranges.
+Quand je demande ce qu’il se passe mon père me dit :
+
+- Stéphane, j''ai étais viré et nous n''avons  plus d''argent. Nous avons pris une décision ; demain nous vendrons ton vélo pour subvenir aux besoins de la famille.', true, true),
+  ('52d7a2e7-e661-4bf8-9b8d-490e7ae048a4', '52d7a2e7-e661-4bf8-9b8d-490e7ae048a4', '80f0803e-8441-4c22-8c21-6b3ed62fdd23', 3, 'c12ca8e2-fc17-4d47-9097-170abd04b3dc', 'Je reste sans mot… j’ai la tête toute chaude d’émotion et une boule au ventre. Un mélange de colère pour mon vélo et de peine pour mon père. Les émotions sont tellement fortes que je préfère monter dans ma chambre sans rien dire. J’entends mes parents qui parlent en bas alors que je regarde par la fenêtre le soleil se coucher derrière les plaines. Celles-là même sur lesquelles j’ai tant fait de vélo. 
+
+Les souvenirs m’envahissent et les larmes me montent aux yeux. Je plonge sur mon lit pour me cacher la tête sous l’oreiller et ne plus rien entendre. Je pense aux Jeux Olympiques qui approchent et je me mets à rêver du jour où j’irai ; Un train ou du Stop, là où je dormirai. Soudain je me rends compte que j’ai besoin de mon vélo pour aller travailler afin de gagner de l’argent pour payer mon voyage à Paris. J’avais prévu de travailler aux prochaines vacances, celles de Noël, dans un magasin de jouets pour faire les emballages cadeaux ou sur les marchés de Noël des alentours.
+Je dois absolument être à Paris le 29 juillet prochain pour les épreuves de VTT Crosscountry. Elles auront lieu sur la colline d’Elancourt. 
+
+Tout doucement je m’endors et me mets à rêver de mon voyage.', true, true),
+  ('b78ab2f4-5a9a-4d43-9fb3-18bb09b90796', 'b78ab2f4-5a9a-4d43-9fb3-18bb09b90796', '80f0803e-8441-4c22-8c21-6b3ed62fdd23', 4, '7b590374-c445-4dc0-8c57-6e7567c93219', 'Le lendemain matin, je me lève doucement, la tête encore embrumée par le sommeil qui disparaît peu à peu. Mais ma détermination n''a pas changé. Je suis bien décidé à participer aux prochaines épreuves olympiques de Cross Country. Encore tout empêtré dans un état semi comateux, je prends soudain conscience que la route va être longue et compliquée. Mais je sais que je vais y arriver. J''ai confiance en ma volonté.
+
+Après une bonne douche, mon petit déjeuner à peine englouti, et mes dents brossées, je file déjà, cheveux au vent, sur mon vélo, au centre du village. Je vais retrouver ma grand-mère, là-bas. Elle est toujours de bon conseil, et me rassure dans mes moments de doute.
+
+En arrivant devant sa maison, je descends de mon vélo et je sonne. Comme à chaque fois que je vais la voir, elle m''accueille avec un bol de chocolat au lait. Malgré mon nouvel objectif, je dois avoir l''air rêveur et un peu inquiet, car elle me demande : « Alors, mon tout petit, à quoi penses-tu ? »', true, true),
+  ('ce9fdbfb-ec1e-4a05-bde2-d27647287dbe', 'ce9fdbfb-ec1e-4a05-bde2-d27647287dbe', '80f0803e-8441-4c22-8c21-6b3ed62fdd23', 5, 'c12ca8e2-fc17-4d47-9097-170abd04b3dc', '- Bonjour Mamie ! Il faut que tu m''aides, c''est urgent !!!
+
+- Ohla !!! Mais que se passe t''il mon petit ?
+
+Je regarde ma grand-mère, mes yeux me brûlent et s''emplissent de larmes. Je ne sais par où commencer pour lui expliquer la situation.
+
+Elle est si belle malgré son âge. Ses cheveux courts et grisonnant brillent comme des étoiles. On dirait un ange.
+
+Elle s''approche de moi, s''assit sur la chaise à côté et met sa main dans mon dos pour me frotter le dos et me réchauffer le cœur.
+
+- Dis moi tout Stéphane, que se passe t''il ?
+
+Je prends une respiration et m''élance ;
+
+- Papa a perdu son travail !
+
+- Oh non !!! Mais comment cela se fait-il ?
+
+- Je ne sais pas, dis-je.
+
+- Mais quel malheur ! Ohhh ! Puis, dans notre région, cela ne va pas être facile de retrouver du travail, pense t''elle à mie voix.
+
+- Mamie. Papa et maman veulent vendre mon vélo.
+
+- Mais pourquoi ça ? Me répond elle très étonnée.
+
+Je répète alors les mots de ma mère.
+
+- Non, non, non dit elle en se relevant et en faisant quelques pas dans la salle à manger. Me tournant le dos, elle s''arrête devant la baie vitrée qui s''ouvre sur la plaine. Elle ne dit plus rien.
+
+Je tiens mon bol de chocolat des deux mains et la regarde, espérant qu''elle va se retourner pour me donner une solution.
+
+Ma grand-mère se retourne et tout en marchant me dit de finir mon chocolat, puis se dirige vers une autre pièce. Je la vois qui rentre dans sa chambre, ferme la porte, puis après le son de quelque pas, j''entends une autre porte se fermer. Elle doit être dans son bureau.
+
+Je ne sais pas dans quel état elle est, contrariée, inquiète, dans ses pensées.
+
+J''ai peur de l''avoir contrariée.
+
+Je finis mon chocolat, puis me lève pour me diriger comme ma grand-mère devant la baie vitrée. Je regarde la plaine en pensant à mon vélo. En regardant cette vaste étendue, je me dis que si je l''accroche quelque part en le cachant, mes parents ne pourront pas le vendre.
+
+C''était un cadeau de ma famille il y a quelques années. Un vélo fait sur mesure, à ma taille et léger, très maniable, conçu avec des pièces de qualité et qui coûtent cher.
+
+J''entends ma grand-mère qui parle... elle doit être au téléphone. Je tends l''oreille, mais je ne comprends absolument pas ce qu''elle dit.
+
+Je patiente, toujours devant la fenêtre, en cherchant un endroit où cachait mon vélo.
+
+Puis une porte s''ouvre.', true, true),
+  ('35d58dfb-5c47-4c4f-925c-1f6bf9c335e0', '35d58dfb-5c47-4c4f-925c-1f6bf9c335e0', '80f0803e-8441-4c22-8c21-6b3ed62fdd23', 6, '7b590374-c445-4dc0-8c57-6e7567c93219', 'Ma grand-mère apparait, sourire aux lèvres, avec ce qu''il me semble être une boite à chaussures dans les mains.
+
+« Qu''est ce que c''est, cette boite, grand-maman ? Qu''est ce qu''il y a, dedans ?
+
+- Ah ah, mon trésor, me répond elle, ça, c''est ma boite à secrets. Je ne la sors qu''en cas d''urgence. Et d''après ce que tu me racontes, il y a urgence, me dit elle, en me déposant un baiser sur le front. J''ai pu aider tes parents, au début de leur mariage, grâce à ça. Je vais faire pareil pour toi, mon tout petit. Mais d''abord, je dois parler à ton père. On ne vendra pas ton vélo, c''est promis. Et tu vas aller t''entraîner dans un club.
+
+A ces mots, je retrouve vite mon énergie. Ma grand-mère est magique. Elle a toujours su trouver la solution aux situations compliquées.
+
+Elle sort alors de la boite une calculette et un cahier, qu''elle pose devant elle, sur le bureau.
+
+« D''abord, il faut établir un budget, me dit elle, l''air sérieux et déterminé. Ensuite, il faut profiter d''un bon goûter, viens avec moi, j''ai fait du gâteau aux pommes, on retourne à la cuisine et on profite. Ne t''inquiète pas pour ton projet, j''ai un plan.”
+
+Et ce soir, tandis que je roule sur le chemin du retour, et que je me dirige vers la maison, je me sens à nouveau plein d''espoir. Grand maman est de mon côté. Elle ne m''a pas tout expliqué mais elle me soutient, comme elle l''a toujours fait. Je sais quelles ont été les difficultés de ma mère pour me mettre au monde, par conséquent, ma grand-mère m''a adoré et entouré dès le jour de ma naissance.', true, true),
+  ('f5d73c90-4579-424f-a49b-eb5009d0f92c', 'f5d73c90-4579-424f-a49b-eb5009d0f92c', '80f0803e-8441-4c22-8c21-6b3ed62fdd23', 7, 'c12ca8e2-fc17-4d47-9097-170abd04b3dc', 'Alors que j''arrive à la maison, je vois mon père dans le jardin qui coupe du bois. Je pose mon vélo contre la maison et rentre. Ma mère est à la cuisine. En m''entendant rentrer ;
+
+- Bonjour mon chéri, où étais-tu ?
+
+- Oh... j''étais allé me promener en vélo...
+
+- Ah ! Ton copain Stéphane est passé dans l''après-midi pour te voir. Je ne savais pas où tu étais.
+
+- D''accord, c''est pas grave. Je vais l''appeler.
+
+Puis je pars dans ma chambre pour téléphoner à Stéphane. Je lui raconte alors toute l''histoire et il ne répond que des exclamations à tout ce que je lui dis. Il est choqué de ce qu''il apprend, tant par la surprise que par la déception ou l''émerveillement de la réaction de ma grand-mère. Je sens son silence comme une peur. Si je n''ai plus de vélo, finies alors nos virées dans les plaines.
+
+Puis je lui répète ce que ma grand-mère m''a dit : " Tu vas aller t''entraîner dans un club"
+
+À ces mots, Steph s''exclame plein d''enthousiasme et d''encouragement. On discute alors du meilleur club de la région, du nombre d''heures que je vais y passer pour m''entraîner, des progrès que je vais faire. Puis on s''amuse à me comparer à Julien Absalon, à parler de tous ses trophées ; double champion olympique en 2004 et 2008. Tout est allé très vite pour lui, il avait la niaque, je l''ai aussi. Il faut que j''intègre un club et que j''ai ma licence. Vite, maintenant c''est urgent, les prochains JO sont bientôt. Steph me calme rapidement, il faut déjà que je me qualifie sur les autres compétitions.
+
+- Titi, les prochains championnats de France sont en Mars ! T''as quatre mois pour t''entraîner. Quand est-ce que tu vas t''inscrire dans un club ?
+
+- Je ne sais pas, il faut que je vois ça avec ma grand-mère. Mais là pour l''instant, c''est tendu. Je pense qu''elle n''a pas encore parlé à mes parents.
+
+- Quoi ! Tes parents pensent toujours vendre ton vélo ?
+
+- Oui... !
+
+- Mince ! Bon de toute façon ce n''est pas aujourd''hui que tu aurais pu faire quelque chose.
+
+- Ouai...
+
+- On se voit demain avec Aurélie ? Là-haut, comme d''hab ?
+
+- Yes, ça marche, on fait ça. Tu l''appelles ?
+
+- Ok mec, je l''appelle. A demain là-haut.
+
+- D''ac, Tchao !
+
+Je raccroche avec le cœur soulagé et en même temps pleins d''inquiétude vis à vis de mes parents. Ma tête tourbillonne de pensées, toutes plus existantes les une que les autres.
+
+"Bientôt !!! Bientôt ça sera moi le champion !!!"', true, true),
+  ('0138a819-69f7-4a10-bf4d-1c40a4f41b4d', '0138a819-69f7-4a10-bf4d-1c40a4f41b4d', '80f0803e-8441-4c22-8c21-6b3ed62fdd23', 8, '7b590374-c445-4dc0-8c57-6e7567c93219', 'Pendant le repas, les mots de ma grand-mère résonnant encore dans ma tête, j''hésite à parler à mes parents. Je sais que la situation est délicate pour mon père, mais je sais aussi que je n''y suis pour rien. Si je veux arrêter de rêver mon avenir, je dois prendre le taureau par les cornes et me lancer. Alors que je tends mon assiette à ma mère pour prendre une deuxième part de ses incomparables lasagnes aux légumes, je repense à ce que m''a dit Stéphane quand je lui ai raconté mon après-midi. Je ressens une sensation indescriptible, entre peur et envie de tout faire pour que mon projet prenne forme. Et cela se voit forcément sur mon visage, car ma mère me dit soudainement :
+
+” Mon Titi, à quoi tu penses là ? Tu fais une drôle de tête.
+
+- Je sais pas, maman, j''ai rappelé Stéphane en rentrant tout à l''heure et on a parlé d''un truc important. J''ai envie de faire du sport cette année.
+
+- Du sport ? D''accord, très bien, mais quel genre de sport ?
+
+- Euuuh ben, du vélo. Du cross country. “
+
+Plein d''espoir, je regarde ma mère, en espérant qu''elle ne s''énerve pas. Alors qu''elle s''apprête à me répondre, mon père, silencieux jusqu''ici, répond à sa place.
+
+« Titi, tu sais que je n''ai plus de travail. Comment crois-tu que l''on puisse payer une licence sportive ? On doit aussi gérer la scolarité de ta sœur.. ça va pas être possible.
+
+Ma mère, me soutenant soudain, lui répond alors :
+
+- Du travail, tu peux en trouver un autre. Il n''y est pour rien.
+
+Puis, s''adressant de nouveau à moi :
+
+- On va trouver une solution, ne t''en fais pas. Demain, j''appelle ta grand-mère. Je sens qu''elle peut nous aider. Allez, on passe au dessert. »
+
+Je crois que je n''ai jamais mangé une crème brûlée aussi bonne que ce soir là. Elle avait le goût du bonheur.', true, true),
+  ('11b71fef-40f9-8053-a08c-d0d9e8ecd3ee', '11b71fef-40f9-8053-a08c-d0d9e8ecd3ee', '80f0803e-8441-4c22-8c21-6b3ed62fdd23', 9, 'c12ca8e2-fc17-4d47-9097-170abd04b3dc', 'Le repas se termine et nous faisons chacun notre part pour débarrasser et ranger le dîner et la cuisine. Mon père fait sa tête des mauvais jours. Je pense qu''il rumine ce que ma mère lui a répondu. A peine nous avons fini, qu''il part dans son bureau et ma sœur dans sa chambre.
+
+Je suis seul avec ma mère, conscient qu''elle a prit ma défense.
+
+Alors qu''elle s''essuie les mains sur un torchon et que je range les dernières assiettes, j''ose lui parler.
+
+- Maman...
+
+- Oui mon chéri, qu''est-ce qu''il y a ? Tu as fais une drôle de tête toute la soirée. C''est au sujet de ton vélo ? Pour l''instant, le sujet est clos. Nous allons vendre ton vélo ! Tant que ton père n''a pas retrouvé du travail, nous devons tous faire des efforts.
+
+A ces mots je blêmis;
+
+- Maman...
+
+- Stéphane ?
+
+- Maman, j''ai vu grand-maman aujourd''hui.
+
+- Ah ! Comment va t''elle ?
+
+- Heu... bien... mais en fait...
+
+J''ai peur, j''hésite, je ne sais pas comment lui dire. Je ne sais même pas si c''est à moi de lui dire.
+
+- Oui ?
+
+- Et bien, j''ai vu grand-maman...
+
+- Oui tu l''as déjà dit.
+
+- Oui, et bien, je lui ai parlé de papa.
+
+- Ah ! Je comptais lui en parler demain. Ce n''est pas grave. Je l''appellerai demain quand-même.
+
+- ok
+
+Et je pars fissa dans ma chambre. Je ne lui dit rien de plus. Je préfère que ce soit grand-maman qui lui dise qu''elle va les aider.
+
+Dans ma chambre je regarde le ciel étoilé par la fenêtre. Je pense à cet appel qui aura lieu demain. J''ai prévu de voir Steph et Aurélie, on se retrouve l''après-midi généralement, dès qu''on a déjeuné on part chacun de chez nous pour se retrouver là-haut.
+
+Cette situation me stresse un peu, je n''arrête pas de ruminer toute cette histoire dans ma tête.
+
+Je décide alors de jouer sur mon téléphone.
+
+Je me jette sur mon lit, et commence à jouer à mon jeu vidéo préféré, histoire de me changer les idées et de réussir à dormir cette nuit. Sinon, je me connais, c''est mort.
+
+Le lendemain, je pars à peine le déjeuner terminé. Il n''y a pas eu d''appel de ma grand-mère. Je n''ai rien dit du repas et à peine regardé mes parents. Ma sœur faisait l''animation avec ses histoires et sa petite voix super aiguë.
+
+Je retrouve les copains là-haut. J''ai pédalé tellement vite que pour une fois la montée m''a fatigué. Je rigole intérieurement en me disant que c''est un bon entraînement et qu''il va falloir que je le refasse souvent en me chronométrant. Steph et Aurélie discutent ensemble et me saluent. Mais c''est à peine si Steph me regarde. Il ne quitte pas Aurélie des yeux... je souris discrètement, puis vais m''assoir avec eux.', true, true),
+  ('13871fef-40f9-80ac-8ae3-f3464acebbf9', '13871fef-40f9-80ac-8ae3-f3464acebbf9', '80f0803e-8441-4c22-8c21-6b3ed62fdd23', 10, '7b590374-c445-4dc0-8c57-6e7567c93219', 'Dans ma tête, c''est le brouillard. Je ne comprends pas comment ma mère a pu faire volte-face à ce point. Soit elle me soutient, soit elle soutient mon père. Elle ne peut pas faire les deux en même temps. A moins qu''elle ait choisi de botter en touche pour clore la discussion, pendant le repas. Dans ce cas, peut-être que ce n''est pas tout à fait perdu pour moi. Du moins je l''espère.
+
+Voyant ma mine rêveuse, mes copains se tournent vers moi et m''interrogent :
+
+« Qu''est ce qui se passe, Titi? T''en fais, une tête..
+
+- Oh rien.. enfin, si, maman m''a dit qu''à cause des ennuis de papa, on allait vendre mon vélo.. j''ai vu ma grand-mère hier après-midi, elle m''a dit qu''elle me soutenait et qu''elle allait les appeler mais elle ne l''a pas encore fait et j''ai pas le moral à cause de ça..
+
+Aurélie essaie alors de me rassurer :
+
+- t''inquiète pas! Elle va appeler, ta grand-mère. Tu te mets un peu trop la pression, là, pas vrai, Steph?
+
+Stéphane, descendant de son nuage, devient rouge écarlate, et répond :
+
+- Bah oui, oui, c''est clair. T''inquiète, je suis sûr qu''elle va leur téléphoner aujourd''hui.
+
+- Merci, vous êtes trop chouettes.
+
+Un léger bip dans ma poche m''informe que j''ai sans doute reçu un message sur mon portable. Je le sors et je lis : « mon Titi, viens chez ta grand-mère, on t''attend pour goûter. On va discuter. » Je n''ai même pas fini de lire le message que je dévale la colline à toute blinde sur mon vélo en plantant là Aurélie et Stéphane :
+
+- bon, les amoureux, moi, j''ai une urgence. Amusez- vous bien !
+
+Avant de filer, j''ai le temps de voir mon pote devenir écrevisse et Aurélie protester, complètement hilare. Moi, je roule déjà plein d''espoir, vers la maison de grand-maman.', true, true),
+  ('14771fef-40f9-8098-8361-f25f7f0d2a8f', '14771fef-40f9-8098-8361-f25f7f0d2a8f', '80f0803e-8441-4c22-8c21-6b3ed62fdd23', 11, 'c12ca8e2-fc17-4d47-9097-170abd04b3dc', 'Bon sang, qu''est-ce qu''ils ont pu se dire ? Ma mère parle d''un goûter dans son message, mais l''heure est grave et je n''ai pas le sentiment que le problème actuel de mon père et la vente de mon vélo mérite un goûter.
+
+Plongé dans toutes ces pensées, le visage d''Aurélie m''apparaît protestant sur la manière dont je les ai appelé. Je ne savais pas que Steph avait un crush pour Aurélie, ça me fait bizarre.
+
+Le goûter... mais qu''est-ce qu''on va se dire... ?
+
+J''appréhende une dispute entre mes parents, ma grand-mère et moi. Je ralenti ma course sérieusement. Pas certain d''être si pressé que ça de voir le carnage.
+
+Aurélie... Mince... Aurélie avec Stéphane... Nan !!!
+
+Je pose le pied à terre, le regard vide à fixer au loin.
+
+J''ai trop de choses dans la tête, et tout ça me met en colère. Bon sang, c''est quoi ce foutoir ; Mon père qui n''a plus d''emploi, ma mère qui ne sait plus qui défendre, ma grand-mère qui s''en mêle et qui veut m''inscrire dans un club, Steph qui drague Aurélie, Mon Aurélie... NAN...il peut pas. Il ne peut pas me faire ça.
+
+Je revois son visage d''enfant, je connais Aurélie depuis la maternelle. Elle a toujours été ma meilleure amie. J''ai une boule à la gorge qui me fait mal et l''envie de pleurer un bon coup.
+
+Mince, je réalise... Aurélie, ma meilleure amie... je l''aime. Cette boule douloureuse dans ma gorge se transforme soudaine en une énorme boule d''oxygène dans mon ventre, libérée des problèmes.
+
+J''enfourche mon vélo, le visage détendu et heureux. Je suis amoureux.
+
+Je finis le trajet le sourire aux lèvres, dans un rythme moins effréné et arrive chez ma grand-mère. J''ai oublié les problèmes, je pense à Aurélie.
+
+J''ouvre la porte et entre sans dire un mot, toujours souriant. Ils m''accueillent surpris.', true, true),
+  ('15a71fef-40f9-8021-9074-f1ac7ffc79cc', '15a71fef-40f9-8021-9074-f1ac7ffc79cc', '80f0803e-8441-4c22-8c21-6b3ed62fdd23', 12, '7b590374-c445-4dc0-8c57-6e7567c93219', 'Je ne comprends pas leurs regards si sérieux. En vérité, j''ai bien des difficultés à descendre de mon nuage. Je retire mon blouson, pose mon vélo contre le mur de l''entrée et leur jette un oeil étonné. Ma mère me dit alors :
+
+- Allez Titi, viens t''asseoir, il faut qu''on parle.
+
+Je la suis, me dirigeant derrière elle vers le salon où sont déjà partis s''installer papa et grand-mère. Cette dernière me regarde d''un air malicieux, et soudain, je me sens mieux. Je sais que tout va s''arranger.
+
+- Titi, on t''a demandé de venir parce qu''il va falloir prendre une décision. Ton père n''a plus de travail, il se retrouve au chômage et ça veut dire que financièrement, tout va devenir compliqué à partir de maintenant.
+
+Dans ma tête, c''est un peu le bazar. Je me demande pourquoi tout devient aussi pénible quand on grandit. Je suis amoureux de la même fille dont est amoureux mon meilleur copain, ce qui veut dire qu''une lutte va forcément s''instaurer entre nous et risquer de briser notre amitié. Dans le cas présent, je ne sais pas pourquoi, mais je sens que mes parents vont me demander de sacrifier mon vélo. Soudain, je réalise l''injustice de la situation. Pourquoi faudrait- il que je grandisse d''un seul coup et que fasse une croix sur mon avenir, tout ça parce que mon père a perdu son emploi ? Ça n''est pas de ma faute, et je ne dois en aucun cas céder face à la pression de mes parents. Je dois leur montrer que je suis déterminé. Grand- mère est de mon côté. Je l''ai su dès le début. C''est déjà ça.', true, true),
+  ('16e71fef-40f9-804c-899c-f7ac58ffcf2e', '16e71fef-40f9-804c-899c-f7ac58ffcf2e', '80f0803e-8441-4c22-8c21-6b3ed62fdd23', 13, 'c12ca8e2-fc17-4d47-9097-170abd04b3dc', '- Et moi aussi j''ai pris une décision, rétorque ma grand-mère qui laisse tout le monde sans voix.
+
+- Pard... Commence ma mère
+
+- Vous ne vendrez pas le vélo de Stéphane, c''est hors de question. Si vous avez besoin d''argent, je vous aiderez. Et Stéphane va s''inscrire au Club de Chanterac, j''ai contacté le Président, il l''attend lundi à 18h pour le rencontrer. C''est moi qui vais payer son inscription et les frais. Quant à vous, dit elle en regardant fixement mes parents, Jean-François, je vais contacter les gens que je connais pour t''aider à retrouver du travail. Hélène, il est peut-être temps de commencer à vendre des affaires de ton père. Je ne peux pas tout garder, il va falloir faire du tri et vendre ce que l''on peut vendre. Cet argent vous reviendra, c''est la part de ton père qui te revient.
+
+J''ai le cœur qui bat la chamade et les joues bouillonnantes. Whaou !!! Alors ça ! Je ne m''y attendais pas. Et mes parents encore moins à ce que je vois. Ils sont bouche ouverte, les yeux rivés sur ma grand-mère et n''ose plus rien dire.
+
+- Aussi, Jean-François, ma chérie, vous savez que avec grand-père, nous gardions de l''argent de côté pour les urgences. Bon, si tu ne retrouves pas du travail rapidement Jean-François, je pourrai vous aider.
+
+- Non Grand-Maman ! Ce n''est pas à vous de nous aider !
+
+- Et alors, ce n''est pas à Stéphane de vous aider non plus, répond illico ma grand-mère.
+
+- Maman, mais...
+
+- Hélène, on en reparlera tous les trois. Pour l''instant, le sujet c''est Stéphane et il a une place au Club de Chanterac, alors maintenant il va falloir préparer tout ça !
+
+- Merci Grand-Maman
+
+- Oui, merci disent mes parents.
+
+L''après-midi se poursuit où nous parlons de l''organisation pour mes entraînements, on soulève les problèmes, on trouve différentes solutions. On échange pendant presqu''une heure tous ensemble et tout se passe bien. C''est ma grand-mère qui m''emmènera lundi, apparemment elle connaît bien le Président du Club. Ma mère a fait une drôle de tête quand elle a parlé de lui... Avec mon père on s''est regardé en souriant discrètement.
+
+Quand la discussion est finie, je demande si je peux rentrer à la maison. J''ai envie de voir mon frère qui est resté pour garder notre petite sœur.
+
+Après l''accord de mes parents, je file sur mon vélo en imaginant et préparant le rendez-vous de lundi. Quand j''arrive à la maison, mon frère et ma sœur ne sont pas à l''intérieur, mais dans le jardin. Je file les rejoindre.', true, true),
+  ('18971fef-40f9-80dc-ad23-f942550cec1a', '18971fef-40f9-80dc-ad23-f942550cec1a', '80f0803e-8441-4c22-8c21-6b3ed62fdd23', 14, '7b590374-c445-4dc0-8c57-6e7567c93219', 'Quand je les retrouve, je pourrais leur faire part de la nouvelle, profiter un peu de ma joie avec eux. Mais, ne me demandez pas pourquoi, je décide de garder ça pour moi. Je nage en pleine confusion en ce moment. Le soutien et l’implication de ma grand-mère dans mon projet, et la prise de conscience de ce que je ressens pour Aurélie brouillent mes pensées. Et Stéphane.. j’ai l’impression qu’il m’enfonce un couteau dans le ventre. Je me sens floué, trahi. Je me réfugie dans ma chambre, avec la sensation d’être désorienté.
+
+Une fois réfugié dans mon cocon, je m’assois en tailleur sur mon lit et ferme les yeux en essayant de me concentrer sur ma respiration pour faire le vide. Il y a au moins du positif dans tout ça. J’ai le soutien de ma grand-mère. Je sens un léger sourire monter à mes lèvres. Je me dis qu’elle les a bien eus. Mes parents ne s’attendaient sûrement pas à ça. Grâce à elle, je vais pouvoir franchir les premières étapes de ma future qualification aux prochains Jeux Olympiques. Il va falloir que je m’implique à fond dans mon projet. Je sais que je peux y arriver. J’ai la motivation et l’envie nécessaires. Je vais transformer la confusion qui m’habite en énergie pour avancer et gagner ma place à la prochaine olympiade.', true, true),
+  ('19c71fef-40f9-8086-8079-da98e2e655db', '19c71fef-40f9-8086-8079-da98e2e655db', '80f0803e-8441-4c22-8c21-6b3ed62fdd23', 15, 'c12ca8e2-fc17-4d47-9097-170abd04b3dc', 'Histoire de gagner en force, je me mets à faire du sport dans ma chambre. Je commence par des pompes, je vise 50... Bon à 27 je m''écroule. Ok, j''ai encore du taff. Je fais ensuite des squats, puis des burpees. Super, c''est le cardio qui travaille aussi. C''est bien ça, si j''en fait tous les jours, je vais vite m''améliorer en Cross.
+
+C''est demain le rendez-vous, mince mes devoirs. Je travaille vite fait, hyper motivé pour la journée de demain.
+
+La soirée se passe, nous dînons tous les 5. Juste avant le repas, mon frère me tape l''épaule en me demandant si ça va. Je lui réponds que oui, en souriant un peu bizarrement. Mon frère me regarde fixement avec un léger sourire. On passe à table, il continue de me regarder. Puis la discussion commence, et mes parents annoncent la grande nouvelle. Mon frère, surpris, décroche enfin ses yeux de moi. Ouf, je ne savais plus où regarder pour éviter son regard. Mes frère et sœur sont hyper contents pour moi et gentiment mon frère, pour me taquiner, me met la pression pour le rendez-vous de demain soir. Quel naze, comme si j''avais pas déjà assez la pression.
+
+Rapidement après le dîner, je vais me coucher. Grosse journée demain, entre les cours, Steph et Aurélie, le rendez-vous avec président du Club... Faut que je dorme vite, mais mon cerveau switche d''Aurélie au Club... Pfff', true, true),
+  ('1bb71fef-40f9-8078-abc1-f6c1e9f6f162', '1bb71fef-40f9-8078-abc1-f6c1e9f6f162', '80f0803e-8441-4c22-8c21-6b3ed62fdd23', 16, '7b590374-c445-4dc0-8c57-6e7567c93219', 'Le lendemain matin, le réveil est un peu douloureux. J''ai quelques courbatures. En souriant, je me dis que je n''aurais peut être pas dû faire autant d''exercices physiques avant de dormir. Mais c''est bon signe. Ça veut dire que je dois continuer et, à force, je n''aurai plus mal.
+
+A mon arrivée dans la cuisine, j''engloutis mon petit déjeuner comme si c''était le premier de mon existence. La joie de savoir que je vais enfin me consacrer à mon objectif, tenter d''être qualifié aux Jeux Olympiques, me donne encore plus faim. En classe, je suis à peine concentré. Je ne parviens pas à me focaliser sur les exercices de maths que le prof nous a donnés. J''échange quelques regards entendus avec Stéphane, à qui j''ai annoncé la nouvelle avant la sonnerie. Je n''ai pas osé lui demander ce qui se passait entre lui et Aurélie. Mais j''ai bien l''intention de le faire. Pour le moment, inutile de gâcher la fête.
+
+Pendant l''interclasse, alors que nous étions entrain de chahuter légèrement en attendant l''arrivée de la prof d''anglais, je reçois un message de confirmation pour mon rendez vous de ce soir. Envoyé en copie par ma mère, sur mon adresse mail. Je feins l''indifférence pour ne pas trahir le bouillonnement intérieur qui me travaille depuis hier soir. Tout à coup, je prends conscience que je suis encore bien petit. Hyper jeune. Et je me mets à stresser. Mille questions me viennent à l''esprit. Le doute, aussi, mais je lui barre le chemin car je n''ai jamais été aussi sûr de moi. Une opportunité s''offre à moi, je dois absolument la saisir. Et cette pensée me donne soudain confiance en mes capacités. Ça va le faire, j''en suis sûr.', true, true),
+  ('1d571fef-40f9-80c2-9dac-dec05f80de46', '1d571fef-40f9-80c2-9dac-dec05f80de46', '80f0803e-8441-4c22-8c21-6b3ed62fdd23', 17, 'c12ca8e2-fc17-4d47-9097-170abd04b3dc', 'La journée passe à toute vitesse et le stress ne m''a pas quitté. Ce midi, un nœud à l''estomac me bloque l''appétit. Assis avec Steph et les copains, je souris à peine aux blagues et regarde mon assiette en me forçant à manger. Je vois Stéphane jeter des coups d''œil vers Aurélie qui est à une autre table avec ses copines et nous tourne le dos. J''avale mes pates carbo avec difficulté, et pourtant, pour une fois, le repas est bon. Je finis de manger et quitte la table avant les autres. En partant, je chipe deux morceaux de pain pour tout à l''heure et être sûr que j''aurai l''estomac remplie pour les tests de ce soir. Dans la cour, je relis le mail ; "Rendez-vous 18h avec Monsieur Sylvain JOBERT sur le terrain, venir avec l''équipement de sécurité."
+
+L''après-midi se passe et ma concentration s''est belle et bien envolée...
+
+17:05 sonne et un nouveau moi se réveille. Déterminé et empli d''une force intérieure, je quitte la salle sans même saluer les copains. Je récupère ma petite sœur et nous attendons ma mère devant l''école. Steph et Aurélie passent à côté de nous. Steph me souhaite bonne chance, Aurélie passe sa main sur mon bras et me dit : "Ca va aller, j''ai confiance en toi !" Je sens une chaleur m''envahir et ma force se décupler. Ma mère arrive en voiture et nous rentrons à la maison. Je réponds à peine à ses questions et ma sœur, comme d''habitude, fait toute la conversation à elle seule.
+
+Je suis super concentré sur le test de ce soir, et arrivé à la maison, je prépare mes affaires et fais quelques exercices sportifs pour m''échauffer.
+
+17:30 sonne beaucoup trop vite, et mon stress est à son maximum. Je descends, alors que je suis prêt à partir avec ma mère ou mon père, je vois à travers le fenêtre de la cuisine ma grand-mère arriver en voiture, puis mon frère.
+
+Je sors pour l''accueillir, étonné qu''elle soit là.
+
+- Bonjour mon petit. Tu es prêt ?
+
+- C''est toi qui m''emmène ?
+
+- Oui Stéphane, c''est moi, me dit elle en souriant.
+
+Je ne sais pourquoi, mais je me sens rassuré que ce soit ma grand-mère qui m''accompagne.
+
+- Alors champion, t''es prêt ? Tu as tout ce qu''il te faut ? Ton équipement ? De l''eau ? me demande mon frère.
+
+Mince, j''ai oublié de prendre une gourde, alors que j''ai déjà la bouche sèche. Je cours dans la maison attraper ma gourde, la remplit et ressort aussi vite. Alors que nous allons monter dans la voiture avec ma grand-mère, toute la famille est sur le perron et me regarde en souriant. Ma mère lève les mains et me montre ses doigts croisés. Mon père me salue avec un sourire de fierté. Mon frère hoche de la tête avec les pouces en l''air. Ma sœur me fait des grands signes d''aurevoir, en sautillant sur place et en criant : "Aller Titi, tu es le meilleur !!!".
+
+Sur le trajet, ma grand-mère me demande comment je me sens. Je lui réponds que je suis stressé. Elle me rassure tout le long du trajet et ça fonctionne. J''arrive au club très à l''aise. Je repère le terrain d''entrainement, et ma grand-mère me dit d''y aller, qu''elle me rejoint juste après. Puis elle part à l''opposé, vers les bureaux où un monsieur aussi âgé qu''elle sort pour l''accueillir. Ils se font la bise en se prenant les bras. Je comprends qu''ils se connaissent bien...
+
+J''arrive sur le terrain d''entraînement où 5 vététistes parcourent le terrain.
+
+Un homme attire mon regard lorsqu''il crie : "On continue comme ça les garçons !". Puis l''homme se dirige vers moi.
+
+- Tu es Stéphane !
+
+- Oui Monsieur.
+
+- Appelle moi Sylvain. Alors ! Tu viens faire un test aujourd''hui ? A ce qu''il paraît tu as déjà un bon niveau. Où est-ce que tu t''entraînais avant ?
+
+- Heu... nul part... enfin, si dans les collines et la forêt.
+
+- D''accord Petit. Bon on va attendre qu''ils aient terminé leur entraînement et après tu vas me montrer ce que tu sais faire. Va te chercher un vélo dans le local là-bas.
+
+Je regarde les autres passer les parcours, cela me paraît facile. En revanche, je n''arrive pas à évaluer ma vitesse par rapport à la leur. Je reviens avec le vélo et attends à côté de Sylvain.
+
+- C''est bon les garçons, c''était bien. Mercredi on travaillera la technique.
+
+Les garçons quittent le terrain et je me retourne pour voir où est ma grand-mère, car j''ai le stress qui monte. Elle arrive avec le monsieur. "Ok, c''est bon, ça va le faire" me dis-je dans ma tête.
+
+Sylvain m''envoie faire quelques tours du parcours pour l''apprivoiser et me précise d''y aller tranquillement pour démarrer. Je mets mon casque et me lance. Tout le monde me regarde, les vététistes aussi. Je me sens bien, dans mon élément, léger et fort. Je me lance sur la piste pour la découvrir et repérer les points de difficulté. Je ne vais pas trop vite, mais tout de même à une bonne allure. Ce n''est pas mon vélo, il est plus lourd et je dois redoubler d''efforts. Je me lance sur un deuxième tour, en essayant d''aller plus vite. Ce n''est pas facile. J''entends au loin Sylvain :
+
+- Mathieu, passe lui ton vélo.
+
+Mathieu repart dans le local à vélo et revient près de Sylvain. Lorsque j''arrive à la fin de mon deuxième tour, Sylvain m''interpelle pour que je m''arrête.
+
+- Alors Petit, comment te sens-tu ?
+
+- Ca va. Je mens un peu, car je n''arrive pas à m''habituer à ce vélo.
+
+- Ok, tu vas prendre ce vélo et tu vas me refaire 2 tours. Le premier tranquille, le deuxième tu envoies.
+
+Je repars sur le nouveau vélo, ça va mieux. Je commence à ressentir le même plaisir qu''avec le mien. Je vais déjà plus vite. Je me prépare à faire le deuxième tour en envoyant tout ce que je peux. J''ai les dents serrées à m''en faire mal à la mâchoire et les bras super tendus. Je vois la ligne d''arrivée du premier tour et me force à me détendre. C''est parti ! Je donne tout ce que je peux sur ce deuxième tour. Détendu, je me relâche, je respire mieux et mes coups de pédales s''enchaînent avec légèreté. Je me sens bien, je calcule toutes mes trajectoires, les sauts, les virages relevés, je vais vite. Je réussi tous les passages difficiles, j''accélère sur les lignes droites. Tout s''enchaîne super bien, j''ai l''impression de voler. La ligne d''arrivée en ligne de mire, je ne relâche rien, je fonce.
+
+Puis l''arrivée, des cris, des applaudissements, je freine en dérapant le cœur battant à 100 à l''heure. Je m''arrête, descends du vélo, je tremble.
+
+Je me retourne vers le coach, tout le monde me sourit. Je m''approche de lui le vélo à la main.
+
+- Bravo Petit ! Me dit-il en hochant la tête et avec un sourire de fierté. Tu as un bon niveau pour un débutant.
+
+Le directeur s''avance vers moi. Il me tend la main pour me saluer.
+
+- Bonjour Stéphane, je suis Pierre le directeur du club et ami de ta grand-mère. Elle m''avait dit que tu avais du niveau, mais honnêtement je ne m''attendais pas à ce niveau là. Les championnats de France sont dans 2 semaines. Est-ce que tu es prêt à t''entrainer dur pour y participer ?', true, true),
+  ('1ea71fef-40f9-804e-a929-d28dcf2e5658', '1ea71fef-40f9-804e-a929-d28dcf2e5658', '80f0803e-8441-4c22-8c21-6b3ed62fdd23', 18, '7b590374-c445-4dc0-8c57-6e7567c93219', 'Je n''arrive pas à en croire mes oreilles. Moi qui à peine une semaine avant doutais de mon niveau et n''osais même pas imaginer que je rencontrerais un staff digne de ce nom, moi qui, une semaine auparavant essayais de réfréner mes ambitions sportives, voilà qu''on me proposait de participer à une première grosse compétition. MA première grosse compétition. J''ai regardé Sylvain puis j''ai balbutié un « oui », la voix rauque et la respiration bloquée par le stress et l''effort physique que je venais de fournir. J''avais à peine 13 ans. Cet instant, cette rencontre avec les dirigeants du club, je l''avais maintes et maintes fois imaginée depuis que ma grand-mère avait pris les choses en mains mais, jamais je n''aurais pensé que mon niveau me permettrait aussi vite de prouver ma valeur sur une manifestation sportive aussi importante. Je descendis de mon vélo, et entrepris de rentrer au hangar avec mes coéquipiers. Avant de partir, je dus passer par l''accueil récupérer un certain nombre de documents à remplir et à ramener la semaine suivante. Quand ma grand-mère me vit arriver, elle fut impressionnée par mon silence. J''attendais juste d''être dans la voiture pour laisser exploser ma joie. C''était tout simplement incroyable. Ma grand mère me félicita et me certifia qu''à partir de maintenant, ma vie allait tout bonnement changer, mais qu''il faudrait travailler d''arrache pied, autant à l''école qu''au centre d''entraînement. Je lui promis de ne pas la décevoir.
+
+Arrivés à la maison, nous fumes accueillis par des applaudissements qui redoublèrent, une fois que tout le monde fut au courant. Une légère vibration dans la poche de mon survêtement m''avertit de l''arrivée d''un message. Jetant un rapide coup d''œil, je vis qu''il provenait d''Aurélie. Je contins mon envie d''y répondre de suite pour profiter de la soirée mais dix minutes plus tard, un nouveau message témoigna de l''impatience de mon amie de toujours. Je m''excusai brièvement auprès de mes parents qui comprirent instantanément, vu le sourire que j''arborais. Ouvrant le menu des messages, je lus :
+
+« Alors, mon champion, tu comptes me dire quand que tu as géré comme un pro? » suivi d''un autre message: « on se retrouve demain devant le collège, il faut que je te parle d''un truc. »
+
+Mon frère vint me débusquer à ce moment là et rit quand il vit l''air stupide que j''affichais en regardant mon téléphone. Il me ramena à la réalité. En fait, j''étais affamé. Heureux, fier, mais affamé. Je saisis un verre de Champomy mais ma mère me l''échangea contre une coupe de champagne. Wow ! J''étais dans la cour des grands, maintenant.', true, true),
+  ('1ff71fef-40f9-807f-bdc8-d0cd47c04717', '1ff71fef-40f9-807f-bdc8-d0cd47c04717', '80f0803e-8441-4c22-8c21-6b3ed62fdd23', 19, 'c12ca8e2-fc17-4d47-9097-170abd04b3dc', 'La soirée se passa joyeusement en compagnie de toute ma famille. Tout le monde souriait, rigolait et s''exprimait gaiement. Cela faisait quelques temps que je ne les avais pas vu heureux comme cela. J''avais envie de partir dans ma chambre, répondre à Aurélie, et à Steph qui m''avait aussi envoyé un message, mais je ne voulais pas rompre ce moment familial si intense. Je participais à cette bonne humeur avec mon esprit qui partait de temps à autres vers mes amis.
+
+Je sentis mon téléphone vibrait une nouvelle fois, je savais que c''était Steph ou Aurélie. Ne pouvant regarder mon téléphone à table, c''était une des conditions pour avoir un téléphone ; pas de téléphone à table, je décidais de les quitter prétextant aller me coucher, il était 21h45.
+
+Arrivé dans ma chambre, je relisais les messages de mes amis. Je restais bloqué sur les messages d''Aurélie, la tête un peu tournante après le champagne que j''avais bu. J''essayais de réfléchir et de comprendre le sens des messages d''Aurélie, mais mon cerveau n''arrivait pas à se concentrer.
+
+Quelqu''un frappa à la porte de ma chambre et mon frère entra.
+
+- Ca va petit frère ?
+
+- Je crois que je suis un peu saoul, je n''arrive pas à répondre à Aurélie.
+
+Mince, j''en avais trop dit... Je n''ai pas réussi non plus à me concentrer sur ce que je disais. Mon frère allait m''interroger c''est sûr.
+
+Tout en s''approchant de moi, Alex me demande :
+
+- Pourquoi ? Qu''est-ce qu''elle te dit ?
+
+- Non, rien. Dis-je en baissant mon téléphone contre ma cuisse afin qu''il ne voie pas le message.
+
+- Vas y, dis moi. Je peux peut-être t''aider ?
+
+- Non, rien je te dis. C''est bon, je vais gérer.
+
+Et je posais le téléphone sur mon bureau, face cachée.
+
+- Hé, j''ai bien vu tu sais ! J''ai vu tes petits sourires quand tu regardais ton téléphone. T''as le droit d''être amoureux tu sais ! C''est Aurélie après tout, je comprends.
+
+" Comment avait il pu deviner ? "
+
+- Je ne suis pas amoureux !!! rétorquais-je énervé.
+
+- C''est bon Steph, je sais. Pas la peine de me le cacher. Je suis passé par là moi aussi avec Emilie.
+
+Je ne répondis rien.
+
+- Tu vas m''en parler ou quoi ? Allez, dis moi. Ca a commencé quand ? Vous êtes ensemble ?
+
+- Non, je crois qu''elle est avec Steph.
+
+- Ah mince ! Pourquoi tu crois ?
+
+Je lui racontais alors notre entrevue sur les collines, où j''avais pu observer le comportement de Steph vis à vis d''Aurélie. Puis les sentiments que j''avais ressenti en suivant. Et enfin, je lui lisais les messages qu''Aurélie m''avait envoyés ce soir. Alors que j''allais passer mon téléphone à mon frère, je décidait de lire aussi les derniers messages de Steph.
+
+" T''es dispo ? Faut que je te parle" - 21h47
+
+" Laisse tomber, on en parle demain au bahut, tu dois faire la fête ce soir. Encore Bravo Titi." - 22h05
+
+Je regardais à nouveau les messages d''Aurélie, le dernier datait de 21h38. Les deux m''avaient envoyé un message identique, me disant qu''ils voulaient me parler, à peu près à la même heure. Il avait du se passer quelque chose.
+
+- Tiens, regarde, dis-je à mon frère en lui tendant le téléphone.
+
+Alors que mon frère lisait les messages, je tournais en rond dans ma chambre en prenant ma tête dans les mains.
+
+- Aaaahhh, c''est trop compliqué. J''y arrive pas !
+
+- Hey, calme toi Stéphane.
+
+Je m''assis à mon fauteuil de bureau.
+
+Après quelques secondes de lecture, mon frère me dit :
+
+- C''est rien. De toute façon, tu ne sais pas ce qu''ils veulent te dire pour l''instant, donc ne te prends pas la tête. Moi de ce que je vois, il y a trois possibilités. Soit, elle veut t''annoncer qu''elle est en couple avec Steph, soit elle veut te parler du fait qu''il la drague, mais qu''elle n''est pas amoureuse de lui. Ou alors... mais ça ne l''espère pas trop pour ne pas être déçu, elle veut te dire qu''elle ne veut pas être avec lui car elle est amoureuse de toi... Ou alors, c''est complétement autre chose...
+
+Alors que je soufflais, la tête dans les mains au dessus de mes genoux, mon frère me dit d''un air très sérieux :
+
+- Stéphane ! Reste concentré sur le vélo. Regarde, tu as été pris direct dans le club, en cours d''année, et en plus ils t''inscrivent au championnat de France qui a lieu dans deux semaines ! Sérieux, c''est une sacrée chance, ne la gâche pas en te prenant la tête avec ces histoires.
+
+- Ces histoires !!!??? Tu plaisantes ? Tu parles de ça comme si c''était rien !
+
+- Non, ce que je veux dire, c''est que deux semaines c''est court, ça va passer super vite. Je te dis juste de rester concentré sur le vélo et la compét. Ecoute, demain tu parles avec eux, et on déjeune ensemble le midi pour en parler. Quoi qu''il arrive, ne dis rien de tes sentiments, sauf si Aurélie t''avoue des sentiments pour toi. Nan, en fait, ne dis rien.
+
+- Pourquoi ?
+
+- Parce que ce n''est pas le moment ! me rétorque mon frère un peu agacé. Faut que tu restes concentré sur le vélo, et si tu commences une relation maintenant, bah autant laisser tomber la compét, tu n''arriveras pas à te concentrer.
+
+- Ok, ok, lui répondis-je, ça marche, bon aller je vais me coucher, dis-je en ouvrant la porte de ma chambre pour faire sortir mon frère.
+
+Tout en sortant, mon frère me dit une dernière fois :
+
+- La compét ! C''est ça ton objectif !
+
+Je fais un signe de la tête puis referme la porte derrière lui.
+
+Alors que je me dirige vers mon lit, la porte s''ouvre à nouveau. Mes parents passent la tête tout souriant, et mon père me félicite à nouveau.
+
+- Bonne nuit Stéphane, fais de beaux rêves. Me dit ma mère.', true, true),
+  ('22d71fef-40f9-8006-87b3-dc403f80fe59', '22d71fef-40f9-8006-87b3-dc403f80fe59', '80f0803e-8441-4c22-8c21-6b3ed62fdd23', 20, '7b590374-c445-4dc0-8c57-6e7567c93219', 'Je me sentais totalement perdu. Alex avait raison, concernant Aurélie. Il ne fallait pas que je me laisse distraire. Je devais prioriser le fait que je venais de réussir à atteindre mon objectif, celui que je m''étais fixé en regardant la finale olympique de cross country à la télévision. Aurélie et mes petits soucis devraient passer au second plan. Tout à ma réflexion, je réalisai soudain que j''étais entrain de gagner en maturité. Jusqu''à présent, je m''étais laissé porter. Mais maintenant, j''allais devoir prouver à ceux qui avaient cru en moi que leur mobilisation pour que je réussisse n''étais pas vaine. J''avais beau avoir 14 ans, l''exploit que je venais d''accomplir m''obligeait à adopter un comportement plus adulte. Une bonne nuit de sommeil allait me faire le plus grand bien.
+
+Le lendemain matin, au petit déjeuner, je pris le temps de répondre à Aurélie avant de préparer mes affaires pour l''entraînement qui commençait à 13h. Je lui dis que je n''avais pas eu le temps de répondre à son message, lui expliquant que mes parents m''avaient organisé une petite fête pour célébrer ma réussite.
+
+« Salut, ça va ? Désolé pour hier soir, j''aurais voulu te répondre de suite, mais une petite fête a été organisée à la maison pour moi, et j''ai oublié ton message. »
+
+La réponse vint cinq minutes après :
+
+« T''as réussi ton épreuve ? Mais c''est génial, félicitations, Stéph. Oui, je voudrais te parler d''un truc, mais ça peut attendre. Concentre toi sur ta préparation, je passerai te voir après, en fin d''après midi, si tu as un peu de temps à m''accorder.
+
+- Bien sûr ! Je termine à 18h, on se voit après.
+
+- Génial ! A toute ! »
+
+A la lecture du dernier message, je ne pus m''empêcher de sourire bêtement. Je me dépêchais d''engloutir mes céréales et filais dans ma chambre préparer mes affaires. Assis sur mon lit, affairé à trier mes vêtements de sport, je ne vis pas ma mère passer sa tête dans l''encadrement de ma porte.', true, true),
+  ('25b71fef-40f9-8000-81dc-f33c2933f8c1', '25b71fef-40f9-8000-81dc-f33c2933f8c1', '80f0803e-8441-4c22-8c21-6b3ed62fdd23', 21, 'c12ca8e2-fc17-4d47-9097-170abd04b3dc', '- J''ai reçu la confirmation de ton inscription à la coupe de France... ça sera le dimanche 22 novembre, à 13h45, et si je comprends bien, tu es inscrit pour le Cross court de 4320 m. Après il y a des choses d''écrites que je ne comprends pas bien : D + 2MB + A.
+
+Elle me sourit, et repart en me disant qu''elle m''a transféré le mail.
+
+Je regarde alors mon téléphone le cœur battant. Ca y est, c''est donc vrai... Je vais participer à ma première coupe de France de cross country.
+
+Je finis mon sac d''école, prends mon sac de sport et descends rejoindre ma mère et mon frère pour le départ au collège.
+
+Dans la voiture, nous discutons de la nouvelle organisation. Ma mère m''informe que c''est ma grand-mère qui va assurer les voyages en journée pour le club, et que c''est elle qui viendra me rechercher le soir.
+
+Mon frère se retourne pour me demander si ça va, je comprends le sens de sa question et lui réponds que oui.
+
+Ma mère continue en m''expliquant qu''avec cette nouvelle organisation, le collège va s''adapter à mes entrainements, et de ce fait, j''aurai les cours via la plateforme de l''école, et pour les évaluations, les professeurs s''adapteront pour que je les passe dans les meilleurs délais.
+
+Arrivé au collège, je me prépare à descendre de la voiture, quand Alex se retourne vers moi, pour me demander "On déjeune toujours ensemble ce midi ?".
+
+Je lui réponds que oui, mais que Grand-maman vient me chercher à 12h45 pour m''emmener à l''entrainement.
+
+A peine sortie de la voiture que je croise Stéphane. Celui-ci me tape le dos, et me demande comment s''est passé le test d''hier. Je lui raconte alors toutes les nouveautés, en essayant de ne pas m''arrêter de parler afin que lui ne me dise pas ce qu''il voulait me dire hier. J''ai retenu la leçon de mon frère, je dois rester concentré.
+
+A peine rentrés dans le collège, que la cloche sonne et nous montons dans les classes.
+
+La matinée se passe, et je rejoints mon frère pour avaler rapidement un sandwich. Puis ma grand-mère arrive et je monte dans sa voiture. Me voilà parti, pour le premier entrainement.', true, true),
+  ('27671fef-40f9-809b-97b1-e3b59660c0de', '27671fef-40f9-809b-97b1-e3b59660c0de', '80f0803e-8441-4c22-8c21-6b3ed62fdd23', 22, '7b590374-c445-4dc0-8c57-6e7567c93219', 'Tout au long du trajet, je fais en sorte de canaliser tout ce que je ressens. Je suis stressé mais je me dis que c''est normal. Je me suis tellement donné à fond ces derniers jours pour prouver ma valeur en tant que compétiteur, que ce qui m''arrive n''est que le résultat de tous mes efforts. J''éprouve de la fierté et du soulagement, bien sûr, et je suis conscient que je dois aussi énormément à mes parents et à Grand- Maman qui m''a épaulé depuis le début. Je souris. Je sais que le plus dur reste à venir et que les entraînements seront exigeants, mais le jeu en vaut la chandelle.
+
+En descendant de la voiture, je rassemble mes équipements et mon énergie et me dirige d''un pas décidé vers l''entrée du club. Après avoir montré mon attestation, celle que ma mère m''a transmise par mail la veille, je pars me mettre en tenue et rejoins les coachs à l''extérieur. Je suis présenté à mes deux entraîneurs principaux, qui m''encadreront au quotidien, ainsi qu''au préparateur mental, qui m''aidera à gérer mes émotions et mon stress, surtout avant les qualifications et les championnats. Pour moi, cette partie est essentielle, car étant d''un naturel angoissé, j''ai besoin qu''on m''apprenne à maîtriser l''anxiété qui a tendance à m''envahir dès que je suis confronté à des enjeux importants. Il faut que je devienne capable de me concentrer uniquement sur ce qu''on attend de moi. Pour donner le meilleur de moi même.
+
+Mes entraîneurs m''ayant donné des instructions pour la session de ce soir, je m''élance sur la piste.', true, true),
+  ('29571fef-40f9-80d7-af42-e20e03b0e2d4', '29571fef-40f9-80d7-af42-e20e03b0e2d4', '80f0803e-8441-4c22-8c21-6b3ed62fdd23', 23, 'c12ca8e2-fc17-4d47-9097-170abd04b3dc', 'La session d''aujourd''hui s''est bien passée. Mon entraîneur m''a prit le pouls après chaque passage rapide. Mon pouls était trop élevé, alors il m''a expliqué comment mieux respirer quand je roule pour réguler mon rythme cardiaque et du coup m''économiser. L''autre entraîneur a corrigé ma position des mains sur les poignées du vélo. Grâce à tous ces petits détails, j''ai déjà senti une amélioration dans ma manière de rouler et dans ma vitesse. Techniquement, j''ai encore des progrès à faire, mais les entraîneurs sont confiants.
+
+Demain soir, ça sera renforcement musculaire.
+
+Nous sommes rentrés à la maison avec ma mère et avons peu parlé dans la voiture. Je suis vanné, l''entraînement de cet après-midi m''a achevé. Après une bonne douche, je dîne et monte travailler. Ca va je n''ai pas trop de devoirs, je les fais rapidement, imprime les cours de cet après-midi que les profs m''ont envoyés, les lis puis je me couche aussi tôt.
+
+Je vois que j''ai des messages mais je ne les regarde même pas.
+
+Le lendemain, je me lève et prépare mes affaires. Ca va être ça mon rythme maintenant, cours le matin, parfois l''après-midi et entraînement l''après-midi ou fin d''après-midi. Je dois rattraper les cours loupés en dehors. Je suis crevé, et un petit côté de moi regrette. Mais je sais que c''est parce que je suis fatigué que je ressens ça. Dans quelques jours, ça ira mieux. Il faut que je m''y habitue.
+
+Avant de monter dans la voiture pour partir au collège, je regarde de qui proviennent les messages.
+
+Les deux sont d''Aurélie. Je ne les lis pas. Je mets mon téléphone en silencieux et éteins l''écran, puis sors mon cours de français d''hier pour réviser. Chaque minute compte pour avancer tant sur ma scolarité que sur la préparation des championnats.', true, true),
+  ('2a171fef-40f9-804c-a8cc-c3f4e65e462f', '2a171fef-40f9-804c-a8cc-c3f4e65e462f', '80f0803e-8441-4c22-8c21-6b3ed62fdd23', 24, '7b590374-c445-4dc0-8c57-6e7567c93219', 'En rangeant mon téléphone dans ma poche, je pensais aux sacrifices que j''allais devoir faire. Oui, j''avais bien des sentiments pour Aurélie, et j''étais tenté de me laisser porter, d''aller lui dire, parce que je suis de la catégorie de ceux qui pensent que quand on ressent quelque chose pour quelqu''un, il faut lui dire, il faut se laisser guider par son cœur. Mais d''un autre côté, mon nouveau statut d''athlète me forçait à être rationnel. A séparer mes émotions de tout ce que je devrais mettre en place pour atteindre mon objectif. Je ne devais pas oublier que j''avais ma famille de mon coté. Ce que je ressentais pour Aurélie devrait attendre. Pas trop longtemps, mais pour le moment, je devais rester concentré.
+
+Au centre de formation, cet après midi là, je donnais tout. Depuis quelques temps, j''avais réalisé de jolis chronos, assez prometteurs. Ils démontraient que j''avais le potentiel pour faire de grandes choses. En revanche, je rechignais à faire de la musculation et des exercices au sol, mais sachant qu''ils étaient complémentaires à tout le reste, je m''exécutais de bonne grâce. Le soir, épuisé, je n''avais même pas le temps d''échanger avec mon frère qui pourtant, me pressait de questions. Je m''écroulais de fatigue.', true, true),
+  ('2c971fef-40f9-80d2-8e3b-e101ae5615e5', '2c971fef-40f9-80d2-8e3b-e101ae5615e5', '80f0803e-8441-4c22-8c21-6b3ed62fdd23', 25, 'c12ca8e2-fc17-4d47-9097-170abd04b3dc', 'Nous sommes le samedi 14 novembre, la coupe de France est le week-end prochain. Les semaines sont passées à tout allure, et j''ai enchainé les cours, les entraînements, les révisions. J''ai enfin trouvé mon rythme, certes effréné, mais je m''en sors. Je suis hyper rigoureux, je fais attention à mon sommeil et à mon alimentation. Mon père me soutient beaucoup comme un coach afin que je garde le mental. Je n''ai plus le temps de voir les copains, mais je pense toujours à Aurélie. Nous avons assez peu échangé par SMS.
+
+Le vendredi suivant, je pars au collège en me sentant assez mal. Je suis hyper stressé et j''ai très mal dormi. Les cours se passent mais je suis complètement ailleurs. Midi, je quitte le collège, ma grand-mère est là pour m''amener au club.
+
+J''arrive, nous ne somme que 3 aujourd''hui, ceux qui participent à la coupe de France ce week-end. Tous les entraîneurs sont là et aussi le Directeur. Ils nous accueillent dans le bureau, on s''assoie devant un tableau. Pendant une heure ils nous expliquent comment ça va se passer. Ils nous montrent le circuit de dimanche et nous parlent des autres vététistes qui vont compétiter avec nous. Nous sommes tout 3 dans des catégories différentes. Pour finir la réunion, ils prennent le temps de voir comment nous nous sentons. Il semble que je sois le plus apeuré, normal c''est ma première compétition.
+
+Le coach me prend à part pour parler avec moi et me rassurer, et ça marche. Il me rassure en me disant que j''aurai le temps de parcourir le circuit avant la compétition pour l''appréhender, qu''il faut que je donne tout mais en prenant du plaisir, comme à l''entraînement. La seule différence avec l''entrainement, c''est qu''il faudra que je reste très concentré sur ce que je fais et non sur les conseils qu''il me donne quand je roule, car là, il n''y aura que moi. Il me donne quelques conseils pour ce soir quand je vais rentrer chez moi et pour demain. Puis il finit en me disant que je suis prêt physiquement et que je n''ai pas à m''inquiéter.
+
+C''est parti pour le dernier entraînement avant la compétition, mes perfs ne sont pas top, le coach ne veut pas que je force trop.
+
+Dimanche matin...', true, true),
+  ('2e471fef-40f9-80f0-a385-de7eda7c3c6e', '2e471fef-40f9-80f0-a385-de7eda7c3c6e', '80f0803e-8441-4c22-8c21-6b3ed62fdd23', 26, '7b590374-c445-4dc0-8c57-6e7567c93219', 'Dimanche matin.. mon réveil sonne à huit heures et étonnement, je constate que j''ai bien dormi. Je mets cela sur le compte de la fatigue et du stress engendrés par la perspective de ma première compétition. Je me répète ces mots intérieurement. Et j''essaie de me détendre. Tous les grands champions, quelles qu''eurent été leurs disciplines, ont eu un point de départ qui a aussi été un repère dans leurs cheminements vers le succès. Donc, il ne faut pas que je mette trop de pression. Ça va aller.
+
+Quand je descends dans la cuisine, ma mère s''affaire paisiblement à la confection de mon petit déjeuner. Je fais en sorte de manger tout ce qu''elle m''a préparé, un bol de flocons d''avoine avec du lait, deux tartines, des knackis, et un grand verre d''oranges pressées. J''ai une légère boule au ventre mais pour le moment, j''arrive à la maîtriser. Une petite demi heure plus tard, dans la voiture, j''essaie de me concentrer sur mon objectif de la journée. Il faut que je donne le meilleur de moi même et que je me fasse plaisir. Dans le vestiaire, pendant que je me change, mon coach vient rapidement s''assurer que tout va bien et me répète que je suis là pour donner mon maximum sans pour autant oublier de profiter. Il faut que je fasse exactement comme j''ai fait le premier jour, quand j''ai été engagé dans ce club. Et tout ira bien.
+
+Maintenant sur la ligne de départ, après un rapide coup d''œil à mes concurrents, je sens l''adrénaline qui m''envahit. Je me parle à moi même en silence, je m''encourage. Je vais tout donner. Je ne suis pas là par hasard. C''est à moi de prouver que je mérite ma place ici.', true, true);

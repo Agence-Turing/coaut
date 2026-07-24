@@ -1,0 +1,833 @@
+Request URL
+https://app-api.co-aut.com/books?status=Launched
+Request Method
+GET
+Status Code
+200 OK
+Remote Address
+[2001:1600:13:101::16c1]:443
+Referrer Policy
+strict-origin-when-cross-origin
+access-control-allow-origin
+https://app.co-aut.com
+connection
+keep-alive
+content-type
+application/json; charset=utf-8
+date
+Fri, 24 Jul 2026 19:25:24 GMT
+server
+nginx/1.26.3
+strict-transport-security
+max-age=31536000
+transfer-encoding
+chunked
+accept
+application/json, text/plain, */*
+accept-encoding
+gzip, deflate, br, zstd
+accept-language
+fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7,it;q=0.6
+authorization
+Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1laWQiOiIyN2RhODI3Yi1iNjZlLTQyYTgtODdiMC1mYzdjMjc5MTMwZTAiLCJ1bmlxdWVfbmFtZSI6InRvbmlnYXJjaWEiLCJlbWFpbCI6InRvbmkuZ2FyY2lhLmZyZWVsYW5jZUBnbWFpbC5jb20iLCJBc3BOZXQuSWRlbnRpdHkuU2VjdXJpdHlTdGFtcCI6IlZSNVdaVFFQUTRWWktWVUVKTzZWQVJVTVJaTlJDWFdNIiwibmlja25hbWUiOiJ0b25pZ2FyY2lhIiwicm9sZSI6InBsYXllciIsImF1ZCI6WyJodHRwczovL2F1dGgtYXBpLmNvLWF1dC5jb20iLCJodHRwczovL2FwcC1hcGkuY28tYXV0LmNvbSJdLCJuYmYiOjE3ODQ5MjA5NDgsImV4cCI6MTc4NDk4NTc0OCwiaWF0IjoxNzg0OTIwOTQ4LCJpc3MiOiJjb2F1dCJ9.LmFUsUWYnYfupqmLealbox9veAGq0PE3qWdm9HBNOo4
+connection
+keep-alive
+host
+app-api.co-aut.com
+origin
+https://app.co-aut.com
+referer
+https://app.co-aut.com/
+sec-ch-ua
+"Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"
+sec-ch-ua-mobile
+?0
+sec-ch-ua-platform
+"Windows"
+sec-fetch-dest
+empty
+sec-fetch-mode
+cors
+sec-fetch-site
+same-site
+user-agent
+Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36
+
+
+payload: status
+Launched
+
+[
+    {
+        "code": "#000",
+        "title": "Exemple Lancer un livre",
+        "themes": [
+            "fantastique",
+            "mémoires"
+        ],
+        "synopsys": "Comment lancer un livre : Je choisis le titre, le(s) thème(s), et le nombre de co-auteurs avec qui je veux écrire, puis j’écris le synopsis pour présenter mon histoire. Si je souhaite écrire avec des personnes que je connais, j’indique les informations nécessaires ; Exemple : Avec “son pseudonyme” ou “son prénom”, ou Avec mon grand-père, ou En famille… Si je souhaite lancer un livre pour ma classe, alors je commence le synopsis par : PROJET DE CLASSE. Une fois le livre prêt, il n’y a plus qu’à commencer à écrire.",
+        "scolarLevel": null,
+        "launcherNickname": null,
+        "playersCount": 0,
+        "status": "Lancé",
+        "playersNickname": [],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#052",
+        "title": "Harry Potter et les dragons du nord - Tome 4",
+        "themes": [
+            "FanFiction",
+            "Aventure"
+        ],
+        "synopsys": "Livre commencé - Recherche 1 co-auteur : Harry Potter, orphelin veut connaître son histoire avec ses deux amis Ron et Hermione, ils vont partir à la découverte de mondes mystérieux et remplis de créatures fantastiques comme des dragons…",
+        "scolarLevel": "4ème",
+        "launcherNickname": "dragonbleu✏️✏️✏️",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "dragonbleu✏️✏️✏️"
+        ],
+        "turnsCount": 19,
+        "fileUrl": null
+    },
+    {
+        "code": "#065",
+        "title": "La colo",
+        "themes": [
+            "Amour"
+        ],
+        "synopsys": "Livre commencé - Recherche 1 co-auteur : Valentine et ses deux meilleures amies, Sarah et Clémence, partent pour les vacances de Pâques en colo dans les Pyrénées. Le jour du départ, devant le car qui va les emmener dans les Pyrénées, Valentine et ses amies remarquent un jeune garçon blond, à la peau très claire et aux yeux bleus à tomber parterre… Les filles se regardent bouche bée et souriantes jusqu’à ce qu’elles comprennent qu’elles ont toutes craqué sur ce beau prince charmant. Valentine et ses amies vont alors entreprendre une guerre amicale pour essayer de plaire à ce bel inconnu.",
+        "scolarLevel": "6eme",
+        "launcherNickname": "Eddie14✏️✏️✏️",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "Armonie✏️✏️✏️"
+        ],
+        "turnsCount": 12,
+        "fileUrl": null
+    },
+    {
+        "code": "#070",
+        "title": "Graffiti l’astro-chat",
+        "themes": [
+            "Science-Fiction"
+        ],
+        "synopsys": "Livre commencé - Avec 1 enfant, Arnaud de la société Albiréoo, se propose d’accompagner un jeune auteur dans la création de cette histoire : “ Graffiti est un chat espiègle qui s'est trouvé une belle cachette pour la nuit. Il ne sait pas que cet immense arbre blanc est la fusée Apollo 18 qui doit décoller le lendemain en direction de la Lune. Un drôle de réveil l'attend ! “ Je suis un adulte et mon métier est de faire découvrir l'espace. Je te propose de rejoindre mon livre. A toi de continuer cette histoire comme tu en as envie. De temps en temps je te donnerai quelques conseils ou je t'expliquerai comment se passe la vie à bord d'une fusée.",
+        "scolarLevel": "Enfant",
+        "launcherNickname": "Albireoo",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "Albireoo"
+        ],
+        "turnsCount": 15,
+        "fileUrl": null
+    },
+    {
+        "code": "#084",
+        "title": "Enlèvement au collège",
+        "themes": [
+            "Aventure",
+            "fantastique"
+        ],
+        "synopsys": "Recherche 1 co-auteur : Bonjour, je m'appelle Alix et je suis en 3ème 4 au collège Victor Hugo à Toulouse. Professeurs et élèves coulent des jours heureux dans cet établissement. Mais, un jour, la directrice disparaît mystérieusement. Ma classe, les 3èmes 4 va tout faire pour la retrouver. Mais allons-nous y arriver ? La route est longue et semée d'embûches. La classe va devoir affronter de nombreux dangers.",
+        "scolarLevel": "2nde",
+        "launcherNickname": "adele33",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "manolo"
+        ],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#091",
+        "title": "Les âmes liées ",
+        "themes": [
+            "Amour",
+            "Humour"
+        ],
+        "synopsys": "Avec 2 co-auteurs : Harry un garçon populaire au lycée toujours de bonne humeur il y avait toujours des filles qui lui tournaient autour sauf une Ines elle était souvent seule elle avait une amie celle-ci s'appelait Lou-Ann mais un jour tout bascula dans la vie de Harry …",
+        "scolarLevel": "Enfant",
+        "launcherNickname": "Kiki",
+        "playersCount": 0,
+        "status": "Lancé",
+        "playersNickname": [],
+        "turnsCount": 1,
+        "fileUrl": null
+    },
+    {
+        "code": "#099",
+        "title": "La jeune fille perdue de l’île d’Oléron",
+        "themes": [
+            "fantastique"
+        ],
+        "synopsys": "Avec 2 co-auteurs : Dans cette histoire mêlée d'aventure, d'amour et de suspens, la jeune fille, Amanda, 13 ans, arrive avec sa mère sur une île, l'île d'Oléron. Un beau jour, perdue dans ses pensées, elle tomba d'une falaise. La rumeur dit qu'elle rôde toujours dans les parages, comme si elle existait vraiment. Un jeune garçon nommé Julien partit à sa recherche.",
+        "scolarLevel": "6eme",
+        "launcherNickname": "Cacahouete",
+        "playersCount": 0,
+        "status": "Lancé",
+        "playersNickname": [],
+        "turnsCount": 11,
+        "fileUrl": null
+    },
+    {
+        "code": "#100",
+        "title": "Robot 124",
+        "themes": [
+            "fantastique",
+            "Science-Fiction"
+        ],
+        "synopsys": "Avec 2 co-auteurs : C'est une usine à robot, ils les construisent, les animent et les habituent au monde humain. Mais un des robots n'est pas comme les autres, le robot 124 qui décide de changer le monde…",
+        "scolarLevel": "Enfant",
+        "launcherNickname": "Cacahouete",
+        "playersCount": 0,
+        "status": "Lancé",
+        "playersNickname": [],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#110",
+        "title": "Une histoire d’amitié",
+        "themes": [
+            "Amitiè",
+            "Lecture"
+        ],
+        "synopsys": "Recherche 1 co-auteur : Marion et Adèle sont deux élèves de quatrième dans le même collège, rien ne semble les rapprocher : la première à l'esprit de compétition quand l'autre se tient timidement dans l'ombre de ce que les autres attendent d'elle. Pourtant une chose les rassemble : la lecture ! Elles s'inscrivent toutes les deux au club lecture de leur collège et participent à un concours d'écriture…",
+        "scolarLevel": "2nde",
+        "launcherNickname": "Aded",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "manolo"
+        ],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#111",
+        "title": "Une colo un peu mouvementée",
+        "themes": [
+            "Humour",
+            "Aventure",
+            "fantaisie"
+        ],
+        "synopsys": "Avec 2 co-auteurs : Les grandes vacances ont commencé et le car de la colonie Evasion soleil quitte la ville de Bordeaux en direction de la Corse avec à son bord 20 jeunes qui ont entre 12 et 16 ans et 5 animateurs dont parmi eux la directrice du centre. Au programme visite du village d'Evia, baignade et visite de la magnifique ville de Calvi, randonné et autres activités mais tout ne va pas se passer comme prévue…",
+        "scolarLevel": "Enfant",
+        "launcherNickname": "Charlie33✏️",
+        "playersCount": 0,
+        "status": "Lancé",
+        "playersNickname": [],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#112",
+        "title": "Ma vie sans limite(s)",
+        "themes": [
+            "roman"
+        ],
+        "synopsys": "Avec 2 co-auteurs :  Je me nomme Julien et j'adore la guitare, sauf que mes parents me l'interdisent car ils préfèrent que je me concentre sur mes études…",
+        "scolarLevel": "6eme",
+        "launcherNickname": "Camcam99",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "Roromantique"
+        ],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#113",
+        "title": "Amour perdu ?",
+        "themes": [
+            "Amour",
+            "drame"
+        ],
+        "synopsys": "Recherche 1 co-auteur : Une jeune fille nommée lou-Ann vient de perdre ses parents elle vient toujours en cours et tombe amoureuse d’un garçon nommé Louka. Mais elle a peur de pas lui plaire, elle perd confiance en elle !",
+        "scolarLevel": "6eme",
+        "launcherNickname": "Kiki",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "Timi16"
+        ],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#114",
+        "title": "Un effet de mode",
+        "themes": [
+            "Romance",
+            "Amitiè"
+        ],
+        "synopsys": "Avec 2 co-auteurs : Une jeune fille nommée Carla se faisait harceler étant plus petite, arrivée au lycée elle se met à la mode et devient populaire. Un garçon l’invite à un bal, ils commencent à sortir ensemble mais ses amis disent que c’est juste un effet de mode",
+        "scolarLevel": "Enfant",
+        "launcherNickname": "Kiki",
+        "playersCount": 0,
+        "status": "Lancé",
+        "playersNickname": [],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#122",
+        "title": "La vie d’Eleanor",
+        "themes": [
+            "Science-Fiction"
+        ],
+        "synopsys": "Avec 2 co-auteurs : C'est l'histoire d'une fille qui vit avec ses parents mais qui a un démon qui la possède et ses parents n’ont pas beaucoup d'argent pour l'exorciser…",
+        "scolarLevel": "Enfant",
+        "launcherNickname": "chachoo",
+        "playersCount": 0,
+        "status": "Lancé",
+        "playersNickname": [],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#126",
+        "title": "Un été en France",
+        "themes": [
+            "fantastique",
+            "Aventure",
+            "Romance"
+        ],
+        "synopsys": "Recherche 1 co-auteur : Un adolescent Québécois de 15 ans va en voyage en France et découvre un portail menant vers un monde fantastique. Là-bas il découvre non seulement des animaux incroyables, mais aussi l'amour.",
+        "scolarLevel": "2nde",
+        "launcherNickname": "Zoro",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "manolo"
+        ],
+        "turnsCount": 2,
+        "fileUrl": null
+    },
+    {
+        "code": "#131",
+        "title": "Quand les amies deviennent des ennemies",
+        "themes": [
+            "Amitiè",
+            "Trahison",
+            "Solitude"
+        ],
+        "synopsys": "Recherche 1 co-auteur : Romane pensait avoir des amies pour toujours. Mais un jour, une dispute change tout. Les messages deviennent méchants, les groupes se séparent et les amitiés se brisent. Peu à peu, Romane se retrouve presque seule dans la cour de récréation. Entre les disputes, les rumeurs et les trahisons, Romane essaie de comprendre pourquoi tout a changé. Certaines personnes s'éloignent, d'autres reviennent, et parfois les mots font plus mal qu'on ne l'imagine. Heureusement, il reste quelques lumières dans cette tempête : une amie qui reste à ses côtés, des promenades avec son père pour parler et se calmer, et surtout l'espoir qu'un jour tout ira mieux. C'est l'histoire d'une fille qui traverse des moments difficiles, mais qui apprend peu à peu à être plus forte que la méchanceté des autres.",
+        "scolarLevel": "4ème",
+        "launcherNickname": "Roromantique",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "Leaetana"
+        ],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#132",
+        "title": "Roméa et Julien",
+        "themes": [
+            "drame",
+            "comédie"
+        ],
+        "synopsys": "Recherche 2 co-auteurs : Julien trompe Roméa et elle fait croire qu'elle se suicide mais elle découvre qu'il la trompe avec sa meilleure amie.",
+        "scolarLevel": "4ème",
+        "launcherNickname": "Leaetana",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "Leaetana"
+        ],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#133",
+        "title": "Et si la vie était là ?",
+        "themes": [
+            "Amour",
+            "drame",
+            "psychologie"
+        ],
+        "synopsys": "Recherche 2 co-auteurs : Lisa, jeune fille de 15 ans n'a jamais été amoureuse. Jour après jour elle se demande ce que ça fait d'aimer quelqu'un. Puis tout bascule le jour où elle est percutée par une voiture et que seul un garçon se présente a l'hôpital. Est-on obligé d'aimer pour vivre ? Une question que Lisa va devoir répondre.",
+        "scolarLevel": "2nde",
+        "launcherNickname": "manolo",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "manolo"
+        ],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#138",
+        "title": "13:15 depuis 2h",
+        "themes": [
+            "fantastique"
+        ],
+        "synopsys": "Recherche 1 co-auteur : Une jeune femme s'endort dans une gare souterraine en attendant son tram et en se réveillant elle voit que l'heure n'a pas bougé. En essayant de chercher la sortie elle fait face à des évènements étranges…",
+        "scolarLevel": "4ème",
+        "launcherNickname": "Tenshi",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "Tenshi"
+        ],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#141",
+        "title": "Le chat",
+        "themes": [
+            "Amour"
+        ],
+        "synopsys": "Recherche 1 co-auteur : Il était une fois un chat qui rencontre une chate qui l'aimait beaucoup. Il se baladait sur les toits dans Paris en regardant la tour Eiffel. Ils étaient très heureux, ils voulaient rester ensemble, Mais une fois …",
+        "scolarLevel": "6eme",
+        "launcherNickname": "Timi16",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "Timi16"
+        ],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#143",
+        "title": "Une douleur enfouie",
+        "themes": [
+            "Romance",
+            "horreur"
+        ],
+        "synopsys": "Avec 2 co-auteurs : Alors qu'un groupe d'amis créé sur Discord ce rejoint dans une villa au milieu d'une foret d'Amazonie, une étrange rumeur tourne sur cette foret où ont  été trouvés des corps décapités. Entre amour et peur, réussiront ils a rester en vie pendant leurs séjours ?",
+        "scolarLevel": "4ème",
+        "launcherNickname": "DAMIRS",
+        "playersCount": 0,
+        "status": "Lancé",
+        "playersNickname": [],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#144",
+        "title": "Entre nuage et océan",
+        "themes": [
+            "fantastique",
+            "Aventure"
+        ],
+        "synopsys": "Recherche 2 co-auteurs : Maria, 13 ans, elle vit en orphelina depuis toujours. avec ses cheveux d'un roux éclatant elle n'est jamais adoptée. Mais au jour de ses 14 ans un vieil homme vient et dit être celui qu'elle attend depuis toujours. Qui est-il ? Pourquoi il a l'air de la connaitre tant ?",
+        "scolarLevel": "2nde",
+        "launcherNickname": "manolo",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "manolo"
+        ],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#148",
+        "title": "Mathilde et la bibliothèque magique",
+        "themes": [
+            "magie"
+        ],
+        "synopsys": "Recherche 2 co-auteurs : Mathilde est une fille qui a 13 ans et elle a une bibliothèque où il y a plein de livres. Un jour, elle se téléporte dans ses livres qui sont…",
+        "scolarLevel": "6eme",
+        "launcherNickname": "Timi16",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "Timi16"
+        ],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#149",
+        "title": "Les Gardiens du Lys d’Argent",
+        "themes": [
+            "fantastique"
+        ],
+        "synopsys": "Recherche 4 co-auteurs : Dans un monde où la magie est née d'une pluie d'étoiles et d'un mystérieux Lys de cristal, Kiara, 16 ans, rêve d'intégrer la prestigieuse Académie Daemon. Mais son pouvoir est une malédiction : elle peut créer des objets aléatoires, sans aucun contrôle. Méprisée par la noblesse et réduite au rang de servante au palais depuis un incident d'enfance avec le prince Eryx, elle doit prouver sa valeur dans un monde qui ne croit pas en elle. Mais pendant ce temps, dans l'ombre, une secte adore l'ancien roi démon Sulfur et œuvre secrètement pour briser la barrière magique qui emprisonne les monstres des abysses…",
+        "scolarLevel": "1ère",
+        "launcherNickname": "Createur_de_mondes",
+        "playersCount": 2,
+        "status": "Lancé",
+        "playersNickname": [
+            "Createur_de_mondes",
+            "manolo"
+        ],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#150",
+        "title": "Lilou et le doudou",
+        "themes": [
+            "fantastique"
+        ],
+        "synopsys": "Recherche 2 co-auteurs : C’est une fille qui a un doudou qui l’emmène dans des mondes parallèles",
+        "scolarLevel": "6eme",
+        "launcherNickname": "Timi16",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "Timi16"
+        ],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#151",
+        "title": "Colombe, Tome 1 : De la cité des nuages",
+        "themes": [
+            "fantastique",
+            "Aventure"
+        ],
+        "synopsys": "Recherche 2 co-auteurs : Colombe, jeune fille de la cité des nuages, mène une vie agréable et grâce à ses amis, elle vit plein d'aventures. Malheureusement, la cité des nuages est en guerre contre celle du feu. Mais elle va vite découvrir que ses habitants ne sont pas forcément tous méchants…",
+        "scolarLevel": "CM2",
+        "launcherNickname": "Lulu",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "Lulu"
+        ],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#500",
+        "title": "Qui es-tu maman ? Retour vers le futur",
+        "themes": [
+            "Généalogie",
+            "Romance"
+        ],
+        "synopsys": "Recherche 1 co-auteur : Enfants et petits enfants questionnent Manou, leur mère et grand-mère pour mieux connaitre l'histoire de leur famille. Les chapitres s'organiseront autour de thèmes, en privilégiant des lieux riches d'histoire de la famille. Chaque participant pourra alimenter le chapitre à partir de souvenirs qui lui sont propres. Chacun d'entre nous pourrions à tour de rôle, organiser avec Manou, une visite d'un lieu, d'une maison, d'une rue et écrire dans ce livre les souvenirs et les émotions que cela suscite chez Manou. Toute autre façon de participer est la bienvenue.",
+        "scolarLevel": "Adulte",
+        "launcherNickname": "Vincent",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "Alba✏️"
+        ],
+        "turnsCount": 1,
+        "fileUrl": null
+    },
+    {
+        "code": "#501",
+        "title": "Contre-utopie écologique",
+        "themes": [
+            "Aventure",
+            "Science-Fiction",
+            "écologie"
+        ],
+        "synopsys": "Avec 2 co-auteurs : Dans le futur, une nouvelle guerre froide a lieu entre les États-Unis et la Russie. La Russie a reconstruit un empire équivalent à celui de l'URSS. Pendant ce temps, en France, il y a eu une révolution écologique. L'histoire commence quand un espion russe arrive en France pour comprendre cette nouvelle société utopique pour la détruire, mais au contact de celle-ci, cet agent double est progressivement séduit par cette nouvelle société.",
+        "scolarLevel": "Adulte",
+        "launcherNickname": "Oasis",
+        "playersCount": 0,
+        "status": "Lancé",
+        "playersNickname": [],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#502",
+        "title": "L’enseignante excentrique",
+        "themes": [
+            "Aventure"
+        ],
+        "synopsys": "Recherche 2 co-auteurs : Une enseignante de sixième année est très spéciale à l'école Dupré-Beaudet. Elle a toujours les pieds dans les plats et toutes sortes de malheurs lui arrivent.. à suivre…",
+        "scolarLevel": "Adulte",
+        "launcherNickname": "Amypaquet",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "Backloop"
+        ],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#503",
+        "title": "Pas aimé, mal aimé",
+        "themes": [
+            "Amour",
+            "Résilience"
+        ],
+        "synopsys": "Recherche 2 co-auteurs : Pas aimé, mal aimé raconte la descente aux enfers d'une adolescente harcelée, son réveil d'un comas après une tentative suicide grâce à un rêve salvateur, puis son incroyable résilience : une plongée brutale dans la souffrance, suivie d'une remontée où la musique, l'acceptation de soi et l'amour deviennent les piliers d'une renaissance.",
+        "scolarLevel": "Adulte",
+        "launcherNickname": "lou",
+        "playersCount": 2,
+        "status": "Lancé",
+        "playersNickname": [
+            "Ohuolm✏️✏️",
+            "m_vince18"
+        ],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#504",
+        "title": "Le cœur sur la patte ",
+        "themes": [
+            "Amitiè"
+        ],
+        "synopsys": "Recherche 1 co-auteur : 10 Août, à Paris. Sous une chaleur écrasante, Eva est bloquée dans la capitale pour cet été. Alors qu'elle s'apprête à se poser dans un parc, elle tombe sur Poppy, un chiot berger, qui semble être abandonné. Quel destin ce chiot lui réserve-t-elle ? Vont-ils s'unir pour la vie, ou faire comme si, ils ne s'étaient jamais rencontrés?",
+        "scolarLevel": "Adulte",
+        "launcherNickname": "DianaLina",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "Isabelle89"
+        ],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#505",
+        "title": "Pour une école sans frontière",
+        "themes": [],
+        "synopsys": "Recherche 10 co-auteurs : A l'ere de la globalisation, des nouvelles technologies, des réseaux sociaux, les valeurs universelles se généralisent dans tous les continents, au détriment d'un individualisme hermétique. Ce nouvel état d'esprit crée un rapprochement et un entendement impressionnant qui se tisse au quotidien entre les internautes, enseignants praticiens, chercheurs, artistes, membres de différents réseaux, professionnels et autres. Ces échanges virtuels génèrent une ouverture sur des pays avant gardistes en éducation et formation, créant des possibilités de mobilité et de coopération. Une éducation de qualité devient un rêve pour tous.\n\n",
+        "scolarLevel": "Adulte",
+        "launcherNickname": "Yagamed",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "Yagamed"
+        ],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#506",
+        "title": "Octavia et Alarick",
+        "themes": [
+            "Dark Romance"
+        ],
+        "synopsys": "Recherche 2 co-auteurs : Octavia et Alarick sont ce qu'on appelle des inséparables. Ils ont toujours plus ou moins vécu ensemble, D'abord comme de simples voisins enfants puis à la mort du seul parent de la petite, comme les meilleurs amis qu'ils sont toujours. Sauf que voilà bien qu'ayant plus ou moins toujours sacrifié une partie de leur vie pour rester que tout les deux, ils ont développé des sentiments, assentiments et repentis bien à eux ! Aujourd'hui après un nouveau coup dur ils sont de nouveau seuls contre le monde, ils montent leur boite de tatouage sur une nouvelle ile de retour aux états unis. Suivons ensembles leur vie chacun dans son journal intime.",
+        "scolarLevel": "Adulte",
+        "launcherNickname": "Roxane",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "Roxane"
+        ],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#507",
+        "title": "Et si on inventait une histoire ?",
+        "themes": [
+            "Humour"
+        ],
+        "synopsys": "Recherche 10 co-auteurs : La seule limite c’est toi",
+        "scolarLevel": "Adulte",
+        "launcherNickname": "Noe",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "Renar"
+        ],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#508",
+        "title": "Diego",
+        "themes": [
+            "Initiatique"
+        ],
+        "synopsys": "Recherche 1 co-auteur : Dans les années 2010, Diego est un combattant particulier. Le jour il prend part à de nombreux combats à mains nues aux issues souvent sanglantes ; le soir, il devient Niña Pistola, drag queen sensuelle pour qui la nuit est une possibilité infinie. Si cette ambivalence lui colle au corps, certains événements pourraient bien bouleverser cet équilibre.",
+        "scolarLevel": "Adulte",
+        "launcherNickname": "galawan",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "mamiebea✏️✏️"
+        ],
+        "turnsCount": 3,
+        "fileUrl": null
+    },
+    {
+        "code": "#509",
+        "title": "Hope",
+        "themes": [
+            "horreur",
+            "drame",
+            "Romance"
+        ],
+        "synopsys": "Recherche 1 co-auteur : Mei, 16 ans, est une Lycéenne banale, s'ennuyant de cette vie trop fade pour elle et ayant des troubles de la mémoire. Elle va faire la rencontre de Umeko, un garçon plein de vie qui va tenter de donner un sens à la sienne",
+        "scolarLevel": "Adulte",
+        "launcherNickname": "Alice123456789",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "Minipuce✏️"
+        ],
+        "turnsCount": 1,
+        "fileUrl": null
+    },
+    {
+        "code": "#512",
+        "title": "Mon badboy",
+        "themes": [
+            "Romance"
+        ],
+        "synopsys": "Recherche 2 co-auteurs : C'est le meilleur joueur de Hockey du campus. Je le déteste, il me déteste mais pourquoi mon corps s'embrase lorsqu'il est dans les parages ? Et pourquoi j'ai si mal lorsque je le vois avec d'autres filles ?",
+        "scolarLevel": "Adulte",
+        "launcherNickname": "Fiya@14",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "Minipuce✏️"
+        ],
+        "turnsCount": 7,
+        "fileUrl": null
+    },
+    {
+        "code": "#513",
+        "title": "C’est quoi l’amour",
+        "themes": [
+            "Amour"
+        ],
+        "synopsys": "Recherche 2 co-auteurs : C'est quoi l'amour maman ? C'est quoi l'amour papa ? Du haut de ses 11 ans Clotilde se pose beaucoup de questions…",
+        "scolarLevel": "Adulte",
+        "launcherNickname": "Clotilde",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "Clotilde"
+        ],
+        "turnsCount": 1,
+        "fileUrl": null
+    },
+    {
+        "code": "#514",
+        "title": "La Malédiction des Aftons",
+        "themes": [
+            "horreur",
+            "Suspense"
+        ],
+        "synopsys": "Recherche 1 co-auteur : Après la mort de la famille Afton, Michael, le fils cadet, décide de retourner dans son ancienne maison, pour espèrer réparer les fautes de sa famille... ainsi que les siennes.",
+        "scolarLevel": "Adulte",
+        "launcherNickname": null,
+        "playersCount": 0,
+        "status": "Lancé",
+        "playersNickname": [],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#515",
+        "title": "Le sous sol de l’école",
+        "themes": [
+            "Suspense"
+        ],
+        "synopsys": "Recherche 1 co-auteur :  Un petit garçon veut visiter le sous sol de l'école",
+        "scolarLevel": "Adulte",
+        "launcherNickname": "liatalbot",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "Overbooked"
+        ],
+        "turnsCount": 1,
+        "fileUrl": null
+    },
+    {
+        "code": "#517",
+        "title": "Vie sphérique",
+        "themes": [
+            "Science-Fiction"
+        ],
+        "synopsys": "Avec 2 co-auteurs : Dans un avenir lointain, la vie n'est plus possible sur Terre sauf si on fait parti de l'Elite qui vit dans des Dômes. Les Autres vivent au fond dans l'océan dans différentes sphères. Je fais partie des Autres, une loterie a lieu tous les ans pour que 2 personnes rejoignent la surface mais à quel prix ?",
+        "scolarLevel": "Adulte",
+        "launcherNickname": "jesgar",
+        "playersCount": 0,
+        "status": "Lancé",
+        "playersNickname": [],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#526",
+        "title": "Léo",
+        "themes": [
+            "roman"
+        ],
+        "synopsys": "Recherche 4 co-auteurs : Léo a 14 ans. Interne, il rentre pour le week-end. Son père vient le chercher un jour glacial.",
+        "scolarLevel": "Adulte",
+        "launcherNickname": "Doldid",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "Doldid"
+        ],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#528",
+        "title": "Mémoires dormantes",
+        "themes": [
+            "mémoires",
+            "roman",
+            "psychologie"
+        ],
+        "synopsys": "Recherche 3 co-auteurs : Rien ne se perd, rien ne se créer, tout se transforme ! Pourquoi en serait-il autrement pour la mémoire ? C'est ce que David découvre, après un violent accident de voiture, lorsqu'il se retrouve avec un souvenir qui n'est pas le sien mais celui de son défunt grand-père. Une promesse faite, un objet mystérieux à retrouver. Est-ce de la folie ou du courage se demande David en se lançant sans réfléchir dans cette aventure qui l'amènera au plus profond de lui-même, au plus profond de la mémoire humaine.",
+        "scolarLevel": "Adulte",
+        "launcherNickname": "Chomiere95",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "AnneCe16"
+        ],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#529",
+        "title": "Le 23 décembre",
+        "themes": [
+            "Enquête"
+        ],
+        "synopsys": "Recherche 1 co-auteur : Le 23 décembre, quand Maxwell est sortit de chez moi, je ne pensais pas que c'était pour la dernière fois, enfin par pour toujours bien sûr, ou si ? Peut-être ? Tout ce qui est sûr, c'est que la première personne à qui il s'est confié c'est moi, car, pendant que la police ne faisait rien, moi j'enquêtais !",
+        "scolarLevel": "Adulte",
+        "launcherNickname": "Hugo",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "Hugo"
+        ],
+        "turnsCount": 0,
+        "fileUrl": null
+    },
+    {
+        "code": "#530",
+        "title": "Les flammes de la lune",
+        "themes": [
+            "Mystique"
+        ],
+        "synopsys": "Recherche 2 co-auteurs : La face cachée de la lune est recouverte de flammes noires intenses et interminables.",
+        "scolarLevel": "Adulte",
+        "launcherNickname": "Taylor",
+        "playersCount": 1,
+        "status": "Lancé",
+        "playersNickname": [
+            "Taylor"
+        ],
+        "turnsCount": 0,
+        "fileUrl": null
+    }
+]

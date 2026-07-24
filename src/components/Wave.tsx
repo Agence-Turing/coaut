@@ -14,14 +14,4 @@ function Wave({ flip = false, className = "" }: { flip?: boolean; className?: st
   );
 }
 
-/** Bande décorative sombre aux bords ondulés, posée entre deux sections claires. */
-export function WaveBand({ className = "" }: { className?: string }) {
-  return (
-    <div aria-hidden className={`text-ink ${className}`}>
-      <Wave flip className="h-10 md:h-14 -mb-px" />
-      <Wave className="h-10 md:h-14 -scale-x-100" />
-    </div>
-  );
-}
-
 export default Wave;

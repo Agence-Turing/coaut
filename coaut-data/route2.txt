@@ -1,0 +1,96 @@
+Request URL
+https://app-api.co-aut.com/books/%23052
+Request Method
+GET
+Status Code
+200 OK
+Remote Address
+[2001:1600:13:101::16c1]:443
+Referrer Policy
+strict-origin-when-cross-origin
+access-control-allow-origin
+https://app.co-aut.com
+connection
+keep-alive
+content-type
+application/json; charset=utf-8
+date
+Fri, 24 Jul 2026 19:28:29 GMT
+server
+nginx/1.26.3
+strict-transport-security
+max-age=31536000
+transfer-encoding
+chunked
+accept
+application/json, text/plain, */*
+accept-encoding
+gzip, deflate, br, zstd
+accept-language
+fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7,it;q=0.6
+authorization
+Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1laWQiOiIyN2RhODI3Yi1iNjZlLTQyYTgtODdiMC1mYzdjMjc5MTMwZTAiLCJ1bmlxdWVfbmFtZSI6InRvbmlnYXJjaWEiLCJlbWFpbCI6InRvbmkuZ2FyY2lhLmZyZWVsYW5jZUBnbWFpbC5jb20iLCJBc3BOZXQuSWRlbnRpdHkuU2VjdXJpdHlTdGFtcCI6IlZSNVdaVFFQUTRWWktWVUVKTzZWQVJVTVJaTlJDWFdNIiwibmlja25hbWUiOiJ0b25pZ2FyY2lhIiwicm9sZSI6InBsYXllciIsImF1ZCI6WyJodHRwczovL2F1dGgtYXBpLmNvLWF1dC5jb20iLCJodHRwczovL2FwcC1hcGkuY28tYXV0LmNvbSJdLCJuYmYiOjE3ODQ5MjA5NDgsImV4cCI6MTc4NDk4NTc0OCwiaWF0IjoxNzg0OTIwOTQ4LCJpc3MiOiJjb2F1dCJ9.LmFUsUWYnYfupqmLealbox9veAGq0PE3qWdm9HBNOo4
+connection
+keep-alive
+host
+app-api.co-aut.com
+origin
+https://app.co-aut.com
+referer
+https://app.co-aut.com/
+sec-ch-ua
+"Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"
+sec-ch-ua-mobile
+?0
+sec-ch-ua-platform
+"Windows"
+sec-fetch-dest
+empty
+sec-fetch-mode
+cors
+sec-fetch-site
+same-site
+user-agent
+Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36
+
+payload
+
+{
+    "code": "#052",
+    "title": "Harry Potter et les dragons du nord - Tome 4",
+    "themes": [
+        "FanFiction",
+        "Aventure"
+    ],
+    "synopsys": "Livre commencé - Recherche 1 co-auteur : Harry Potter, orphelin veut connaître son histoire avec ses deux amis Ron et Hermione, ils vont partir à la découverte de mondes mystérieux et remplis de créatures fantastiques comme des dragons…",
+    "scolarLevel": "4ème",
+    "launcherNickname": "dragonbleu✏️✏️✏️",
+    "playersCount": 1,
+    "status": "Lancé",
+    "playersNickname": [
+        "dragonbleu✏️✏️✏️"
+    ],
+    "turnsCount": 19,
+    "fileUrl": null
+}
+
+result :
+
+{
+    "code": "#052",
+    "title": "Harry Potter et les dragons du nord - Tome 4",
+    "themes": [
+        "FanFiction",
+        "Aventure"
+    ],
+    "synopsys": "Livre commencé - Recherche 1 co-auteur : Harry Potter, orphelin veut connaître son histoire avec ses deux amis Ron et Hermione, ils vont partir à la découverte de mondes mystérieux et remplis de créatures fantastiques comme des dragons…",
+    "scolarLevel": "4ème",
+    "launcherNickname": "dragonbleu✏️✏️✏️",
+    "playersCount": 1,
+    "status": "Lancé",
+    "playersNickname": [
+        "dragonbleu✏️✏️✏️"
+    ],
+    "turnsCount": 19,
+    "fileUrl": null
+}

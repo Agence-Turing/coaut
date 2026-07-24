@@ -7,7 +7,9 @@ import BookCard from "@/components/BookCard";
 import {
   listMyBooks,
   listMyRequests,
+  listMyFavorites,
   getCurrentWriters,
+  getFavoriteCounts,
   bookRef,
 } from "@/lib/books";
 import { getCurrentUser } from "@/lib/auth";
@@ -26,13 +28,18 @@ export default async function MyBooksPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/?mode=login");
 
-  const [books, requests] = user.authorId
-    ? await Promise.all([listMyBooks(user.authorId), listMyRequests(user.authorId)])
-    : [[], []];
+  const [books, requests, favorites] = user.authorId
+    ? await Promise.all([
+        listMyBooks(user.authorId),
+        listMyRequests(user.authorId),
+        listMyFavorites(user.authorId),
+      ])
+    : [[], [], []];
 
   const writing = books.filter((b) => b.status === "launched");
   const published = books.filter((b) => b.status === "published");
   const currentWriters = await getCurrentWriters(writing);
+  const favCounts = await getFavoriteCounts(favorites.map((b) => b.id));
   const pendingRequests = requests.filter((r) => r.status !== "accepted");
 
   return (
@@ -98,6 +105,25 @@ export default async function MyBooksPage() {
                   book={b}
                   flags={{ launcher: b.launcher_id === user.authorId }}
                 />
+              ))}
+            </div>
+          )}
+
+          <h2 className="mt-14 font-display text-2xl font-bold text-ink">
+            ❤️ Mes favoris
+          </h2>
+          {favorites.length === 0 ? (
+            <p className="mt-4 text-graphite">
+              Aucun favori pour l&rsquo;instant. Explore{" "}
+              <Link href="/bibliotheque" className="font-bold text-brand hover:underline">
+                la bibliothèque
+              </Link>{" "}
+              et ajoute les livres que tu aimes !
+            </p>
+          ) : (
+            <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {favorites.map((b) => (
+                <BookCard key={b.id} book={b} favCount={favCounts.get(b.id) ?? 0} />
               ))}
             </div>
           )}

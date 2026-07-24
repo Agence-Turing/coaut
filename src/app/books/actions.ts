@@ -235,6 +235,33 @@ export async function publishBook(
   return { info: "📖 Ton livre est publié ! Il rejoint la bibliothèque de Co-Aut." };
 }
 
+export async function toggleFavorite(formData: FormData) {
+  const user = await getCurrentUser();
+  if (!user) redirect("/?mode=login");
+  if (!user.authorId) return;
+
+  const bookId = String(formData.get("book_id") ?? "");
+  const bookRef = String(formData.get("book_ref") ?? "");
+  const isFavorite = formData.get("is_favorite") === "1";
+
+  const supabase = await createClient();
+  if (isFavorite) {
+    await supabase
+      .from("favorites")
+      .delete()
+      .eq("book_id", bookId)
+      .eq("author_id", user.authorId);
+  } else {
+    await supabase
+      .from("favorites")
+      .insert({ book_id: bookId, author_id: user.authorId });
+  }
+
+  revalidatePath(`/books/${bookRef}`);
+  revalidatePath("/bibliotheque");
+  revalidatePath("/books/mes-livres");
+}
+
 export async function rejectRequest(formData: FormData) {
   const requestId = String(formData.get("request_id") ?? "");
   const bookRef = String(formData.get("book_ref") ?? "");

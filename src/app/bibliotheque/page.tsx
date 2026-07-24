@@ -4,7 +4,12 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import BookCard from "@/components/BookCard";
 import BookFiltersBar from "@/components/BookFilters";
-import { listBooks, getFilterOptions, type BookFilters } from "@/lib/books";
+import {
+  listBooks,
+  getFilterOptions,
+  getFavoriteCounts,
+  type BookFilters,
+} from "@/lib/books";
 import { getCurrentUser } from "@/lib/auth";
 
 export const metadata: Metadata = {
@@ -24,6 +29,11 @@ export default async function BibliothequePage({
     getFilterOptions("published"),
     getCurrentUser(),
   ]);
+  const favCounts = await getFavoriteCounts(books.map((b) => b.id));
+  // Les plus populaires d'abord (à égalité : ordre historique).
+  const sorted = books
+    .slice()
+    .sort((a, b) => (favCounts.get(b.id) ?? 0) - (favCounts.get(a.id) ?? 0));
 
   return (
     <>
@@ -66,8 +76,8 @@ export default async function BibliothequePage({
             </p>
           ) : (
             <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {books.map((b) => (
-                <BookCard key={b.id} book={b} />
+              {sorted.map((b) => (
+                <BookCard key={b.id} book={b} favCount={favCounts.get(b.id) ?? 0} />
               ))}
             </div>
           )}

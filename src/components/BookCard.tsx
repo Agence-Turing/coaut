@@ -9,9 +9,11 @@ import {
 export default function BookCard({
   book,
   flags,
+  favCount = 0,
 }: {
   book: BookSummary;
   flags?: { launcher?: boolean; myTurn?: boolean };
+  favCount?: number;
 }) {
   const players = playersOf(book);
   const turns = turnsCountOf(book);
@@ -63,7 +65,12 @@ export default function BookCard({
             ? `✍️ ${players.join(", ")}`
             : "En attente de co-auteurs"}
         </span>
-        <span className="shrink-0 font-semibold">
+        <span className="flex shrink-0 items-center gap-3 font-semibold">
+          {favCount > 0 && (
+            <span className="text-brand-dark" title="Ajouté en favoris">
+              ❤️ {favCount}
+            </span>
+          )}
           {turns} tour{turns > 1 ? "s" : ""}
         </span>
       </div>

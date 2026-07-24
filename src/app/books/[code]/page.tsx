@@ -6,12 +6,15 @@ import Footer from "@/components/Footer";
 import JoinRequestForm from "@/components/JoinRequestForm";
 import TurnEditor from "@/components/TurnEditor";
 import PublishBookButton from "@/components/PublishBookButton";
+import FavoriteButton from "@/components/FavoriteButton";
 import { acceptRequest, rejectRequest } from "@/app/books/actions";
 import {
   getBook,
   getTurns,
   getJoinRequests,
   getMyJoinRequest,
+  getFavoriteCounts,
+  getMyFavoriteIds,
   playersOf,
   bookRef,
   writingState,
@@ -59,6 +62,13 @@ export default async function BookPage({
   const myRequest =
     !isLauncher && !isPlayer && user?.authorId
       ? await getMyJoinRequest(book.id, user.authorId)
+      : null;
+
+  const favCounts =
+    book.status === "published" ? await getFavoriteCounts([book.id]) : null;
+  const myFavorites =
+    book.status === "published" && user?.authorId
+      ? await getMyFavoriteIds(user.authorId)
       : null;
 
   return (
@@ -125,6 +135,17 @@ export default async function BookPage({
             {isLauncher && book.status === "launched" && (
               <div className="mt-6">
                 <PublishBookButton bookRef={ref} />
+              </div>
+            )}
+
+            {book.status === "published" && user?.authorId && (
+              <div className="mt-6">
+                <FavoriteButton
+                  bookId={book.id}
+                  bookRef={ref}
+                  isFavorite={myFavorites?.has(book.id) ?? false}
+                  count={favCounts?.get(book.id) ?? 0}
+                />
               </div>
             )}
 

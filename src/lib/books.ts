@@ -75,6 +75,49 @@ export async function listBooks(
   );
 }
 
+/**
+ * Nombre de favoris par livre. Tolérant : renvoie une map vide tant que la
+ * table favorites n'existe pas (migration 0005 non exécutée).
+ */
+export async function getFavoriteCounts(bookIds: string[]) {
+  const map = new Map<string, number>();
+  if (bookIds.length === 0) return map;
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("favorites")
+    .select("book_id")
+    .in("book_id", bookIds);
+  if (error) return map;
+  for (const row of data ?? []) {
+    const id = row.book_id as string;
+    map.set(id, (map.get(id) ?? 0) + 1);
+  }
+  return map;
+}
+
+/** Ids des livres mis en favori par l'auteur. */
+export async function getMyFavoriteIds(authorId: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("favorites")
+    .select("book_id")
+    .eq("author_id", authorId);
+  if (error) return new Set<string>();
+  return new Set((data ?? []).map((r) => r.book_id as string));
+}
+
+/** Livres publiés mis en favori par l'auteur. */
+export async function listMyFavorites(authorId: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("books")
+    .select(`${BOOK_SUMMARY}, fav:favorites!inner(author_id)`)
+    .eq("fav.author_id", authorId)
+    .order("title", { ascending: true });
+  if (error) return [];
+  return data as unknown as BookSummary[];
+}
+
 /** Thèmes et niveaux distincts d'un statut, pour alimenter les filtres. */
 export async function getFilterOptions(status: "launched" | "published") {
   const supabase = await createClient();

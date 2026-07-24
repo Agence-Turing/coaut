@@ -10,7 +10,8 @@ type HeaderUser = { nickname: string } | null;
 
 function navLinks(user: HeaderUser) {
   return [
-    { href: "/books", label: "La bibliothèque" },
+    { href: "/books", label: "Rejoindre un livre" },
+    { href: "/bibliotheque", label: "La bibliothèque" },
     ...(user ? [{ href: "/books/mes-livres", label: "Mes livres" }] : []),
   ];
 }

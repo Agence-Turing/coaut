@@ -68,10 +68,12 @@ export default async function BookPage({
         <section className="bg-aubergine text-white">
           <div className="mx-auto max-w-4xl px-4 py-12 md:px-6">
             <Link
-              href={book.status === "published" ? "/books?statut=publies" : "/books"}
+              href={book.status === "published" ? "/bibliotheque" : "/books"}
               className="text-sm text-white/70 hover:text-peche"
             >
-              ← Retour à la bibliothèque
+              {book.status === "published"
+                ? "← Retour à la bibliothèque"
+                : "← Retour aux livres à rejoindre"}
             </Link>
             <div className="mt-4 flex flex-wrap items-center gap-2">
               {book.themes.map((t) => (

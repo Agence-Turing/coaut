@@ -44,17 +44,58 @@ const BOOK_SUMMARY = `id, legacy_code, title, synopsis, themes, scolar_level, st
   launcher_id, max_players,
   book_players(position, author_id, authors(nickname)), turns(count)`;
 
-export async function listBooks(status: "launched" | "published") {
+export type BookFilters = {
+  q?: string;
+  theme?: string;
+  niveau?: string;
+};
+
+export async function listBooks(
+  status: "launched" | "published",
+  filters: BookFilters = {}
+) {
   const supabase = await createClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from("books")
     .select(BOOK_SUMMARY)
     .eq("status", status)
     .order("legacy_code", { ascending: true });
+
+  if (filters.q) {
+    const q = filters.q.replaceAll("%", "").replaceAll(",", " ");
+    query = query.or(`title.ilike.%${q}%,synopsis.ilike.%${q}%`);
+  }
+  if (filters.theme) query = query.contains("themes", [filters.theme]);
+  if (filters.niveau) query = query.eq("scolar_level", filters.niveau);
+
+  const { data, error } = await query;
   if (error) throw error;
   return (data as unknown as BookSummary[]).filter(
     (b) => b.legacy_code !== "#000" // livre "exemple" de l'ancien MVP
   );
+}
+
+/** Thèmes et niveaux distincts d'un statut, pour alimenter les filtres. */
+export async function getFilterOptions(status: "launched" | "published") {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("books")
+    .select("themes, scolar_level")
+    .eq("status", status);
+  if (error) throw error;
+
+  const themes = new Set<string>();
+  const levels = new Set<string>();
+  for (const row of data ?? []) {
+    (row.themes as string[]).forEach((t) => themes.add(t));
+    if (row.scolar_level) levels.add(row.scolar_level as string);
+  }
+  const sortFr = (a: string, b: string) =>
+    a.localeCompare(b, "fr", { sensitivity: "base" });
+  return {
+    themes: [...themes].sort(sortFr),
+    levels: [...levels].sort(sortFr),
+  };
 }
 
 const UUID_RE =

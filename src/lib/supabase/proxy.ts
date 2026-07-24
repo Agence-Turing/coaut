@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 /** Chemins réservés aux utilisateurs connectés. */
-const PROTECTED_PREFIXES = ["/books"];
+const PROTECTED_PREFIXES = ["/books", "/bibliotheque"];
 
 /** Rafraîchit la session Supabase (cookies) et protège les pages de l'app. */
 export async function updateSession(request: NextRequest) {

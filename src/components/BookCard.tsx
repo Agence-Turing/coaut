@@ -21,7 +21,7 @@ export default function BookCard({
   return (
     <Link
       href={`/books/${bookRef(book)}`}
-      className="group flex h-full flex-col rounded-3xl border border-ink/10 bg-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:shadow-xl"
+      className="group flex h-full min-w-0 flex-col break-words rounded-3xl border border-ink/10 bg-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:shadow-xl"
     >
       <div className="flex flex-wrap items-center gap-2">
         {flags?.myTurn && (

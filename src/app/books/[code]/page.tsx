@@ -284,8 +284,8 @@ export default async function BookPage({
             ) : (
               <p className="mt-10 rounded-2xl bg-peche/20 p-5 text-center text-sm font-semibold text-brand-dark">
                 {isPlayer ? "🔒 " : ""}✍️ C&rsquo;est au tour de{" "}
-                {writing.currentNickname ?? "un co-auteur"} d&rsquo;écrire la
-                suite…
+                {writing.currentNickname ?? "un co-auteur"}{" "}
+                d&rsquo;écrire la suite…
                 {isPlayer && " Tu seras prévenu quand ce sera ton tour."}
               </p>
             ))}

@@ -62,8 +62,8 @@ export default async function BooksPage({
 
         <section className="mx-auto max-w-6xl px-4 py-12 md:px-6">
           <p className="text-sm text-graphite">
-            {books.length} histoire{books.length > 1 ? "s" : ""} en cours
-            d&rsquo;écriture
+            {books.length} histoire{books.length > 1 ? "s" : ""}{" "}
+            en cours d&rsquo;écriture
           </p>
           {books.length === 0 ? (
             <p className="mt-6 text-graphite">

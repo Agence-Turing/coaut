@@ -61,8 +61,8 @@ export default async function BibliothequePage({
 
         <section className="mx-auto max-w-6xl px-4 py-12 md:px-6">
           <p className="text-sm text-graphite">
-            {books.length} livre{books.length > 1 ? "s" : ""} publié
-            {books.length > 1 ? "s" : ""}
+            {books.length} livre{books.length > 1 ? "s" : ""}{" "}
+            publié{books.length > 1 ? "s" : ""}
           </p>
           {books.length === 0 ? (
             <p className="mt-6 text-graphite">

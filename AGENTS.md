@@ -10,7 +10,7 @@ Refonte du MVP [co-aut.com](https://www.co-aut.com) — plateforme d'écriture c
 
 ## Stack
 
-Next.js (App Router, TypeScript, Tailwind v4) + Supabase (`.env.local` : URL + clé publishable ; ⚠️ `SERVICE_ROLE_SECRET` contient pour l'instant la clé anon, pas la vraie service_role). Clients Supabase dans `src/lib/supabase/` (browser + server via `@supabase/ssr`).
+Next.js (App Router, TypeScript, Tailwind v4) + Supabase (`.env` : URL + clé publishable/anon ; en prod la clé anon est un JWT HS256 de la stack auto-hébergée). Clients Supabase dans `src/lib/supabase/` (browser + server via `@supabase/ssr`).
 
 ## Design
 
@@ -24,6 +24,10 @@ Palette reprise du site original : aubergine `#4F2740`, orange `#EC681C`, rouge 
 - `supabase/setup_complete.sql` : schéma + seed concaténés, à exécuter en une fois dans le SQL Editor de Supabase.
 
 Statuts livres : `launched` (recherche co-auteurs / en cours) et `published` (terminé). Un tour avec `is_ended=false` = tour d'écriture en cours. `book_players.position` = ordre de passage.
+
+## Déploiement (dédié agence, depuis le 2026-09-16)
+
+Plus de Vercel ni de Supabase cloud. Le site tourne sur le dédié dans `/opt/coaut` : `docker-compose.yml` = cette app (image buildée depuis `Dockerfile`, Next standalone) + stack Supabase dédiée (Postgres, GoTrue, PostgREST, Kong) interne au réseau Docker — `NEXT_PUBLIC_SUPABASE_URL=http://kong:8000`, figée au build. Public via Traefik : https://coaut.agence-turing.com. Redéployer : `cd /opt/coaut && sudo git -C app pull && sudo docker compose build app && sudo docker compose up -d app`. Migrations SQL : à passer à la main dans `coaut-db` (`docker exec -i coaut-db psql -U postgres < fichier.sql`). Détail côté agence : `technique/infra/dedie-turing.md` du repo turing-os.
 
 ## Fonctionnement de l'app
 

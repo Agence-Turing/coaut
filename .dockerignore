@@ -1,0 +1,9 @@
+node_modules
+.next
+.git
+coaut-data
+supabase
+*.jpeg
+.playwright-mcp
+README.md
+AGENTS.md

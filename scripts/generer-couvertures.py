@@ -118,6 +118,9 @@ def nettoyer(titre, resume):
             resume = reste.strip()
         else:
             break
+    # Une mention de suivi sans histoire derrière (« avec X et Y ») : rien à illustrer, on ne l'envoie pas.
+    if AMORCES.match(resume) or re.match(r"avec\b", resume, re.I):
+        resume = ""
     resume = re.sub(r"\s+", " ", resume)[:500]
     return titre, resume
 
@@ -161,7 +164,7 @@ def en_webp(brut):
         nh = w * HAUTEUR // LARGEUR
         im = im.crop((0, (h - nh) // 2, w, (h - nh) // 2 + nh))
     im = im.resize((LARGEUR, HAUTEUR), Image.LANCZOS)
-    for qualite in (84, 78, 72, 64, 56, 48):
+    for qualite in (84, 78, 72, 64, 56, 48, 40, 30, 20):
         tampon = io.BytesIO()
         im.save(tampon, "WEBP", quality=qualite, method=6)
         if tampon.tell() <= POIDS_MAX:

@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { parseBirthDate, saveBirthDate } from "@/lib/profile";
 import { createClient } from "@/lib/supabase/server";
 
 export type AuthState = { error?: string; info?: string };
@@ -39,6 +40,9 @@ export async function signUp(
     return { error: "Choisis un pseudonyme d'au moins 3 caractères." };
   }
 
+  const birth = parseBirthDate(String(formData.get("birth_date") ?? ""));
+  if ("error" in birth) return { error: birth.error };
+
   const supabase = await createClient();
 
   const { data: taken } = await supabase
@@ -53,7 +57,7 @@ export async function signUp(
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { nickname } },
+    options: { data: { nickname, birth_date: birth.date } },
   });
   if (error) {
     return {
@@ -68,10 +72,12 @@ export async function signUp(
 
   // Session immédiate (confirmation email désactivée) : on crée la fiche auteur.
   if (data.session && data.user) {
-    await supabase.from("authors").insert({
-      nickname,
-      user_id: data.user.id,
-    });
+    const { data: author } = await supabase
+      .from("authors")
+      .insert({ nickname, user_id: data.user.id })
+      .select("id")
+      .maybeSingle();
+    if (author) await saveBirthDate(supabase, author.id, birth.date);
     redirect("/books");
   }
 

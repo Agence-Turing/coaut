@@ -99,6 +99,19 @@ export default function AuthForm({ initialMode }: { initialMode?: string }) {
             autoComplete="email"
             className={INPUT}
           />
+          <label className="block text-sm font-semibold text-ink/70">
+            Ta date de naissance
+            <input
+              name="birth_date"
+              type="date"
+              required
+              autoComplete="bday"
+              className={`${INPUT} mt-1`}
+            />
+          </label>
+          <p className="text-xs text-ink/50">
+            Elle reste privée : elle sert à te proposer des livres de ton âge.
+          </p>
           <input
             name="password"
             type="password"

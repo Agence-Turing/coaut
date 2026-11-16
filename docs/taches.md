@@ -25,7 +25,9 @@
 - [ ] Confirmation de l'adresse e-mail à l'inscription (l'ancien site le faisait).
 - [ ] Envoi de mails : service à trancher (Resend décidé le 15/09 sous réserve du choix de Juliette, clé API Brevo créée le 10/11), domaine d'envoi co-aut.com.
 - [ ] Mails automatiques : « à ton tour d'écrire », deux relances, demande reçue, demande acceptée ou refusée, livre publié.
-- [ ] Profil : âge à la place du niveau scolaire, professionnel ou non, consentement newsletter, ville et pays ; écran pour le modifier.
+- [x] Profil : date de naissance obligatoire à l'inscription, page « Mon profil » (`/profil`) avec l'âge calculé, invitation à la compléter pour les anciens comptes.
+- [ ] Profil, suite : professionnel ou non, consentement newsletter, ville et pays modifiables.
+- [ ] Reprise Notion : le script réécrit la date de naissance depuis Notion à chaque passage ; à neutraliser si des auteurs la modifient avant le jour J.
 - [ ] Livres proposés selon l'âge (un an d'écart autorisé), adultes séparés des enfants.
 - [ ] Inscrits à la newsletter envoyés dans Brevo (Juliette le fait à la main aujourd'hui).
 - [ ] Pages de l'ancien site absentes : règles du jeu, contact (formulaire), mentions légales, cookies, page d'accueil après inscription.

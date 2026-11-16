@@ -6,13 +6,18 @@ import { useState } from "react";
 import { Cta } from "@/components/Buttons";
 import { signOut } from "@/app/auth/actions";
 
-type HeaderUser = { nickname: string } | null;
+type HeaderUser = { nickname: string; needsBirthDate?: boolean } | null;
 
 function navLinks(user: HeaderUser) {
   return [
     { href: "/books", label: "Rejoindre un livre" },
     { href: "/bibliotheque", label: "La bibliothèque" },
-    ...(user ? [{ href: "/books/mes-livres", label: "Mes livres" }] : []),
+    ...(user
+      ? [
+          { href: "/books/mes-livres", label: "Mes livres" },
+          { href: "/profil", label: "Mon profil" },
+        ]
+      : []),
   ];
 }
 
@@ -29,7 +34,18 @@ function AuthZone({ user }: { user: HeaderUser }) {
   }
   return (
     <>
-      <span className="text-sm font-semibold text-peche">✍️ {user.nickname}</span>
+      <Link
+        href="/profil"
+        title="Mon profil"
+        className="text-sm font-semibold text-peche hover:underline"
+      >
+        ✍️ {user.nickname}
+        {user.needsBirthDate && (
+          <span className="ml-2 rounded-full bg-brand px-2 py-0.5 text-xs font-bold text-white">
+            Profil à compléter
+          </span>
+        )}
+      </Link>
       <form action={signOut}>
         <button
           type="submit"

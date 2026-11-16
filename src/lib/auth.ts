@@ -1,9 +1,12 @@
+import { getBirthDate, parseBirthDate, saveBirthDate } from "@/lib/profile";
 import { createClient } from "@/lib/supabase/server";
 
 export type CurrentUser = {
   nickname: string;
   /** null si la fiche auteur n'a pas pu être créée (policies RLS manquantes). */
   authorId: string | null;
+  /** true si la date de naissance n'est pas renseignée (anciens comptes) : invitation à compléter le profil. */
+  needsBirthDate: boolean;
 };
 
 /** Utilisateur connecté (ou null). Crée sa fiche auteur au premier passage si besoin. */
@@ -19,7 +22,24 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     .select("id, nickname")
     .eq("user_id", user.id)
     .maybeSingle();
-  if (author) return { nickname: author.nickname, authorId: author.id };
+  // Date de naissance saisie à l'inscription : elle voyage dans les métadonnées du compte
+  // tant que la fiche auteur n'existe pas (confirmation d'e-mail), puis va dans le profil privé.
+  const signupBirthDate = parseBirthDate(
+    String(user.user_metadata?.birth_date ?? "")
+  );
+
+  if (author) {
+    let birthDate = await getBirthDate(supabase, author.id);
+    if (!birthDate && "date" in signupBirthDate) {
+      const { error } = await saveBirthDate(supabase, author.id, signupBirthDate.date);
+      if (!error) birthDate = signupBirthDate.date;
+    }
+    return {
+      nickname: author.nickname,
+      authorId: author.id,
+      needsBirthDate: !birthDate,
+    };
+  }
 
   // Session active mais pas encore de fiche auteur : on tente de la créer.
   const nickname =
@@ -32,5 +52,15 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     .select("id, nickname")
     .maybeSingle();
 
-  return { nickname: created?.nickname ?? nickname, authorId: created?.id ?? null };
+  let hasBirthDate = false;
+  if (created && "date" in signupBirthDate) {
+    const { error } = await saveBirthDate(supabase, created.id, signupBirthDate.date);
+    hasBirthDate = !error;
+  }
+
+  return {
+    nickname: created?.nickname ?? nickname,
+    authorId: created?.id ?? null,
+    needsBirthDate: !hasBirthDate,
+  };
 }

@@ -19,7 +19,7 @@
 
 ### Semaine 1 : bases
 
-- [ ] Refonte visuelle (la version actuelle reprend le design de l'ancien site).
+- [x] Refonte visuelle : direction « Carnet » sur tous les écrans et les mails (2026-11-16), étagère de couvertures et fil des tours. Reste : planches et relecture par Juliette.
 - [x] Mot de passe oublié : page de demande, page de nouveau mot de passe, envoi du mail (testé en préprod avec un compte repris de Notion).
 - [x] Message à la connexion d'un ancien compte : « Co-Aut a une nouvelle version, faites mot de passe oublié » (affiché à tout échec de connexion, pour ne pas révéler qui a un compte).
 - [x] Confirmation de l'adresse e-mail à l'inscription, pseudo réservé dès l'inscription, renvoi du mail possible.
@@ -31,7 +31,7 @@
 - [ ] Reprise Notion : le script réécrit la date de naissance depuis Notion à chaque passage ; à neutraliser si des auteurs la modifient avant le jour J.
 - [ ] Livres proposés selon l'âge (un an d'écart autorisé), adultes séparés des enfants.
 - [ ] Inscrits à la newsletter envoyés dans Brevo (Juliette le fait à la main aujourd'hui).
-- [ ] Pages de l'ancien site absentes : règles du jeu, contact (formulaire), mentions légales, cookies, page d'accueil après inscription.
+- [ ] Pages de l'ancien site absentes : règles du jeu, contact (formulaire), mentions légales, cookies, page d'accueil après inscription. Les liens « Mentions légales » et « Politique de confidentialité » du pied de page (pages inexistantes) ont été retirés en attendant.
 - [ ] Proposition de livre : sur l'ancien site, lancer un livre passait par une demande envoyée à Juliette ; à trancher (libre comme aujourd'hui, ou validé par elle).
 
 ### Semaine 2 : IA et administration

@@ -14,7 +14,17 @@ Next.js (App Router, TypeScript, Tailwind v4) + Supabase (`.env` : URL + clé pu
 
 ## Design
 
-Palette reprise du site original : aubergine `#4F2740`, orange `#EC681C`, rouge `#D63E1F`, pêche `#FFBC7D`, noir `#191919` — déclarée dans `src/app/globals.css` (`@theme`). Polices : Roboto Slab (titres, `font-display`) + Open Sans (texte). Assets originaux (logo, illustrations SVG, photos) dans `public/images/`. Piège JSX : un espace en fin de ligne après une balise fermante est supprimé à la compilation → utiliser `{" "}`.
+Direction « Carnet » (validée par Toni le 2026-11-16) : fond blanc, le texte d'abord, et pour seules couleurs celles du logo.
+
+- **Jetons** dans `src/app/globals.css` (`@theme`), jamais de couleur en dur dans un composant : `paper`, `ink` `#1C1917`, `muted` `#57524D`, `subtle` `#6B6661`, `line` `#E8E6E3`, `line-strong` `#CFCBC6`, `surface` `#F3F1EE`, `brand` `#FF8A1E`, `accent` `#E0421C`, `accent-deep`, teintes `tint-orange` `#FFD9B0`, `tint-rose` `#FFE1D6`, `tint-cream` `#FFF3E6`, liens `link` `#B03A12`.
+- **Orange** : boutons principaux uniquement, toujours avec du texte encre. Jamais de texte blanc sur orange ni de texte orange sur blanc (contraste insuffisant) ; les liens sont en `link`.
+- **Polices** (`next/font`) : Zilla Slab (`font-display` : titres et texte des histoires) et Inter (`font-sans` : interface).
+- **Logo** : `src/components/Logo.tsx` = le rond du logo (`public/images/logo-mark.png`) + « Co-Aut » retapé, car le fichier d'origine a « Co » en blanc. `logo-co-aut.png` ne sert plus que sur fond sombre (bandeau des mails).
+- **Briques** dans `src/components/ui.tsx` : `BTN_PRIMARY` / `BTN_SECONDARY` / `BTN_DARK`, `INPUT`, `LABEL`, `LINK`, `EYEBROW`, `Notice` (retour d'action), `PageHeading`, `Cta`.
+- **Livres** : étagère de couvertures portrait 3:4 (`BookCard`, `BookShelf`, `BookCover`). `books.cover_path` renseigné = illustration + titre posé dessus ; sinon couverture composée par le code (aplat tiré du code du livre). `getCoverPaths()` tolère l'absence de la colonne.
+- **Page d'un livre** : « fil des tours » (pastilles numérotées reliées, auteur et date), premiers tours repliés au-delà de 5 pour un livre en cours, tour à écrire en orange avec trois coups de pouce (phrases d'aide fixes, sans IA), puis « Ensuite : X ».
+- **Règles** : sobre, pas de mise en page « titre à gauche, texte à droite », pas de dégradé décoratif, pas d'émoji, tutoiement, phrases courtes ; rien d'affiché qui ne soit vrai en base ; tout tient à 360 px, cibles tactiles de 44 px, focus visible.
+- Piège JSX : un espace en fin de ligne après une balise fermante est supprimé à la compilation → utiliser `{" "}`.
 
 ## Données de l'ancien MVP
 

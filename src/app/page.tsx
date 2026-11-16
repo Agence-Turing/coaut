@@ -6,11 +6,11 @@ import { getCurrentUser } from "@/lib/auth";
 export default async function Home({
   searchParams,
 }: {
-  searchParams: Promise<{ mode?: string }>;
+  searchParams: Promise<{ mode?: string; erreur?: string }>;
 }) {
   const user = await getCurrentUser();
   if (user) redirect("/books");
-  const { mode } = await searchParams;
+  const { mode, erreur } = await searchParams;
 
   return (
     <main className="flex min-h-screen flex-1 flex-col items-center justify-center bg-aubergine px-4 py-12">
@@ -31,7 +31,14 @@ export default async function Home({
       </p>
 
       <div className="mt-10 flex w-full justify-center">
-        <AuthForm initialMode={mode} />
+        <AuthForm
+          initialMode={mode}
+          initialError={
+            erreur === "lien"
+              ? "Ce lien de confirmation n'est plus valable. Connecte-toi : si ton adresse n'est pas encore confirmée, tu pourras recevoir un nouveau lien."
+              : undefined
+          }
+        />
       </div>
 
       <p className="mt-8 text-center text-sm text-white/60">

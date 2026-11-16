@@ -22,5 +22,5 @@ export async function GET(request: Request) {
       redirect(type === "recovery" ? "/nouveau-mot-de-passe" : "/books");
     }
   }
-  redirect("/mot-de-passe-oublie?erreur=lien");
+  redirect(type === "recovery" ? "/mot-de-passe-oublie?erreur=lien" : "/?mode=login&erreur=lien");
 }

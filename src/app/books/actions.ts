@@ -1,10 +1,18 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
 import { getBook, getTurns, writingState } from "@/lib/books";
+import {
+  notifyBookPublished,
+  notifyBookStarts,
+  notifyJoinAnswer,
+  notifyJoinRequest,
+  notifyYourTurn,
+} from "@/lib/mail/notify";
 
 export type ActionState = { error?: string; info?: string };
 
@@ -87,6 +95,9 @@ export async function requestJoin(
     return { error: `Demande impossible : ${error.message}` };
   }
 
+  const requesterId = user.authorId;
+  after(() => notifyJoinRequest(bookId, requesterId));
+
   revalidatePath(`/books/${bookRef}`);
   return { info: "Demande envoyée ! Le lanceur du livre va te répondre." };
 }
@@ -131,6 +142,12 @@ export async function acceptRequest(formData: FormData) {
     book_id: request.book_id,
     author_id: request.author_id,
     position: count ?? 0,
+  });
+
+  // Mails : réponse au demandeur, et « à toi d'écrire » si le livre peut démarrer.
+  after(async () => {
+    await notifyJoinAnswer(request.book_id, request.author_id, true);
+    await notifyBookStarts(request.book_id);
   });
 
   revalidatePath(`/books/${bookRef}`);
@@ -185,6 +202,11 @@ export async function saveTurn(
     return { error: `Enregistrement impossible : ${error.message}` };
   }
 
+  if (finish) {
+    const writerId = user.authorId;
+    after(() => notifyYourTurn(book.id, writerId));
+  }
+
   revalidatePath(`/books/${bookRef}`);
   return finish
     ? { info: "Ton tour est terminé ! Au suivant d'écrire la suite. ✍️" }
@@ -231,6 +253,9 @@ export async function publishBook(
     .eq("id", book.id);
   if (error) return { error: `Publication impossible : ${error.message}` };
 
+  const publisherId = user.authorId;
+  after(() => notifyBookPublished(book.id, publisherId));
+
   revalidatePath(`/books/${bookRef}`);
   return { info: "📖 Ton livre est publié ! Il rejoint la bibliothèque de Co-Aut." };
 }
@@ -272,6 +297,9 @@ export async function rejectRequest(formData: FormData) {
     .from("join_requests")
     .update({ status: "rejected" })
     .eq("id", requestId);
+
+  const { book_id, author_id } = result.request;
+  after(() => notifyJoinAnswer(book_id, author_id, false));
 
   revalidatePath(`/books/${bookRef}`);
 }

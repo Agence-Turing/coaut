@@ -20,11 +20,12 @@
 ### Semaine 1 : bases
 
 - [ ] Refonte visuelle (la version actuelle reprend le design de l'ancien site).
-- [ ] Mot de passe oublié : page de demande, page de nouveau mot de passe, envoi du mail.
-- [ ] Message à la connexion d'un ancien compte : « Co-Aut a une nouvelle version, faites mot de passe oublié ».
-- [ ] Confirmation de l'adresse e-mail à l'inscription (l'ancien site le faisait).
-- [ ] Envoi de mails : service à trancher (Resend décidé le 15/09 sous réserve du choix de Juliette, clé API Brevo créée le 10/11), domaine d'envoi co-aut.com.
-- [ ] Mails automatiques : « à ton tour d'écrire », deux relances, demande reçue, demande acceptée ou refusée, livre publié.
+- [x] Mot de passe oublié : page de demande, page de nouveau mot de passe, envoi du mail (testé en préprod avec un compte repris de Notion).
+- [x] Message à la connexion d'un ancien compte : « Co-Aut a une nouvelle version, faites mot de passe oublié » (affiché à tout échec de connexion, pour ne pas révéler qui a un compte).
+- [x] Confirmation de l'adresse e-mail à l'inscription, pseudo réservé dès l'inscription, renvoi du mail possible.
+- [ ] Envoi de mails en production : service à trancher (Resend décidé le 15/09 sous réserve du choix de Juliette, clé API Brevo créée le 10/11), domaine d'envoi co-aut.com.
+- [x] Mails automatiques : « à ton tour d'écrire », deux relances (4 et 8 jours), demande reçue, demande acceptée ou refusée, livre publié. En préprod tout arrive dans Mailpit.
+- [ ] Mails, suite : textes à faire relire par Juliette ; protéger les liens des mails contre les antivirus de messagerie qui les ouvrent avant l'utilisateur (le lien est à usage unique).
 - [x] Profil : date de naissance obligatoire à l'inscription, page « Mon profil » (`/profil`) avec l'âge calculé, invitation à la compléter pour les anciens comptes.
 - [ ] Profil, suite : professionnel ou non, consentement newsletter, ville et pays modifiables.
 - [ ] Reprise Notion : le script réécrit la date de naissance depuis Notion à chaque passage ; à neutraliser si des auteurs la modifient avant le jour J.

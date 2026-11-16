@@ -33,6 +33,18 @@ Plus de Vercel ni de Supabase cloud. Depuis le 2026-09-30 la pile tourne dans la
 
 **Mails de la préprod** : le SMTP de GoTrue pointe sur un Mailpit interne à la pile (`coaut-mailpit`, service `mailpit` du compose de `/opt/coaut`, `SMTP_HOST=mailpit`, `SMTP_PORT=1025` dans son `.env`), sans relais sortant ; le SMTP sortant de la VM est de toute façon bloqué au pare-feu. La base contient les vraies adresses des auteurs repris de Notion : ne jamais brancher un service d'envoi sur la préprod. Lire les mails : `ssh -L 8226:127.0.0.1:8226 -J ubuntu@54.38.69.101 turing@192.168.200.10` puis http://localhost:8226 (boucle locale de la VM, rien de public). Sauvegardes avant opération : `/opt/coaut/backups/`.
 
+Mise en ligne en une commande depuis un poste qui a l'accès SSH : `scripts/deploy-preprod.sh` (pull dans la VM, build, redémarrage sous verrou, l'image d'avant reste sous `coaut-app:precedente`).
+
+## Mails
+
+Deux sources, un seul gabarit (bandeau aubergine, bouton orange, tutoiement) :
+
+- **Compte (GoTrue)** : mot de passe oublié et confirmation d'adresse. Modèles dans `public/emails/recovery.html` et `confirmation.html`, que GoTrue lit sur le réseau Docker (`MAILER_TEMPLATES_*=http://app:3000/emails/…`, sujets `MAILER_SUBJECTS_*`, dans `/opt/coaut/.env`). GoTrue n'étant pas exposé au public, les liens pointent sur l'app : `/auth/confirm?token_hash=…&type=recovery|email`, qui vérifie le jeton côté serveur puis ouvre la session. Confirmation d'adresse activée (`ENABLE_EMAIL_AUTOCONFIRM=false`). La fiche auteur est créée par le trigger `handle_new_user` dès l'inscription : le pseudonyme est réservé avant la confirmation.
+- **App (`src/lib/mail/`)** : `notify.ts` (déclencheurs), `templates.ts` (textes), `send.ts` (envoi SMTP + journal), `config.ts` (délais des relances). Appelés depuis `src/app/books/actions.ts` avec `after()` : un mail raté ne bloque jamais l'action. Mails : à toi d'écrire (tour précédent terminé, ou premier co-auteur accepté sur un livre vide), relances à 4 et 8 jours, demande reçue (au lanceur), demande acceptée ou refusée (au demandeur), livre publié (à l'équipe sauf celui qui publie). L'adresse est lue dans `auth.users` avec la clé service (`src/lib/supabase/admin.ts`) au moment de l'envoi et ne sort jamais du serveur.
+- **Journal `mail_log`** (migration 0007) : une ligne par mail, unique par (type, auteur, clé), donc jamais de doublon ; table invisible par l'API publique. Les relances partent uniquement des lignes « à toi d'écrire » déjà envoyées : les tours ouverts repris de l'ancien site, pour lesquels aucun mail n'est parti, ne sont jamais relancés.
+- **Relances** : `GET /api/cron/relances` avec `Authorization: Bearer $CRON_SECRET`. En préprod : `/opt/coaut/cron-relances.sh`, crontab de `turing`, toutes les heures de 9 h à 19 h (heure de Paris), journal `/opt/coaut/cron-relances.log`.
+- **Variables de l'app** (`/opt/coaut/app/.env`) : `SITE_URL`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE=1` (TLS implicite), `MAIL_FROM`, `CRON_SECRET`, `SUPABASE_SERVICE_ROLE_SECRET`. Sans `SMTP_HOST`, rien ne part (ligne `skipped` dans le journal). En production : brancher le fournisseur SMTP retenu sur l'app et sur GoTrue, et déclarer le domaine d'envoi (SPF, DKIM).
+
 ## Fonctionnement de l'app
 
 `/` = connexion/inscription (le site vitrine reste le WordPress co-aut.com). Routes protégées par `src/proxy.ts` : `/books` (bibliothèque à rejoindre/publiés), `/books/new` (lancer un livre), `/books/mes-livres`, `/books/[code]` (lecture + écriture ; code hérité « 052 » ou uuid pour les nouveaux).

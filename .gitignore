@@ -41,3 +41,8 @@ yarn-error.log*
 next-env.d.ts
 .playwright-mcp/
 /coaut-*.jpeg
+
+# exports Notion (données personnelles)
+*ExportBlock*
+export-notion*
+*.import.sql

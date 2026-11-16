@@ -363,14 +363,62 @@ export function splitTitle(raw: string): {
 
   const w = rest.search(/(^|\s[-–]\s)[ÉéEe]crit\b/);
   if (w !== -1) {
-    written = rest
+    const brut = rest
       .slice(w)
       .replace(/^\s[-–]\s/, "")
-      .replace(/^[ÉéEe]crit\s*:?\s*/, "Écrit : ")
-      .replace(/\s[-–]\s/g, " – ")
+      .replace(/^[ÉéEe]crit\s*:?\s*/, "")
       .trim();
+    written = writtenPeriod(brut) ?? `Écrit : ${brut.replace(/\s[-–]\s/g, " – ")}`;
     rest = rest.slice(0, w).trim();
   }
   const volume = rest ? rest.replace(/\s[-–]\s/g, " · ") : null;
   return { main: main || title, volume, written };
+}
+
+const MOIS: [RegExp, string][] = [
+  [/^janv?/, "janvier"],
+  [/^f[ée]v/, "février"],
+  [/^mars/, "mars"],
+  [/^avr/, "avril"],
+  [/^mai/, "mai"],
+  [/^juin/, "juin"],
+  [/^juil/, "juillet"],
+  [/^ao[uû]/, "août"],
+  [/^sept?/, "septembre"],
+  [/^oct/, "octobre"],
+  [/^nov/, "novembre"],
+  [/^d[ée]c/, "décembre"],
+];
+
+/** « Oct 23 » → { mois: "octobre", annee: 2023 } ; null si ce n'est pas un mois. */
+function parseMonth(part: string): { mois: string; annee: number | null } | null {
+  const m = part.trim().toLowerCase().match(/^([a-zéûè]+)\.?\s*(\d{2}|\d{4})?$/);
+  if (!m) return null;
+  const mois = MOIS.find(([re]) => re.test(m[1]))?.[1];
+  if (!mois) return null;
+  const annee = m[2] ? (m[2].length === 2 ? 2000 + Number(m[2]) : Number(m[2])) : null;
+  return { mois, annee };
+}
+
+const de = (mot: string) => (/^[aeiouyéèh]/i.test(mot) ? `d'${mot}` : `de ${mot}`);
+
+/**
+ * Période d'écriture en français : « Oct 23 - Mars 24 » → « Écrit d'octobre 2023 à mars 2024 »,
+ * « mars - mai 26 » → « Écrit de mars à mai 2026 », « avril 26 » → « Écrit en avril 2026 ».
+ * null si le texte ne se lit pas comme une période (il est alors affiché tel quel).
+ */
+function writtenPeriod(text: string): string | null {
+  const parts = text.split(/\s+(?:[-–]|à)\s+/);
+  if (parts.length > 2) return null;
+  const debut = parseMonth(parts[0]);
+  if (!debut) return null;
+  if (parts.length === 1) {
+    return debut.annee ? `Écrit en ${debut.mois} ${debut.annee}` : null;
+  }
+  const fin = parseMonth(parts[1]);
+  if (!fin || !fin.annee) return null;
+  const anneeDebut = debut.annee ?? fin.annee;
+  return anneeDebut === fin.annee
+    ? `Écrit ${de(debut.mois)} à ${fin.mois} ${fin.annee}`
+    : `Écrit ${de(debut.mois)} ${anneeDebut} à ${fin.mois} ${fin.annee}`;
 }

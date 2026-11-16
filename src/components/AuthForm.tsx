@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useState } from "react";
 import { signIn, signUp, type AuthState } from "@/app/auth/actions";
 
@@ -76,6 +77,14 @@ export default function AuthForm({ initialMode }: { initialMode?: string }) {
           <button type="submit" disabled={loginPending} className={SUBMIT}>
             {loginPending ? "Connexion…" : "Me connecter"}
           </button>
+          <p className="text-center text-sm">
+            <Link
+              href="/mot-de-passe-oublie"
+              className="font-semibold text-brand hover:underline"
+            >
+              Mot de passe oublié ?
+            </Link>
+          </p>
         </form>
       ) : (
         <form action={signupAction} className="mt-8 space-y-4">

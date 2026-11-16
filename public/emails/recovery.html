@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="fr">
+  <body style="margin:0;padding:0;background:#f6f1ec;font-family:Arial,Helvetica,sans-serif;color:#191919;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f1ec;padding:32px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;">
+            <tr>
+              <td align="center" style="background:#4F2740;padding:24px;">
+                <img src="{{ .SiteURL }}/images/logo-co-aut.png" alt="Co-Aut" width="150" style="display:block;border:0;" />
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:32px 28px;font-size:16px;line-height:1.5;">
+                <p style="margin:0 0 16px;font-size:20px;font-weight:bold;color:#4F2740;">Ton nouveau mot de passe</p>
+                <p style="margin:0 0 24px;">Tu as demandé à choisir un nouveau mot de passe pour ton compte Co-Aut. Clique sur le bouton, le lien est valable une heure.</p>
+                <p style="margin:0 0 24px;" align="center">
+                  <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery" style="display:inline-block;background:#EC681C;color:#ffffff;text-decoration:none;font-weight:bold;padding:14px 28px;border-radius:999px;">Choisir mon mot de passe</a>
+                </p>
+                <p style="margin:0;font-size:14px;color:#6b6b6b;">Si tu n'as rien demandé, ignore ce message : ton mot de passe ne change pas.</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

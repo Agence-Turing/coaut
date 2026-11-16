@@ -19,7 +19,7 @@ export async function signIn(
     return {
       error:
         error.code === "invalid_credentials"
-          ? "Email ou mot de passe incorrect."
+          ? "Email ou mot de passe incorrect. Co-Aut a une nouvelle version : si tu avais déjà un compte, clique sur « Mot de passe oublié » pour retrouver ton accès."
           : error.code === "email_not_confirmed"
             ? "Confirme d'abord ton adresse email (regarde ta boîte mail)."
             : `Connexion impossible : ${error.message}`,
@@ -84,6 +84,56 @@ export async function signUp(
   return {
     info: "Compte créé ! Vérifie ta boîte mail pour confirmer ton adresse, puis connecte-toi.",
   };
+}
+
+export async function requestPasswordReset(
+  _prev: AuthState,
+  formData: FormData
+): Promise<AuthState> {
+  const email = String(formData.get("email") ?? "").trim();
+  if (!email) return { error: "Indique ton email." };
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.resetPasswordForEmail(email);
+  if (error?.code === "over_email_send_rate_limit") {
+    return {
+      error: "Un lien vient déjà d'être envoyé. Attends une minute avant de réessayer.",
+    };
+  }
+  if (error) console.error("Mot de passe oublié :", error.code, error.message);
+
+  // Même réponse que le compte existe ou non : on ne révèle pas qui est inscrit.
+  return {
+    info: "Si un compte existe avec cet email, un lien vient de partir. Regarde ta boîte mail (et tes indésirables).",
+  };
+}
+
+export async function updatePassword(
+  _prev: AuthState,
+  formData: FormData
+): Promise<AuthState> {
+  const password = String(formData.get("password") ?? "");
+  const confirmation = String(formData.get("confirmation") ?? "");
+  if (password.length < 6) {
+    return { error: "Mot de passe trop court (6 caractères minimum)." };
+  }
+  if (password !== confirmation) {
+    return { error: "Les deux mots de passe ne sont pas identiques." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) {
+    return {
+      error:
+        error.code === "same_password"
+          ? "Choisis un mot de passe différent de l'ancien."
+          : error.code === "weak_password"
+            ? "Mot de passe trop faible (6 caractères minimum)."
+            : `Changement impossible : ${error.message}`,
+    };
+  }
+  redirect("/books");
 }
 
 export async function signOut() {

@@ -1,15 +1,15 @@
 #!/bin/bash
-# Met en ligne origin/main sur la préprod (VM agents, /opt/coaut) : pousse le code dans le clone
-# de la VM (elle n'a pas d'accès GitHub), reconstruit l'image et redémarre l'app, sous verrou.
+# Met en ligne origin/main sur la préprod (VM agents, /opt/coaut) : tire le code dans le clone
+# de la VM, reconstruit l'image et redémarre l'app, sous verrou (plusieurs agents déploient).
+# L'image d'avant reste disponible sous coaut-app:precedente pour revenir en arrière.
 # Usage : scripts/deploy-preprod.sh            (depuis un poste qui a l'accès SSH à la VM)
 set -euo pipefail
 JUMP=ubuntu@54.38.69.101
 VM=turing@192.168.200.10
 
-git fetch -q origin main
-GIT_SSH_COMMAND="ssh -o BatchMode=yes -J $JUMP" git push -q "ssh://$VM/opt/coaut/app" origin/main:main
 ssh -o BatchMode=yes -J "$JUMP" "$VM" 'cd /opt/coaut && flock .deploy.lock sh -c "
   set -e
+  git -C app pull -q --ff-only
   docker tag coaut-app:latest coaut-app:precedente 2>/dev/null || true
   docker compose build -q app
   docker compose up -d app

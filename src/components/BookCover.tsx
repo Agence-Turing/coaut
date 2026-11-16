@@ -7,14 +7,18 @@
  * Jamais de trou ni d'image cassée.
  */
 
+/* Les teintes claires dominent : les aplats vifs restent l'exception sur l'étagère. */
 const PALETTES = [
-  "bg-ink text-paper",
-  "bg-brand text-ink",
   "bg-tint-orange text-ink",
-  "bg-tint-rose text-ink",
   "bg-surface text-ink",
-  "bg-accent-deep text-paper",
+  "bg-ink text-paper",
+  "bg-tint-rose text-ink",
   "bg-tint-cream text-ink",
+  "bg-brand text-ink",
+  "bg-surface text-ink",
+  "bg-tint-orange text-ink",
+  "bg-accent-deep text-paper",
+  "bg-tint-rose text-ink",
 ] as const;
 
 /** Indice stable tiré d'une chaîne (le code ou l'id du livre). */
@@ -42,7 +46,13 @@ export default function BookCover({
   size?: "card" | "page";
 }) {
   const titleSize =
-    size === "page" ? "text-2xl" : title.length > 38 ? "text-lg" : "text-xl";
+    size === "page"
+      ? "text-2xl"
+      : title.length > 44
+        ? "text-base sm:text-lg"
+        : title.length > 24
+          ? "text-lg sm:text-xl"
+          : "text-xl sm:text-2xl";
 
   if (coverPath) {
     return (
@@ -87,14 +97,14 @@ export function CoverBadge({
   tone = "paper",
 }: {
   children: React.ReactNode;
+  /** `brand` : pastille avec un point orange, pour « à toi d'écrire ». */
   tone?: "paper" | "brand";
 }) {
   return (
-    <span
-      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold text-ink ${
-        tone === "brand" ? "bg-brand" : "bg-paper"
-      }`}
-    >
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-ink/15 bg-paper px-2.5 py-1 text-xs font-semibold text-ink">
+      {tone === "brand" && (
+        <span aria-hidden="true" className="h-2 w-2 rounded-full bg-brand" />
+      )}
       {children}
     </span>
   );

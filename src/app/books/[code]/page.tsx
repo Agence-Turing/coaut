@@ -134,6 +134,7 @@ export default async function BookPage({
 
   const joinRequests = isLauncher ? await getJoinRequests(book.id) : [];
   const pendingRequests = joinRequests.filter((r) => r.status === "pending");
+  const answeredRequests = joinRequests.filter((r) => r.status !== "pending");
   const myRequest =
     !isLauncher && !isPlayer && user?.authorId
       ? await getMyJoinRequest(book.id, user.authorId)
@@ -269,40 +270,41 @@ export default async function BookPage({
               )}
             </h2>
 
-            {joinRequests.length === 0 ? (
+            {joinRequests.length === 0 && (
               <p className="mt-3 text-[15px] text-muted">
                 Personne n&rsquo;a encore demandé à rejoindre ton histoire.
               </p>
-            ) : (
+            )}
+            {joinRequests.length > 0 && pendingRequests.length === 0 && (
+              <p className="mt-3 text-[15px] text-muted">
+                Aucune demande en attente.
+              </p>
+            )}
+
+            {pendingRequests.length > 0 && (
               <ul className="mt-2 flex flex-col">
-                {joinRequests.map((r) => (
+                {pendingRequests.map((r) => (
                   <li key={r.id} className="border-b border-line py-4 last:border-0 last:pb-0">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <p className="font-semibold">
                         {r.authors?.nickname ?? "Auteur inconnu"}
                       </p>
-                      {r.status === "pending" ? (
-                        <div className="flex gap-2">
-                          <form action={acceptRequest}>
-                            <input type="hidden" name="request_id" value={r.id} />
-                            <input type="hidden" name="book_ref" value={ref} />
-                            <button type="submit" className={BTN_PRIMARY}>
-                              Accepter
-                            </button>
-                          </form>
-                          <form action={rejectRequest}>
-                            <input type="hidden" name="request_id" value={r.id} />
-                            <input type="hidden" name="book_ref" value={ref} />
-                            <button type="submit" className={BTN_SECONDARY}>
-                              Refuser
-                            </button>
-                          </form>
-                        </div>
-                      ) : (
-                        <span className="rounded-full bg-surface px-3 py-1.5 text-sm font-medium text-muted">
-                          {r.status === "accepted" ? "Acceptée" : "Refusée"}
-                        </span>
-                      )}
+                      <div className="flex gap-2">
+                        <form action={acceptRequest}>
+                          <input type="hidden" name="request_id" value={r.id} />
+                          <input type="hidden" name="book_ref" value={ref} />
+                          <button type="submit" className={BTN_PRIMARY}>
+                            Accepter
+                          </button>
+                        </form>
+                        <form action={rejectRequest}>
+                          <input type="hidden" name="request_id" value={r.id} />
+                          <input type="hidden" name="book_ref" value={ref} />
+                          <button type="submit" className={BTN_SECONDARY}>
+                            Refuser
+                          </button>
+                        </form>
+                      </div>
                     </div>
                     {r.message && (
                       <p className="mt-2 break-words font-display text-lg italic leading-relaxed text-muted">
@@ -312,6 +314,29 @@ export default async function BookPage({
                   </li>
                 ))}
               </ul>
+            )}
+
+            {answeredRequests.length > 0 && (
+              <details className="mt-4">
+                <summary className={`${LINK} inline-flex min-h-11 list-none items-center text-[15px]`}>
+                  Demandes déjà traitées ({answeredRequests.length})
+                </summary>
+                <ul className="flex flex-col">
+                  {answeredRequests.map((r) => (
+                    <li
+                      key={r.id}
+                      className="flex flex-wrap items-center justify-between gap-3 border-b border-line py-3 last:border-0 last:pb-0"
+                    >
+                      <p className="font-semibold">
+                        {r.authors?.nickname ?? "Auteur inconnu"}
+                      </p>
+                      <span className="rounded-full bg-surface px-3 py-1.5 text-sm font-medium text-muted">
+                        {r.status === "accepted" ? "Acceptée" : "Refusée"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
             )}
           </section>
         )}

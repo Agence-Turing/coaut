@@ -1,19 +1,21 @@
 import type { Metadata } from "next";
-import { Open_Sans, Roboto_Slab } from "next/font/google";
+import { Inter, Zilla_Slab } from "next/font/google";
 import "./globals.css";
 
-const openSans = Open_Sans({
-  variable: "--font-open-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
-const robotoSlab = Roboto_Slab({
-  variable: "--font-roboto-slab",
+const zillaSlab = Zilla_Slab({
+  variable: "--font-zilla-slab",
   subsets: ["latin"],
+  weight: ["400", "500", "700"],
+  style: ["normal", "italic"],
 });
 
 export const metadata: Metadata = {
-  title: "Co-Aut | La plateforme d'écriture collaborative pour t'amuser",
+  title: "Co-Aut | Écris un livre à plusieurs, chacun son tour",
   description:
     "Co-Aut, le jeu créatif, ludique et éducatif pour écrire des livres en équipe. Crée une histoire entre co-auteurs, amuse-toi et commande ton livre imprimé.",
 };
@@ -26,7 +28,7 @@ export default function RootLayout({
   return (
     <html
       lang="fr"
-      className={`${openSans.variable} ${robotoSlab.variable} h-full antialiased`}
+      className={`${inter.variable} ${zillaSlab.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

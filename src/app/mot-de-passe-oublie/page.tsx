@@ -1,6 +1,7 @@
 import Link from "next/link";
 import AuthShell from "@/components/AuthShell";
 import { ForgotPasswordForm } from "@/components/PasswordForms";
+import { LINK } from "@/components/ui";
 
 export const metadata = { title: "Mot de passe oublié | Co-Aut" };
 
@@ -23,7 +24,7 @@ export default async function MotDePasseOublie({
         }
       />
       <p className="mt-6 text-center text-sm">
-        <Link href="/" className="font-semibold text-brand hover:underline">
+        <Link href="/" className={`${LINK} inline-flex min-h-11 items-center`}>
           Retour à la connexion
         </Link>
       </p>

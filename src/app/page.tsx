@@ -1,6 +1,8 @@
-import Image from "next/image";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import AuthForm from "@/components/AuthForm";
+import Logo from "@/components/Logo";
+import { EYEBROW, LINK } from "@/components/ui";
 import { getCurrentUser } from "@/lib/auth";
 
 export default async function Home({
@@ -13,24 +15,36 @@ export default async function Home({
   const { mode, erreur } = await searchParams;
 
   return (
-    <main className="flex min-h-screen flex-1 flex-col items-center justify-center bg-aubergine px-4 py-12">
-      <Image
-        src="/images/logo-co-aut.png"
-        alt="Logo Co-Aut"
-        width={200}
-        height={75}
-        priority
-      />
-      <h1 className="mt-6 text-center font-display text-2xl font-bold text-white md:text-3xl">
-        La plateforme d&rsquo;écriture{" "}
-        <span className="text-brand">collaborative</span>
-      </h1>
-      <p className="mt-3 max-w-md text-center text-white/80">
-        Écris des livres en équipe, chacun son tour, et laisse parler ton
-        imagination.
-      </p>
+    <>
+      <header className="border-b border-line">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
+          <Link href="/" aria-label="Co-Aut, accueil">
+            <Logo />
+          </Link>
+          <a
+            href="https://www.co-aut.com"
+            className={`${LINK} inline-flex min-h-11 items-center text-[15px]`}
+          >
+            Découvrir Co-Aut
+          </a>
+        </div>
+      </header>
 
-      <div className="mt-10 flex w-full justify-center">
+      <main className="flex flex-1 flex-col items-center gap-10 px-4 pb-16 pt-12 sm:pt-16">
+        <div className="flex max-w-3xl flex-col gap-4 text-center">
+          <p className={EYEBROW}>Écriture collaborative</p>
+          <h1 className="font-display text-[40px] font-bold leading-[1.05] tracking-tight text-ink sm:text-6xl">
+            Écris un livre à plusieurs,{" "}
+            <span className="box-decoration-clone rounded-md bg-tint-orange px-2">
+              chacun son tour.
+            </span>
+          </h1>
+          <p className="text-lg leading-relaxed text-muted">
+            Un paragraphe, puis tu passes la plume. Personne ne sait où
+            l&rsquo;histoire ira.
+          </p>
+        </div>
+
         <AuthForm
           initialMode={mode}
           initialError={
@@ -39,17 +53,7 @@ export default async function Home({
               : undefined
           }
         />
-      </div>
-
-      <p className="mt-8 text-center text-sm text-white/60">
-        En savoir plus sur Co-Aut ?{" "}
-        <a
-          href="https://www.co-aut.com"
-          className="font-semibold text-peche hover:underline"
-        >
-          Découvre le site
-        </a>
-      </p>
-    </main>
+      </main>
+    </>
   );
 }

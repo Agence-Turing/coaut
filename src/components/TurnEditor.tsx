@@ -1,71 +1,125 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { saveTurn, type ActionState } from "@/app/books/actions";
+import { BTN_PRIMARY, BTN_SECONDARY, Notice } from "@/components/ui";
+
+/** Coups de pouce : une phrase d'aide, sans IA ni appel réseau. */
+const TIPS = [
+  {
+    label: "Fais parler un personnage",
+    help: "Ouvre un tiret et laisse quelqu'un dire ce qu'il pense, ce qu'il veut ou ce qu'il cache. Deux répliques suffisent à relancer la scène.",
+  },
+  {
+    label: "Décris le lieu",
+    help: "Où sommes-nous ? Donne un bruit, une odeur, une lumière : trois détails et le lecteur y est.",
+  },
+  {
+    label: "Ajoute un imprévu",
+    help: "Quelqu'un arrive, un objet disparaît, un secret éclate. Pose un problème que le co-auteur suivant devra résoudre.",
+  },
+] as const;
 
 export default function TurnEditor({
   bookRef,
-  turnNumber,
   draft,
+  nickname,
 }: {
   bookRef: string;
-  turnNumber: number;
   draft: string;
+  nickname: string;
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
     saveTurn,
     {}
   );
+  const [tip, setTip] = useState<number | null>(null);
+  const [length, setLength] = useState(draft.length);
 
   return (
-    <form action={action} className="rounded-3xl border-2 border-brand bg-white p-6 shadow-xl">
+    <form action={action} className="flex flex-col gap-4">
       <input type="hidden" name="book_ref" value={bookRef} />
-      <p className="font-display text-lg font-bold text-ink">
-        ✍️ C&rsquo;est à toi d&rsquo;écrire — tour {turnNumber}
-      </p>
-      <p className="mt-1 text-sm text-graphite">
-        Écris la suite de l&rsquo;histoire. Enregistre ton brouillon autant de
-        fois que tu veux ; quand tu termines ton tour, la main passe au
+      <label
+        htmlFor="turn-content"
+        className="font-display text-2xl font-bold leading-tight"
+      >
+        {nickname}, c&rsquo;est ton tour
+      </label>
+      <p className="text-[15px] leading-relaxed text-muted">
+        Écris la suite de l&rsquo;histoire. Tu peux enregistrer ton brouillon
+        et revenir plus tard ; quand tu termines ton tour, la plume passe au
         co-auteur suivant.
       </p>
+
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-muted">Un coup de pouce ?</span>
+          {TIPS.map((t, i) => (
+            <button
+              key={t.label}
+              type="button"
+              aria-expanded={tip === i}
+              aria-controls="turn-tip"
+              onClick={() => setTip(tip === i ? null : i)}
+              className={`inline-flex min-h-11 items-center rounded-full border px-3.5 text-sm font-medium transition-colors ${
+                tip === i
+                  ? "border-ink bg-tint-orange text-ink"
+                  : "border-line-strong bg-paper text-ink hover:border-ink"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <p
+          id="turn-tip"
+          aria-live="polite"
+          className={
+            tip === null
+              ? "hidden"
+              : "rounded-[10px] bg-tint-cream px-3.5 py-3 text-[15px] leading-relaxed text-ink"
+          }
+        >
+          {tip !== null && TIPS[tip].help}
+        </p>
+      </div>
+
       <textarea
+        id="turn-content"
         name="content"
         rows={8}
         defaultValue={draft}
-        placeholder="Il était une fois…"
-        className="mt-4 w-full rounded-xl border border-ink/15 bg-white px-4 py-3 leading-relaxed text-ink placeholder:text-ink/40 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30"
+        placeholder="Que se passe-t-il ensuite ?"
+        onChange={(e) => setLength(e.target.value.length)}
+        className="block w-full resize-y rounded-xl border-2 border-ink bg-paper p-4 font-display text-xl leading-relaxed text-ink placeholder:text-subtle focus:outline-none focus:ring-2 focus:ring-ink/20"
       />
 
-      {state.error && (
-        <p className="mt-3 rounded-xl bg-brand-dark/10 px-4 py-3 text-sm font-semibold text-brand-dark">
-          {state.error}
-        </p>
-      )}
-      {state.info && (
-        <p className="mt-3 rounded-xl bg-peche/30 px-4 py-3 text-sm font-semibold text-aubergine">
-          {state.info}
-        </p>
-      )}
+      <Notice error={state.error} info={state.info} />
 
-      <div className="mt-4 flex flex-wrap gap-3">
-        <button
-          type="submit"
-          name="finish"
-          value="0"
-          disabled={pending}
-          className="rounded-full border-2 border-ink/20 px-6 py-2.5 text-sm font-bold text-ink transition-colors hover:border-brand hover:text-brand disabled:opacity-60"
-        >
-          {pending ? "…" : "Enregistrer le brouillon"}
-        </button>
-        <button
-          type="submit"
-          name="finish"
-          value="1"
-          disabled={pending}
-          className="rounded-full bg-brand px-6 py-2.5 text-sm font-bold text-white transition-colors hover:bg-brand-dark disabled:opacity-60"
-        >
-          {pending ? "…" : "Terminer mon tour ✓"}
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="text-sm text-muted">
+          {length} caractère{length > 1 ? "s" : ""}
+        </span>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="submit"
+            name="finish"
+            value="0"
+            disabled={pending}
+            className={`${BTN_SECONDARY} min-h-12`}
+          >
+            {pending ? "…" : "Enregistrer le brouillon"}
+          </button>
+          <button
+            type="submit"
+            name="finish"
+            value="1"
+            disabled={pending}
+            className={`${BTN_PRIMARY} min-h-12`}
+          >
+            {pending ? "…" : "Terminer mon tour"}
+          </button>
+        </div>
       </div>
     </form>
   );

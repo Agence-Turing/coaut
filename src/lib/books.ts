@@ -36,6 +36,7 @@ export type Turn = {
   number: number;
   content: string | null;
   is_ended: boolean;
+  created_at: string;
   author_id: string | null;
   authors: { nickname: string } | null;
 };
@@ -91,6 +92,29 @@ export async function getFavoriteCounts(bookIds: string[]) {
   for (const row of data ?? []) {
     const id = row.book_id as string;
     map.set(id, (map.get(id) ?? 0) + 1);
+  }
+  return map;
+}
+
+/**
+ * Fichier de couverture par livre (`books.cover_path`, servi sous /couvertures/).
+ * Tolérant : renvoie une map vide tant que la colonne n'existe pas (migration 0008
+ * non exécutée), et les livres sans couverture en sont simplement absents.
+ */
+export async function getCoverPaths(bookIds: string[]) {
+  const map = new Map<string, string>();
+  if (bookIds.length === 0) return map;
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("books")
+    .select("id, cover_path")
+    .in("id", bookIds);
+  if (error) return map;
+  for (const row of (data ?? []) as unknown as {
+    id: string;
+    cover_path: string | null;
+  }[]) {
+    if (row.cover_path) map.set(row.id, row.cover_path);
   }
   return map;
 }
@@ -188,7 +212,7 @@ export async function getTurns(bookId: string) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("turns")
-    .select("id, number, content, is_ended, author_id, authors(nickname)")
+    .select("id, number, content, is_ended, created_at, author_id, authors(nickname)")
     .eq("book_id", bookId)
     .order("number", { ascending: true });
   if (error) throw error;

@@ -1,31 +1,61 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #191919;
-}
-
+/*
+ * Direction « Carnet » : fond blanc, encre, et les seules couleurs du logo.
+ * Tout passe par ces jetons : pas de couleur en dur dans les composants.
+ */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  /* Neutres */
+  --color-paper: #ffffff;
+  --color-ink: #1c1917;
+  --color-muted: #57524d;
+  --color-subtle: #6b6661;
+  --color-line: #e8e6e3;
+  --color-line-strong: #cfcbc6;
+  --color-surface: #f3f1ee;
 
-  /* Palette Co-Aut */
-  --color-aubergine: #4f2740;
-  --color-aubergine-dark: #3d1e32;
-  --color-brand: #ec681c;
-  --color-brand-dark: #d63e1f;
-  --color-corail: #ff4d29;
-  --color-peche: #ffbc7d;
-  --color-ink: #191919;
-  --color-graphite: #373737;
-  --color-maroon: #38201f;
+  /* Couleurs du logo */
+  --color-brand: #ff8a1e; /* boutons principaux, toujours avec du texte encre */
+  --color-brand-hover: #f57c0c;
+  --color-accent: #e0421c; /* « Aut », accents rares */
+  --color-accent-deep: #c73a14;
 
-  --font-sans: var(--font-open-sans);
-  --font-display: var(--font-roboto-slab);
+  /* Teintes claires */
+  --color-tint-orange: #ffd9b0;
+  --color-tint-rose: #ffe1d6;
+  --color-tint-cream: #fff3e6;
+
+  /* Liens et messages */
+  --color-link: #b03a12;
+  --color-link-hover: #7e2708;
+
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-display: var(--font-zilla-slab), Georgia, serif;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-open-sans), Arial, Helvetica, sans-serif;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+/* Focus clavier visible partout, dans la couleur de l'encre. */
+:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+/* Les champs natifs suivent la police de l'interface. */
+input,
+select,
+textarea,
+button {
+  font: inherit;
+}
+
+summary {
+  cursor: pointer;
+}
+summary::-webkit-details-marker {
+  display: none;
 }

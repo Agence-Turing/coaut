@@ -2,9 +2,7 @@
 
 import { useActionState } from "react";
 import { createBook, type ActionState } from "@/app/books/actions";
-
-const INPUT =
-  "w-full rounded-xl border border-ink/15 bg-white px-4 py-3 text-ink placeholder:text-ink/40 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30";
+import { BTN_PRIMARY, INPUT, LABEL, Notice } from "@/components/ui";
 
 const LEVELS = [
   "CP",
@@ -32,7 +30,7 @@ export default function NewBookForm() {
   return (
     <form action={action} className="space-y-5">
       <div>
-        <label htmlFor="title" className="mb-1 block text-sm font-bold text-ink">
+        <label htmlFor="title" className={`${LABEL} mb-1.5`}>
           Le titre de ton histoire
         </label>
         <input
@@ -47,7 +45,7 @@ export default function NewBookForm() {
       </div>
 
       <div>
-        <label htmlFor="themes" className="mb-1 block text-sm font-bold text-ink">
+        <label htmlFor="themes" className={`${LABEL} mb-1.5`}>
           Le(s) thème(s), séparés par des virgules
         </label>
         <input
@@ -63,12 +61,12 @@ export default function NewBookForm() {
         <div>
           <label
             htmlFor="scolar_level"
-            className="mb-1 block text-sm font-bold text-ink"
+            className={`${LABEL} mb-1.5`}
           >
             Ton niveau
           </label>
           <select id="scolar_level" name="scolar_level" className={INPUT} defaultValue="">
-            <option value="">— Choisis un niveau —</option>
+            <option value="">Choisis un niveau</option>
             {LEVELS.map((l) => (
               <option key={l} value={l}>
                 {l}
@@ -79,7 +77,7 @@ export default function NewBookForm() {
         <div>
           <label
             htmlFor="max_players"
-            className="mb-1 block text-sm font-bold text-ink"
+            className={`${LABEL} mb-1.5`}
           >
             Nombre de co-auteurs (toi compris)
           </label>
@@ -97,8 +95,8 @@ export default function NewBookForm() {
       </div>
 
       <div>
-        <label htmlFor="synopsis" className="mb-1 block text-sm font-bold text-ink">
-          Le synopsis
+        <label htmlFor="synopsis" className={`${LABEL} mb-1.5`}>
+          Le résumé
         </label>
         <textarea
           id="synopsis"
@@ -106,23 +104,19 @@ export default function NewBookForm() {
           required
           minLength={20}
           rows={6}
-          placeholder="Présente ton histoire : c'est ce texte qui donnera envie aux autres co-auteurs de te rejoindre !"
+          placeholder="Présente ton histoire : c'est ce texte qui donnera envie aux autres co-auteurs de te rejoindre."
           className={INPUT}
         />
       </div>
 
-      {state.error && (
-        <p className="rounded-xl bg-brand-dark/10 px-4 py-3 text-sm font-semibold text-brand-dark">
-          {state.error}
-        </p>
-      )}
+      <Notice error={state.error} />
 
       <button
         type="submit"
         disabled={pending}
-        className="w-full rounded-full bg-brand px-7 py-3 font-bold text-white transition-colors hover:bg-brand-dark disabled:opacity-60"
+        className={`${BTN_PRIMARY} min-h-13 w-full text-[17px]`}
       >
-        {pending ? "Lancement…" : "Lancer mon livre 🚀"}
+        {pending ? "Lancement…" : "Lancer mon livre"}
       </button>
     </form>
   );

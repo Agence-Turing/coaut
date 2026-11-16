@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { updateBirthDate } from "@/app/profil/actions";
+import { BTN_PRIMARY, INPUT, Notice } from "@/components/ui";
 
 export default function BirthDateForm({
   birthDate,
@@ -12,7 +13,7 @@ export default function BirthDateForm({
 }) {
   const [state, action, pending] = useActionState(updateBirthDate, {});
   return (
-    <form action={action} className="mt-3 space-y-3">
+    <form action={action} className="mt-2 flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-3">
         <input
           name="birth_date"
@@ -21,26 +22,13 @@ export default function BirthDateForm({
           defaultValue={birthDate ?? ""}
           max={maxDate}
           aria-label="Date de naissance"
-          className="rounded-xl border border-ink/15 bg-white px-4 py-3 text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30"
+          className={`${INPUT} w-auto`}
         />
-        <button
-          type="submit"
-          disabled={pending}
-          className="rounded-full bg-brand px-6 py-3 font-bold text-white transition-colors hover:bg-brand-dark disabled:opacity-60"
-        >
+        <button type="submit" disabled={pending} className={`${BTN_PRIMARY} min-h-12`}>
           {pending ? "Enregistrement…" : "Enregistrer"}
         </button>
       </div>
-      {state.error && (
-        <p className="rounded-xl bg-brand-dark/10 px-4 py-3 text-sm font-semibold text-brand-dark">
-          {state.error}
-        </p>
-      )}
-      {state.info && (
-        <p className="rounded-xl bg-peche/30 px-4 py-3 text-sm font-semibold text-aubergine">
-          {state.info}
-        </p>
-      )}
+      <Notice error={state.error} info={state.info} />
     </form>
   );
 }

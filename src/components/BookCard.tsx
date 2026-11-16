@@ -1,79 +1,89 @@
 import Link from "next/link";
-import {
-  BookSummary,
-  bookRef,
-  playersOf,
-  turnsCountOf,
-} from "@/lib/books";
+import BookCover, { CoverBadge } from "@/components/BookCover";
+import { EYEBROW } from "@/components/ui";
+import { BookSummary, bookRef, playersOf, turnsCountOf } from "@/lib/books";
 
+/** Un livre sur l'étagère : sa couverture, puis thème et repères en dessous. */
 export default function BookCard({
   book,
   flags,
   favCount = 0,
+  coverPath,
 }: {
   book: BookSummary;
   flags?: { launcher?: boolean; myTurn?: boolean };
   favCount?: number;
+  coverPath?: string | null;
 }) {
   const players = playersOf(book);
   const turns = turnsCountOf(book);
+  const launcher = book.book_players.find((p) => p.author_id === book.launcher_id)
+    ?.authors?.nickname;
+  const freeSeats =
+    book.status === "launched" && book.max_players
+      ? Math.max(book.max_players - book.book_players.length, 0)
+      : null;
+  const theme = book.themes.join(" · ");
 
   return (
     <Link
       href={`/books/${bookRef(book)}`}
-      className="group flex h-full min-w-0 flex-col break-words rounded-3xl border border-ink/10 bg-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:shadow-xl"
+      className="group flex min-w-0 flex-col gap-3.5 text-ink"
     >
-      <div className="flex flex-wrap items-center gap-2">
-        {flags?.myTurn && (
-          <span className="rounded-full bg-brand px-3 py-1 text-xs font-bold text-white">
-            ✍️ À toi d&rsquo;écrire !
-          </span>
-        )}
-        {flags?.launcher && (
-          <span className="rounded-full bg-aubergine px-3 py-1 text-xs font-bold text-white">
-            Lancé par toi
-          </span>
-        )}
-        {book.themes.map((t) => (
-          <span
-            key={t}
-            className="rounded-full bg-peche/30 px-3 py-1 text-xs font-semibold text-brand-dark"
-          >
-            {t}
-          </span>
-        ))}
-        {book.scolar_level && (
-          <span className="rounded-full bg-aubergine/10 px-3 py-1 text-xs font-semibold text-aubergine">
-            {book.scolar_level}
-          </span>
-        )}
+      <div className="transition-transform duration-200 group-hover:-translate-y-1">
+        <BookCover
+          seed={book.legacy_code ?? book.id}
+          title={book.title}
+          theme={theme}
+          coverPath={coverPath}
+          badge={
+            <>
+              {flags?.myTurn && <CoverBadge tone="brand">À toi d&rsquo;écrire</CoverBadge>}
+              {flags?.launcher && <CoverBadge>Lancé par toi</CoverBadge>}
+              {!flags && freeSeats !== null && freeSeats > 0 && (
+                <CoverBadge>
+                  {freeSeats} place{freeSeats > 1 ? "s" : ""}
+                </CoverBadge>
+              )}
+            </>
+          }
+        />
       </div>
-
-      <h3 className="mt-4 font-display text-lg font-bold leading-snug text-ink group-hover:text-brand">
-        {book.title}
-      </h3>
-
-      {book.synopsis && (
-        <p className="mt-3 line-clamp-4 text-sm text-graphite">
-          {book.synopsis}
-        </p>
-      )}
-
-      <div className="mt-auto flex items-center justify-between gap-3 pt-5 text-xs text-graphite/80">
-        <span className="truncate">
-          {players.length > 0
-            ? `✍️ ${players.join(", ")}`
-            : "En attente de co-auteurs"}
-        </span>
-        <span className="flex shrink-0 items-center gap-3 font-semibold">
-          {favCount > 0 && (
-            <span className="text-brand-dark" title="Ajouté en favoris">
-              ❤️ {favCount}
-            </span>
-          )}
+      <div className="flex min-w-0 flex-col gap-1">
+        {theme && <p className={`${EYEBROW} truncate`}>{theme}</p>}
+        <p className="text-sm text-muted">
           {turns} tour{turns > 1 ? "s" : ""}
-        </span>
+          {launcher
+            ? ` · lancé par ${launcher}`
+            : players.length > 0
+              ? ` · ${players.join(", ")}`
+              : ""}
+        </p>
+        {favCount > 0 && (
+          <p className="flex items-center gap-1.5 text-sm font-medium text-ink">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              aria-hidden="true"
+              className="text-accent"
+            >
+              <path d="M12 21s-7.5-4.6-10-9.3C.3 8 2.2 4 6 4c2 0 3.6 1 6 3.5C14.4 5 16 4 18 4c3.8 0 5.7 4 4 7.7C19.5 16.4 12 21 12 21z" />
+            </svg>
+            {favCount} favori{favCount > 1 ? "s" : ""}
+          </p>
+        )}
       </div>
     </Link>
+  );
+}
+
+/** Grille en étagère, commune à toutes les listes de livres. */
+export function BookShelf({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-2 gap-x-5 gap-y-9 sm:grid-cols-3 sm:gap-x-7 lg:grid-cols-4">
+      {children}
+    </div>
   );
 }

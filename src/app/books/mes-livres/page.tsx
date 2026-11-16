@@ -3,13 +3,15 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import BookCard from "@/components/BookCard";
+import BookCard, { BookShelf } from "@/components/BookCard";
+import { LINK, PageHeading } from "@/components/ui";
 import {
   listMyBooks,
   listMyRequests,
   listMyFavorites,
   getCurrentWriters,
   getFavoriteCounts,
+  getCoverPaths,
   bookRef,
 } from "@/lib/books";
 import { getCurrentUser } from "@/lib/auth";
@@ -19,10 +21,21 @@ export const metadata: Metadata = {
 };
 
 const REQUEST_LABEL = {
-  pending: { text: "En attente de réponse", cls: "bg-peche/30 text-brand-dark" },
-  accepted: { text: "Acceptée ✓", cls: "bg-brand/10 text-brand-dark" },
-  rejected: { text: "Refusée", cls: "bg-ink/5 text-graphite" },
+  pending: { text: "En attente de réponse", cls: "bg-tint-orange text-ink" },
+  accepted: { text: "Acceptée", cls: "bg-surface text-ink" },
+  rejected: { text: "Non retenue", cls: "bg-surface text-muted" },
 } as const;
+
+function SectionTitle({ children, count }: { children: React.ReactNode; count?: number }) {
+  return (
+    <h2 className="flex items-baseline gap-3 border-t border-line pt-8 font-display text-[28px] font-bold leading-tight tracking-tight">
+      {children}
+      {count !== undefined && count > 0 && (
+        <span className="font-sans text-base font-medium text-subtle">{count}</span>
+      )}
+    </h2>
+  );
+}
 
 export default async function MyBooksPage() {
   const user = await getCurrentUser();
@@ -38,126 +51,133 @@ export default async function MyBooksPage() {
 
   const writing = books.filter((b) => b.status === "launched");
   const published = books.filter((b) => b.status === "published");
-  const currentWriters = await getCurrentWriters(writing);
-  const favCounts = await getFavoriteCounts(favorites.map((b) => b.id));
+  const [currentWriters, favCounts, covers] = await Promise.all([
+    getCurrentWriters(writing),
+    getFavoriteCounts(favorites.map((b) => b.id)),
+    getCoverPaths([...books, ...favorites].map((b) => b.id)),
+  ]);
   const pendingRequests = requests.filter((r) => r.status !== "accepted");
+  // Les livres où c'est à moi d'écrire passent devant.
+  const writingSorted = writing
+    .slice()
+    .sort(
+      (a, b) =>
+        Number(currentWriters.get(b.id) === user.authorId) -
+        Number(currentWriters.get(a.id) === user.authorId),
+    );
+  const myTurnCount = writing.filter(
+    (b) => currentWriters.get(b.id) === user.authorId,
+  ).length;
 
   return (
     <>
       <Header user={user} />
-      <main className="flex-1 bg-white">
-        <section className="bg-aubergine text-white">
-          <div className="mx-auto max-w-6xl px-4 py-12 md:px-6">
-            <h1 className="font-display text-3xl font-bold md:text-4xl">
-              Mes <span className="text-brand">livres</span>
-            </h1>
-            <p className="mt-3 max-w-2xl text-white/85">
-              Les histoires que tu écris, celles que tu as publiées et tes
-              demandes en cours.
-            </p>
-          </div>
-        </section>
+      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-4 pb-20 pt-12 sm:px-6">
+        <PageHeading
+          title="Mes livres"
+          intro={
+            myTurnCount > 0
+              ? `C'est à toi d'écrire dans ${myTurnCount} livre${myTurnCount > 1 ? "s" : ""}.`
+              : "Les histoires que tu écris, celles que tu as publiées et tes demandes en cours."
+          }
+        />
 
-        <section className="mx-auto max-w-6xl px-4 py-12 md:px-6">
-          <h2 className="font-display text-2xl font-bold text-ink">
-            ✍️ En cours d&rsquo;écriture
-          </h2>
-          {writing.length === 0 ? (
-            <p className="mt-4 text-graphite">
-              Tu n&rsquo;écris aucun livre pour le moment.{" "}
-              <Link href="/books/new" className="font-bold text-brand hover:underline">
-                Lance ton histoire
-              </Link>{" "}
-              ou{" "}
-              <Link href="/books" className="font-bold text-brand hover:underline">
-                rejoins une équipe
-              </Link>
-              .
-            </p>
-          ) : (
-            <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {writing.map((b) => (
-                <BookCard
-                  key={b.id}
-                  book={b}
-                  flags={{
-                    launcher: b.launcher_id === user.authorId,
-                    myTurn: currentWriters.get(b.id) === user.authorId,
-                  }}
-                />
-              ))}
-            </div>
-          )}
+        <SectionTitle count={writing.length}>En cours d&rsquo;écriture</SectionTitle>
+        {writing.length === 0 ? (
+          <p className="text-[17px] text-muted">
+            Tu n&rsquo;écris aucun livre pour le moment.{" "}
+            <Link href="/books/new" className={LINK}>
+              Lance ton histoire
+            </Link>{" "}
+            ou{" "}
+            <Link href="/books" className={LINK}>
+              rejoins une équipe
+            </Link>
+            .
+          </p>
+        ) : (
+          <BookShelf>
+            {writingSorted.map((b) => (
+              <BookCard
+                key={b.id}
+                book={b}
+                coverPath={covers.get(b.id)}
+                flags={{
+                  launcher: b.launcher_id === user.authorId,
+                  myTurn: currentWriters.get(b.id) === user.authorId,
+                }}
+              />
+            ))}
+          </BookShelf>
+        )}
 
-          <h2 className="mt-14 font-display text-2xl font-bold text-ink">
-            📚 Publiés
-          </h2>
-          {published.length === 0 ? (
-            <p className="mt-4 text-graphite">
-              Aucun livre publié pour l&rsquo;instant — la fin de ta première
-              histoire approche peut-être !
-            </p>
-          ) : (
-            <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {published.map((b) => (
-                <BookCard
-                  key={b.id}
-                  book={b}
-                  flags={{ launcher: b.launcher_id === user.authorId }}
-                />
-              ))}
-            </div>
-          )}
+        <SectionTitle count={published.length}>Publiés</SectionTitle>
+        {published.length === 0 ? (
+          <p className="text-[17px] text-muted">
+            Aucun livre publié pour l&rsquo;instant.
+          </p>
+        ) : (
+          <BookShelf>
+            {published.map((b) => (
+              <BookCard
+                key={b.id}
+                book={b}
+                coverPath={covers.get(b.id)}
+                flags={{ launcher: b.launcher_id === user.authorId }}
+              />
+            ))}
+          </BookShelf>
+        )}
 
-          <h2 className="mt-14 font-display text-2xl font-bold text-ink">
-            ❤️ Mes favoris
-          </h2>
-          {favorites.length === 0 ? (
-            <p className="mt-4 text-graphite">
-              Aucun favori pour l&rsquo;instant. Explore{" "}
-              <Link href="/bibliotheque" className="font-bold text-brand hover:underline">
-                la bibliothèque
-              </Link>{" "}
-              et ajoute les livres que tu aimes !
-            </p>
-          ) : (
-            <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {favorites.map((b) => (
-                <BookCard key={b.id} book={b} favCount={favCounts.get(b.id) ?? 0} />
-              ))}
-            </div>
-          )}
+        <SectionTitle count={favorites.length}>Mes favoris</SectionTitle>
+        {favorites.length === 0 ? (
+          <p className="text-[17px] text-muted">
+            Aucun favori pour l&rsquo;instant. Explore{" "}
+            <Link href="/bibliotheque" className={LINK}>
+              la bibliothèque
+            </Link>{" "}
+            et garde les livres que tu aimes.
+          </p>
+        ) : (
+          <BookShelf>
+            {favorites.map((b) => (
+              <BookCard
+                key={b.id}
+                book={b}
+                coverPath={covers.get(b.id)}
+                favCount={favCounts.get(b.id) ?? 0}
+              />
+            ))}
+          </BookShelf>
+        )}
 
-          {pendingRequests.length > 0 && (
-            <>
-              <h2 className="mt-14 font-display text-2xl font-bold text-ink">
-                ✉️ Mes demandes
-              </h2>
-              <ul className="mt-6 space-y-3">
-                {pendingRequests.map((r) => {
-                  const label = REQUEST_LABEL[r.status];
-                  return (
-                    <li key={r.id}>
-                      <Link
-                        href={r.books ? `/books/${bookRef(r.books)}` : "/books"}
-                        className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-ink/10 bg-white p-5 transition-colors hover:border-brand/40"
+        {pendingRequests.length > 0 && (
+          <>
+            <SectionTitle count={pendingRequests.length}>Mes demandes</SectionTitle>
+            <ul className="flex flex-col">
+              {pendingRequests.map((r) => {
+                const label = REQUEST_LABEL[r.status];
+                return (
+                  <li key={r.id} className="border-b border-line">
+                    <Link
+                      href={r.books ? `/books/${bookRef(r.books)}` : "/books"}
+                      className="flex min-h-14 flex-wrap items-center justify-between gap-3 py-3 hover:text-link"
+                    >
+                      <span className="min-w-0 break-words font-display text-xl font-bold">
+                        {r.books?.title ?? "Livre supprimé"}
+                      </span>
+                      <span
+                        className={`rounded-full px-3 py-1.5 text-sm font-medium ${label.cls}`}
                       >
-                        <span className="font-display font-bold text-ink">
-                          {r.books?.title ?? "Livre supprimé"}
-                        </span>
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-bold ${label.cls}`}
-                        >
-                          {label.text}
-                        </span>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </>
-          )}
-        </section>
+                        {label.text}
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
       </main>
       <Footer />
     </>

@@ -1,9 +1,10 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { Cta } from "@/components/Buttons";
+import Logo from "@/components/Logo";
+import { Cta, BTN_SECONDARY } from "@/components/ui";
 import { signOut } from "@/app/auth/actions";
 
 type HeaderUser = { nickname: string; needsBirthDate?: boolean } | null;
@@ -11,117 +12,168 @@ type HeaderUser = { nickname: string; needsBirthDate?: boolean } | null;
 function navLinks(user: HeaderUser) {
   return [
     { href: "/books", label: "Rejoindre un livre" },
-    { href: "/bibliotheque", label: "La bibliothèque" },
-    ...(user
-      ? [
-          { href: "/books/mes-livres", label: "Mes livres" },
-          { href: "/profil", label: "Mon profil" },
-        ]
-      : []),
+    { href: "/bibliotheque", label: "Bibliothèque" },
+    ...(user ? [{ href: "/books/mes-livres", label: "Mes livres" }] : []),
   ];
 }
 
-function AuthZone({ user }: { user: HeaderUser }) {
-  if (!user) {
+/** Lien de navigation actif : le plus précis l'emporte (/books/mes-livres avant /books). */
+function isActive(pathname: string, href: string) {
+  if (href === "/books") {
     return (
-      <>
-        <Cta href="/?mode=signup">M&apos;inscrire</Cta>
-        <Cta href="/?mode=login" variant="outline">
-          Me connecter
-        </Cta>
-      </>
+      pathname === "/books" ||
+      (pathname.startsWith("/books/") &&
+        !pathname.startsWith("/books/mes-livres"))
     );
   }
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function ProfileLink({ user }: { user: NonNullable<HeaderUser> }) {
   return (
-    <>
-      <Link
-        href="/profil"
-        title="Mon profil"
-        className="text-sm font-semibold text-peche hover:underline"
+    <Link
+      href="/profil"
+      className="inline-flex min-h-11 items-center gap-2 text-[15px] font-semibold text-ink hover:text-link"
+    >
+      {user.nickname}
+      {user.needsBirthDate && (
+        <span className="rounded-full bg-tint-orange px-2.5 py-1 text-xs font-semibold text-ink">
+          Profil à compléter
+        </span>
+      )}
+    </Link>
+  );
+}
+
+function SignOut() {
+  return (
+    <form action={signOut}>
+      <button
+        type="submit"
+        className="inline-flex min-h-11 items-center text-[15px] font-medium text-muted hover:text-ink"
       >
-        ✍️ {user.nickname}
-        {user.needsBirthDate && (
-          <span className="ml-2 rounded-full bg-brand px-2 py-0.5 text-xs font-bold text-white">
-            Profil à compléter
-          </span>
-        )}
-      </Link>
-      <form action={signOut}>
-        <button
-          type="submit"
-          className="rounded-full border-2 border-white px-5 py-2 text-sm font-bold text-white transition-colors hover:bg-white hover:text-aubergine"
-        >
-          Se déconnecter
-        </button>
-      </form>
-    </>
+        Se déconnecter
+      </button>
+    </form>
   );
 }
 
 export default function Header({ user = null }: { user?: HeaderUser }) {
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+  const links = navLinks(user);
 
   return (
-    <header className="sticky top-0 z-50 bg-aubergine shadow-md">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 md:px-6">
-        <Link href={user ? "/books" : "/"} className="shrink-0">
-          <Image
-            src="/images/logo-co-aut.png"
-            alt="Logo Co-Aut"
-            width={140}
-            height={53}
-            priority
-          />
+    <header className="border-b border-line bg-paper">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
+        <Link href={user ? "/books" : "/"} aria-label="Co-Aut, accueil" className="shrink-0">
+          <Logo />
         </Link>
 
-        <nav className="hidden items-center gap-8 md:flex">
-          {navLinks(user).map((l) => (
-            <Link
-              key={l.href}
-              href={l.href}
-              className="text-sm font-semibold text-white/90 transition-colors hover:text-peche"
-            >
-              {l.label}
-            </Link>
-          ))}
+        <nav aria-label="Navigation principale" className="hidden items-center gap-7 lg:flex">
+          {links.map((l) => {
+            const active = isActive(pathname, l.href);
+            return (
+              <Link
+                key={l.href}
+                href={l.href}
+                aria-current={active ? "page" : undefined}
+                className={`border-b-[3px] py-2.5 text-base font-medium transition-colors ${
+                  active
+                    ? "border-brand text-ink"
+                    : "border-transparent text-muted hover:text-ink"
+                }`}
+              >
+                {l.label}
+              </Link>
+            );
+          })}
         </nav>
 
-        <div className="hidden items-center gap-3 md:flex">
-          <AuthZone user={user} />
+        <div className="hidden items-center gap-5 lg:flex">
+          {user ? (
+            <>
+              <Cta href="/books/new">Lancer un livre</Cta>
+              <ProfileLink user={user} />
+              <SignOut />
+            </>
+          ) : (
+            <>
+              <Cta href="/?mode=login" variant="secondary">
+                Me connecter
+              </Cta>
+              <Cta href="/?mode=signup">M&apos;inscrire</Cta>
+            </>
+          )}
         </div>
 
         <button
           type="button"
-          aria-label="Permuter le menu"
-          className="text-white md:hidden"
+          aria-label={open ? "Fermer le menu" : "Ouvrir le menu"}
+          aria-expanded={open}
+          aria-controls="menu-mobile"
+          className="inline-flex h-11 w-11 items-center justify-center rounded-[10px] border border-line-strong text-ink lg:hidden"
           onClick={() => setOpen((o) => !o)}
         >
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            {open ? (
-              <path d="M6 6l12 12M18 6L6 18" />
-            ) : (
-              <path d="M4 7h16M4 12h16M4 17h16" />
-            )}
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            aria-hidden="true"
+          >
+            {open ? <path d="M6 6l12 12M18 6L6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
           </svg>
         </button>
       </div>
 
       {open && (
-        <nav className="border-t border-white/10 px-4 pb-5 pt-3 md:hidden">
-          <div className="flex flex-col gap-4">
-            {navLinks(user).map((l) => (
-              <Link
-                key={l.href}
-                href={l.href}
-                className="font-semibold text-white/90"
-                onClick={() => setOpen(false)}
-              >
-                {l.label}
-              </Link>
-            ))}
-            <div className="flex flex-wrap items-center gap-3 pt-2">
-              <AuthZone user={user} />
-            </div>
+        <nav
+          id="menu-mobile"
+          aria-label="Navigation principale"
+          className="border-t border-line px-4 pb-5 pt-2 lg:hidden"
+        >
+          <ul className="flex flex-col">
+            {links.map((l) => {
+              const active = isActive(pathname, l.href);
+              return (
+                <li key={l.href}>
+                  <Link
+                    href={l.href}
+                    aria-current={active ? "page" : undefined}
+                    className={`flex min-h-12 items-center border-l-[3px] pl-3 text-base font-medium ${
+                      active ? "border-brand text-ink" : "border-transparent text-muted"
+                    }`}
+                    onClick={() => setOpen(false)}
+                  >
+                    {l.label}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="mt-3 flex flex-col gap-3 border-t border-line pt-4">
+            {user ? (
+              <>
+                <Cta href="/books/new" onClick={() => setOpen(false)}>
+                  Lancer un livre
+                </Cta>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <ProfileLink user={user} />
+                  <SignOut />
+                </div>
+              </>
+            ) : (
+              <>
+                <Cta href="/?mode=signup">M&apos;inscrire</Cta>
+                <Link href="/?mode=login" className={BTN_SECONDARY}>
+                  Me connecter
+                </Link>
+              </>
+            )}
           </div>
         </nav>
       )}

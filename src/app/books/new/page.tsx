@@ -3,6 +3,7 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import NewBookForm from "@/app/books/new/NewBookForm";
+import { LINK, PageHeading } from "@/components/ui";
 import { getCurrentUser } from "@/lib/auth";
 
 export const metadata: Metadata = {
@@ -15,26 +16,15 @@ export default async function NewBookPage() {
   return (
     <>
       <Header user={user} />
-      <main className="flex-1 bg-white">
-        <section className="bg-aubergine text-white">
-          <div className="mx-auto max-w-3xl px-4 py-12 md:px-6">
-            <Link href="/books" className="text-sm text-white/70 hover:text-peche">
-              ← Retour à la bibliothèque
-            </Link>
-            <h1 className="mt-4 font-display text-3xl font-bold md:text-4xl">
-              Lancer <span className="text-brand">un livre</span>
-            </h1>
-            <p className="mt-3 text-white/85">
-              Tu as une idée d&rsquo;histoire ? Choisis un thème, trouve un
-              titre, écris ton synopsis et construis ton équipe. Les co-auteurs
-              écriront chacun leur tour, jusqu&rsquo;au mot fin.
-            </p>
-          </div>
-        </section>
-
-        <section className="mx-auto max-w-3xl px-4 py-12 md:px-6">
-          <NewBookForm />
-        </section>
+      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 px-4 pb-20 pt-10 sm:px-6">
+        <Link href="/books" className={`${LINK} inline-flex min-h-11 items-center self-start text-[15px]`}>
+          ← Retour aux livres à rejoindre
+        </Link>
+        <PageHeading
+          title="Lancer un livre"
+          intro="Trouve un titre, écris le résumé et choisis la taille de ton équipe. Les co-auteurs écriront chacun leur tour, jusqu'au mot fin."
+        />
+        <NewBookForm />
       </main>
       <Footer />
     </>

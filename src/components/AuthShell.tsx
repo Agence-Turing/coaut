@@ -1,7 +1,7 @@
-import Image from "next/image";
 import Link from "next/link";
+import Logo from "@/components/Logo";
 
-/** Cadre commun des pages d'accès au compte (fond aubergine, logo, carte blanche). */
+/** Cadre commun des pages d'accès au compte : logo, carte centrée. */
 export default function AuthShell({
   title,
   intro,
@@ -12,23 +12,23 @@ export default function AuthShell({
   children: React.ReactNode;
 }) {
   return (
-    <main className="flex min-h-screen flex-1 flex-col items-center justify-center bg-aubergine px-4 py-12">
-      <Link href="/">
-        <Image
-          src="/images/logo-co-aut.png"
-          alt="Logo Co-Aut"
-          width={200}
-          height={75}
-          priority
-        />
-      </Link>
-      <div className="mt-10 w-full max-w-md rounded-3xl bg-white p-8 shadow-2xl">
-        <h1 className="font-display text-2xl font-bold text-aubergine">
-          {title}
-        </h1>
-        {intro && <p className="mt-3 text-sm text-ink/70">{intro}</p>}
-        {children}
-      </div>
-    </main>
+    <>
+      <header className="border-b border-line">
+        <div className="mx-auto flex max-w-6xl items-center px-4 py-4 sm:px-6">
+          <Link href="/" aria-label="Co-Aut, accueil">
+            <Logo />
+          </Link>
+        </div>
+      </header>
+      <main className="flex flex-1 flex-col items-center px-4 py-14">
+        <div className="w-full max-w-md rounded-2xl border border-line p-6 sm:p-8">
+          <h1 className="font-display text-3xl font-bold leading-tight tracking-tight text-ink">
+            {title}
+          </h1>
+          {intro && <p className="mt-3 text-[15px] leading-relaxed text-muted">{intro}</p>}
+          {children}
+        </div>
+      </main>
+    </>
   );
 }

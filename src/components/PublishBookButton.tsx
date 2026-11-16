@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { publishBook, type ActionState } from "@/app/books/actions";
+import { BTN_DARK, Notice } from "@/components/ui";
 
 export default function PublishBookButton({ bookRef }: { bookRef: string }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
@@ -10,7 +11,7 @@ export default function PublishBookButton({ bookRef }: { bookRef: string }) {
   );
 
   return (
-    <form action={action} className="space-y-2">
+    <form action={action} className="flex flex-col items-start gap-2">
       <input type="hidden" name="book_ref" value={bookRef} />
       <button
         type="submit"
@@ -20,15 +21,11 @@ export default function PublishBookButton({ bookRef }: { bookRef: string }) {
             e.preventDefault();
           }
         }}
-        className="rounded-full border-2 border-peche px-6 py-2.5 text-sm font-bold text-peche transition-colors hover:bg-peche hover:text-aubergine disabled:opacity-60"
+        className={BTN_DARK}
       >
-        {pending ? "Publication…" : "📖 Publier le livre"}
+        {pending ? "Publication…" : "Publier le livre"}
       </button>
-      {state.error && (
-        <p className="rounded-xl bg-white/10 px-4 py-2 text-sm font-semibold text-peche">
-          {state.error}
-        </p>
-      )}
+      <Notice error={state.error} />
     </form>
   );
 }

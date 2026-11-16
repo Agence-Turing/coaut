@@ -19,24 +19,24 @@ function layout(opts: {
     opts.footer ?? "Tu reçois ce message parce que tu participes à un livre sur Co-Aut.";
   const html = `<!doctype html>
 <html lang="fr">
-  <body style="margin:0;padding:0;background:#f6f1ec;font-family:Arial,Helvetica,sans-serif;color:#191919;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f1ec;padding:32px 12px;">
+  <body style="margin:0;padding:0;background:#F3F1EE;font-family:Inter,Arial,Helvetica,sans-serif;color:#1C1917;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3F1EE;padding:32px 12px;">
       <tr>
         <td align="center">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #E8E6E3;">
             <tr>
-              <td align="center" style="background:#4F2740;padding:24px;">
+              <td align="center" style="background:#1C1917;padding:22px;">
                 <img src="${siteUrl()}/images/logo-co-aut.png" alt="Co-Aut" width="150" style="display:block;border:0;" />
               </td>
             </tr>
             <tr>
               <td style="padding:32px 28px;font-size:16px;line-height:1.5;">
-                <p style="margin:0 0 16px;font-size:20px;font-weight:bold;color:#4F2740;">${esc(opts.title)}</p>
+                <p style="margin:0 0 16px;font-family:'Zilla Slab',Georgia,serif;font-size:26px;line-height:1.15;font-weight:bold;color:#1C1917;">${esc(opts.title)}</p>
                 ${opts.paragraphs.map((p) => `<p style="margin:0 0 24px;">${esc(p)}</p>`).join("\n                ")}
                 <p style="margin:0 0 24px;" align="center">
-                  <a href="${url}" style="display:inline-block;background:#EC681C;color:#ffffff;text-decoration:none;font-weight:bold;padding:14px 28px;border-radius:999px;">${esc(opts.cta.label)}</a>
+                  <a href="${url}" style="display:inline-block;background:#FF8A1E;color:#1C1917;text-decoration:none;font-weight:bold;padding:14px 28px;border-radius:10px;">${esc(opts.cta.label)}</a>
                 </p>
-                <p style="margin:0;font-size:14px;color:#6b6b6b;">${esc(footer)}</p>
+                <p style="margin:0;font-size:14px;color:#57524D;">${esc(footer)}</p>
               </td>
             </tr>
           </table>

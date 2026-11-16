@@ -43,7 +43,8 @@ import urllib.request
 from pathlib import Path
 
 TRAVAIL = Path(os.environ.get("COAUT_COUVERTURES_TRAVAIL", "couvertures-travail"))
-MODELE_PAR_DEFAUT = "nano_banana_2"
+MODELE_PAR_DEFAUT = "gpt_image_2_6"  # 0,5 crédit par image en qualité medium (Nano Banana Pro : 2)
+QUALITE_PAR_DEFAUT = "medium"
 LARGEUR, HAUTEUR, POIDS_MAX = 600, 800, 150_000
 
 # Style unique de la collection : ne le changer qu'en refaisant toutes les couvertures.
@@ -58,7 +59,9 @@ STYLE = (
     "Absolutely no text, no letters, no numbers, no words, no logo, no signature, no watermark, no book frame "
     "or border: the picture fills the whole portrait canvas. "
     "Do not depict any character, costume, emblem or object from an existing franchise, brand, film, game or "
-    "book series: if the story refers to one, show a generic scene of the same genre instead."
+    "book series: if the story refers to one, show a generic scene of the same genre instead. "
+    "If the story deals with dark or sad themes, do not depict them: show a calm, hopeful, symbolic scene instead "
+    "(a place, an object, a small figure seen from afar)."
 )
 
 
@@ -125,9 +128,33 @@ def nettoyer(titre, resume):
     return titre, resume
 
 
+# Univers sous licence cités par des fanfictions : on envoie une description générique, jamais le nom.
+LICENCES = [
+    (r"harry\s+potter", "un jeune apprenti sorcier"), (r"poudlard|hogwarts", "une école de magie"),
+    (r"voldemort", "un sorcier inquiétant"), (r"\b(ron|hermione)\b", "son ami"),
+    (r"minecraft", "un monde de jeu vidéo"), (r"\bsteve\b", "un adolescent"),
+    (r"les\s+transformers|transformers", "des robots géants"), (r"decepticons?|autobots?", "robots"),
+    (r"spider-?man", "un jeune héros masqué"), (r"\bhulk\b", "un géant très fort"),
+    (r"bridgerton", "une grande famille de l'époque victorienne"),
+    (r"\bJO\b|jeux\s+olympiques", "une grande compétition sportive"),
+    (r"\bafton(s)?\b", "une famille mystérieuse"), (r"izuku", "un garçon"), (r"\bnhl\b", "une grande ligue"),
+]
+# Résumés trop durs pour être envoyés ou illustrés : on ne garde que le titre.
+SENSIBLE = re.compile(r"viol[ée]|suicid|tu[ée]e?s?\b|meurtr|cadavre|pornograph|sexe|torture|laiss[ée]e? pour mort", re.I)
+
+
+def generique(texte):
+    for motif, remplacement in LICENCES:
+        texte = re.sub(motif, remplacement, texte, flags=re.I)
+    return texte
+
+
 def consigne(livre):
     titre, resume = nettoyer(livre["title"], livre.get("synopsis"))
-    themes = ", ".join(livre.get("themes") or [])
+    if SENSIBLE.search(resume) or SENSIBLE.search(titre):
+        resume = ""
+    titre, resume = generique(titre), generique(resume)
+    themes = ", ".join(t for t in (livre.get("themes") or []) if t.lower() != "fanfiction")
     sujet = f'Story title: "{titre}".'
     if resume:
         sujet += f" Story summary (in French): {resume}"
@@ -136,17 +163,22 @@ def consigne(livre):
     return f"{STYLE} Illustrate this story with a single evocative scene. {sujet}"
 
 
-def generer(texte, modele):
+def generer(texte, modele, qualite=None):
     """Un job Higgsfield, une image. Renvoie les octets de l'image."""
-    sortie = subprocess.run(
-        ["higgsfield", "generate", "create", modele, "--prompt", texte, "--aspect_ratio", "3:4",
-         "--resolution", "1k", "--wait", "--wait-timeout", "15m", "--json"],
-        capture_output=True, text=True,
-    )
+    cmd = ["higgsfield", "generate", "create", modele, "--prompt", texte, "--aspect_ratio", "3:4",
+           "--resolution", "1k", "--wait", "--wait-timeout", "15m", "--json"]
+    if qualite and modele.startswith("gpt_image"):  # seul ce modèle a un réglage de qualité
+        cmd += ["--quality", qualite]
+    sortie = subprocess.run(cmd, capture_output=True, text=True)
     try:
-        url = json.loads(sortie.stdout)[0]["result_url"]
+        debut = sortie.stdout.index("[")
+        job = json.loads(sortie.stdout[debut : sortie.stdout.rindex("]") + 1])[0]
     except (ValueError, LookupError, TypeError):
         raise RuntimeError((sortie.stdout + sortie.stderr).strip()[-400:] or "réponse vide du CLI")
+    url = job.get("result_url")
+    if job.get("status") != "completed" or not url:
+        # Un job en échec est remboursé par Higgsfield ; le service ne donne pas la raison.
+        raise RuntimeError(f"job {job.get('id')} : statut {job.get('status')}, pas d'image")
     with urllib.request.urlopen(url, timeout=120) as r:
         return r.read()
 
@@ -201,12 +233,12 @@ def journal(ligne):
         f.write(json.dumps({"quand": time.strftime("%Y-%m-%d %H:%M:%S"), **ligne}, ensure_ascii=False) + "\n")
 
 
-def traiter(livre, modele, refaire=False):
+def traiter(livre, modele, refaire=False, qualite=None):
     k = cle(livre)
     brut = TRAVAIL / "brut" / f"{k}.png"
     brut.parent.mkdir(parents=True, exist_ok=True)
     if refaire or not brut.exists():
-        brut.write_bytes(generer(consigne(livre), modele))
+        brut.write_bytes(generer(consigne(livre), modele, qualite))
         journal({"livre": k, "etape": "generee", "modele": modele})
     webp = en_webp(brut.read_bytes())
     nom = f"{k}-{hashlib.sha256(webp).hexdigest()[:8]}.webp"
@@ -230,6 +262,8 @@ def main():
     p.add_argument("--refaire", help="regénère la couverture de ce livre")
     p.add_argument("--retirer", help="retire la couverture de ce livre")
     p.add_argument("--modele", default=MODELE_PAR_DEFAUT, help=f"modèle Higgsfield (défaut : {MODELE_PAR_DEFAUT})")
+    p.add_argument("--qualite", default=QUALITE_PAR_DEFAUT, help="low, medium ou high (modèles gpt_image)")
+    p.add_argument("--sauf", help="livres à ne pas traiter, séparés par des virgules (livres de test)")
     a = p.parse_args()
 
     if a.retirer or a.refaire:
@@ -244,27 +278,29 @@ def main():
             journal({"livre": cle(livre), "etape": "retiree", "fichier": livre.get("cover_path")})
             print(f"Couverture retirée : {livre['title']}")
         else:
-            print(f"Refaite : {livre['title']} → {traiter(livre, a.modele, refaire=True)}")
+            print(f"Refaite : {livre['title']} → {traiter(livre, a.modele, refaire=True, qualite=a.qualite)}")
         return
 
     a_faire = livres()
     if a.codes:
         codes = {c.strip() for c in a.codes.split(",") if c.strip()}
         a_faire = [b for b in a_faire if correspond(b, codes)]
+    if a.sauf:
+        sauf = {c.strip() for c in a.sauf.split(",") if c.strip()}
+        a_faire = [b for b in a_faire if not correspond(b, sauf)]
     if a.limite:
         a_faire = a_faire[: a.limite]
 
     if a.lister:
         for b in a_faire:
-            titre, resume = nettoyer(b["title"], b.get("synopsis"))
-            print(f"{cle(b):>12} | {titre} | {resume[:110]}")
+            print(f"{cle(b):>12} | {consigne(b)[len(STYLE):][:200]}")
         print(f"{len(a_faire)} livre(s) sans couverture.")
         return
 
     faits, echecs = 0, []
     for i, b in enumerate(a_faire, 1):
         try:
-            nom = traiter(b, a.modele)
+            nom = traiter(b, a.modele, qualite=a.qualite)
             faits += 1
             print(f"[{i}/{len(a_faire)}] OK  {cle(b)} {b['title'][:50]} → {nom}", flush=True)
         except Exception as e:  # un livre en échec n'arrête pas le lot

@@ -2,8 +2,10 @@
 
 /**
  * Couverture d'un livre, au format portrait 3:4.
+ * Sur la couverture : le titre principal et l'image, rien d'autre (tome, dates,
+ * thème et places libres s'affichent sous la couverture, dans BookCard).
  * - `coverPath` renseigné : illustration servie par /couvertures/<fichier>, titre posé par-dessus.
- * - sinon : couverture composée par le code (aplat tiré du code du livre, thème, titre).
+ * - sinon : couverture composée par le code (aplat tiré du code du livre, titre).
  * Jamais de trou ni d'image cassée.
  */
 
@@ -31,18 +33,14 @@ function stableIndex(seed: string, modulo: number) {
 export default function BookCover({
   seed,
   title,
-  theme,
   coverPath,
-  badge,
   size = "card",
 }: {
   /** Code ou identifiant du livre : fixe la couleur du repli. */
   seed: string;
+  /** Titre principal seul (voir splitTitle). */
   title: string;
-  theme?: string;
   coverPath?: string | null;
-  /** Pastille en haut à gauche (places libres, « à toi d'écrire »). */
-  badge?: React.ReactNode;
   size?: "card" | "page";
 }) {
   const titleSize =
@@ -63,8 +61,7 @@ export default function BookCover({
           loading="lazy"
           className="absolute inset-0 h-full w-full object-cover"
         />
-        <div className="relative flex h-full flex-col justify-between p-3.5">
-          <div className="flex flex-wrap gap-1.5">{badge}</div>
+        <div className="relative flex h-full flex-col justify-end p-3.5">
           <p
             className={`break-words rounded-lg bg-paper px-3 py-2.5 font-display font-bold leading-[1.1] text-ink ${titleSize}`}
           >
@@ -78,14 +75,10 @@ export default function BookCover({
   const palette = PALETTES[stableIndex(seed, PALETTES.length)];
   return (
     <div
-      className={`relative flex aspect-[3/4] flex-col justify-between overflow-hidden rounded-l-md rounded-r-[14px] border border-line border-l-[6px] border-l-ink p-4 ${palette}`}
+      className={`relative flex aspect-[3/4] flex-col justify-center overflow-hidden rounded-l-md rounded-r-[14px] border border-line border-l-[6px] border-l-ink p-4 ${palette}`}
     >
-      <div className="flex min-h-7 flex-wrap gap-1.5">{badge}</div>
       <p className={`break-words font-display font-bold leading-[1.08] ${titleSize}`}>
         {title}
-      </p>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.14em]">
-        {theme || "Co-Aut"}
       </p>
     </div>
   );

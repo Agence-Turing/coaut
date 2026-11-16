@@ -20,6 +20,7 @@ import {
   getCoverPaths,
   bookRef,
   writingState,
+  splitTitle,
   type Turn,
 } from "@/lib/books";
 import { getCurrentUser } from "@/lib/auth";
@@ -157,6 +158,7 @@ export default async function BookPage({
   const folded = fold ? writtenTurns.slice(0, -KEEP_OPEN) : [];
   const shown = fold ? writtenTurns.slice(-KEEP_OPEN) : writtenTurns;
 
+  const heading = splitTitle(book.title);
   const facts = [
     ...book.themes,
     book.scolar_level ? `Niveau ${book.scolar_level}` : null,
@@ -185,8 +187,13 @@ export default async function BookPage({
 
           <p className={EYEBROW}>{facts.join(" · ")}</p>
           <h1 className="break-words font-display text-4xl font-bold leading-[1.05] tracking-tight sm:text-[50px]">
-            {book.title}
+            {heading.main}
           </h1>
+          {(heading.volume || heading.written) && (
+            <p className="-mt-2 text-[17px] text-muted">
+              {[heading.volume, heading.written].filter(Boolean).join(" · ")}
+            </p>
+          )}
           {book.synopsis && (
             <p className="whitespace-pre-line text-[17px] leading-relaxed text-muted">
               {book.synopsis}

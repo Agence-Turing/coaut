@@ -1,7 +1,7 @@
 import Link from "next/link";
 import BookCover, { CoverBadge } from "@/components/BookCover";
 import { EYEBROW } from "@/components/ui";
-import { BookSummary, bookRef, playersOf, turnsCountOf } from "@/lib/books";
+import { BookSummary, bookRef, playersOf, splitTitle, turnsCountOf } from "@/lib/books";
 
 /** Un livre sur l'étagère : sa couverture, puis thème et repères en dessous. */
 export default function BookCard({
@@ -24,6 +24,7 @@ export default function BookCard({
       ? Math.max(book.max_players - book.book_players.length, 0)
       : null;
   const theme = book.themes.join(" · ");
+  const { main, volume, written } = splitTitle(book.title);
 
   return (
     <Link
@@ -33,23 +34,24 @@ export default function BookCard({
       <div className="transition-transform duration-200 group-hover:-translate-y-1">
         <BookCover
           seed={book.legacy_code ?? book.id}
-          title={book.title}
-          theme={theme}
+          title={main}
           coverPath={coverPath}
-          badge={
-            <>
-              {flags?.myTurn && <CoverBadge tone="brand">À toi d&rsquo;écrire</CoverBadge>}
-              {flags?.launcher && <CoverBadge>Lancé par toi</CoverBadge>}
-              {!flags && freeSeats !== null && freeSeats > 0 && (
-                <CoverBadge>
-                  {freeSeats} place{freeSeats > 1 ? "s" : ""}
-                </CoverBadge>
-              )}
-            </>
-          }
         />
       </div>
       <div className="flex min-w-0 flex-col gap-1">
+        {(flags?.myTurn || flags?.launcher || (!flags && freeSeats !== null && freeSeats > 0)) && (
+          <div className="mb-1 flex flex-wrap gap-1.5">
+            {flags?.myTurn && <CoverBadge tone="brand">À toi d&rsquo;écrire</CoverBadge>}
+            {flags?.launcher && <CoverBadge>Lancé par toi</CoverBadge>}
+            {!flags && freeSeats !== null && freeSeats > 0 && (
+              <CoverBadge>
+                {freeSeats} place{freeSeats > 1 ? "s" : ""} libre{freeSeats > 1 ? "s" : ""}
+              </CoverBadge>
+            )}
+          </div>
+        )}
+        {volume && <p className="text-[15px] font-semibold text-ink">{volume}</p>}
+        {written && <p className="text-sm text-muted">{written}</p>}
         {theme && <p className={`${EYEBROW} truncate`}>{theme}</p>}
         <p className="text-sm text-muted">
           {turns} tour{turns > 1 ? "s" : ""}

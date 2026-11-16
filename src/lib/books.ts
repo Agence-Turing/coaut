@@ -341,3 +341,36 @@ export function writingState(book: BookSummary, turns: Turn[]): WritingState {
     number: maxNumber + 1,
   };
 }
+
+/**
+ * Sépare le titre saisi dans Notion de ses mentions de suivi.
+ * « Le secret de Lola - Tome 1 - écrit : Oct 23 - Mars 24 » donne
+ * { main: "Le secret de Lola", volume: "Tome 1", written: "Écrit : Oct 23 – Mars 24" }.
+ * Seul le titre principal va sur la couverture ; le reste s'affiche dessous.
+ */
+export function splitTitle(raw: string): {
+  main: string;
+  volume: string | null;
+  written: string | null;
+} {
+  const title = raw.trim();
+  const sep = title.search(/\s[-–]\s/);
+  if (sep === -1) return { main: title, volume: null, written: null };
+
+  const main = title.slice(0, sep).trim();
+  let rest = title.slice(sep).replace(/^\s[-–]\s/, "").trim();
+  let written: string | null = null;
+
+  const w = rest.search(/(^|\s[-–]\s)[ÉéEe]crit\b/);
+  if (w !== -1) {
+    written = rest
+      .slice(w)
+      .replace(/^\s[-–]\s/, "")
+      .replace(/^[ÉéEe]crit\s*:?\s*/, "Écrit : ")
+      .replace(/\s[-–]\s/g, " – ")
+      .trim();
+    rest = rest.slice(0, w).trim();
+  }
+  const volume = rest ? rest.replace(/\s[-–]\s/g, " · ") : null;
+  return { main: main || title, volume, written };
+}

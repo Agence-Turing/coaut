@@ -51,6 +51,12 @@
 - [ ] Jour J : export Notion frais, migration 0006, `scripts/import-notion.py --apply`, purge des données de démo, bascule du domaine.
 - [ ] Arrêt de l'ancien site (API .NET, Notion).
 
+### Couvertures illustrées
+
+- [ ] Administration : bouton pour refaire ou retirer la couverture d'un livre (aujourd'hui : `scripts/generer-couvertures.py --refaire / --retirer`).
+- [ ] Génération automatique à la création d'un livre en production, avec un accès API au nom de la cliente (aujourd'hui : script lancé à la main avec le compte Higgsfield de l'agence).
+- [ ] Jour J : copier le dossier des couvertures sur le serveur de production et le monter dans l'app ; l'import Notion ne touche pas à `cover_path`.
+
 ## Questions à Juliette
 
 - A-t-elle accès au Bitbucket de l'ancien développeur (sources de l'ancien site) ?

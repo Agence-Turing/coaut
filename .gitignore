@@ -46,3 +46,6 @@ next-env.d.ts
 *ExportBlock*
 export-notion*
 *.import.sql
+
+# couvertures générées (dossier de travail du script)
+/couvertures-travail/

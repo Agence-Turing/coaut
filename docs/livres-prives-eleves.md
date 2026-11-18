@@ -50,7 +50,7 @@ Dans « Lancer un livre », le professionnel voit un choix en plus : **Public** 
 Une page dédiée, **co-aut.com/classe**, avec un seul grand champ « Ton code ».
 
 ```
-        ✏️  Co-Aut — Espace classe
+        Co-Aut — Espace classe
    ┌─────────────────────────────┐
    │  Ton code : LOUTRE-2510     │
    └─────────────────────────────┘

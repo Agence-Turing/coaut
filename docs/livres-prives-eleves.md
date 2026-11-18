@@ -9,7 +9,7 @@ Aujourd'hui, les élèves se connectent avec le compte de l'enseignant : ils voi
 ### 1. Le compte « professionnel »
 
 - À l'inscription ou dans « Mon profil » : case « Je suis enseignant ou professionnel et j'écris avec des enfants », avec l'établissement ou la structure.
-- Juliette valide le compte depuis l'administration (elle surveille déjà les faux profils). Une fois validé, le menu « Mes classes » apparaît.
+- Pas de validation : le professionnel s'inscrit en autonomie et le menu « Mes classes » apparaît tout de suite (décision de Toni, 18/11). Le risque reste limité : les élèves d'une classe n'écrivent que dans les livres de cette classe. Juliette voit les comptes pros dans l'administration et peut les bloquer.
 
 ### 2. « Mes classes » (côté professionnel)
 
@@ -72,8 +72,8 @@ Les élèves n'ont pas d'e-mail : pas de « à ton tour » ni de relances pour e
 
 ## À trancher avec Juliette
 
-1. Le compte professionnel est-il validé par elle (proposé) ou ouvert à tous ?
-2. Un élève peut-il lire la bibliothèque publique (sans écrire) ?
-3. Livre de classe publié : visible publiquement par défaut ou non ?
-4. Que deviennent les comptes élèves en fin d'année (archivage de la classe, codes désactivés) ?
-5. Facturation de ce lot hors devis.
+1. Un élève peut-il lire la bibliothèque publique (sans écrire) ?
+2. Livre de classe publié : visible publiquement par défaut ou non ?
+3. Que deviennent les comptes élèves en fin d'année (archivage de la classe, codes désactivés) ?
+
+Côté agence : facturation de ce lot hors devis.

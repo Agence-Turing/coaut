@@ -1,4 +1,3 @@
-/* eslint-disable @next/next/no-img-element */
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -9,6 +8,7 @@ import TurnEditor from "@/components/TurnEditor";
 import PublishBookButton from "@/components/PublishBookButton";
 import FavoriteButton from "@/components/FavoriteButton";
 import ClassBookPanel from "@/components/classes/ClassBookPanel";
+import BookCover from "@/components/BookCover";
 import { BTN_PRIMARY, BTN_SECONDARY, EYEBROW, LINK, Notice } from "@/components/ui";
 import { acceptRequest, rejectRequest } from "@/app/books/actions";
 import {
@@ -18,7 +18,6 @@ import {
   getMyJoinRequest,
   getFavoriteCounts,
   getMyFavoriteIds,
-  getCoverPaths,
   bookRef,
   writingState,
   shownTurns,
@@ -111,11 +110,7 @@ export default async function BookPage({
   const { code } = await params;
   const [book, user] = await Promise.all([getBook(code), getCurrentUser()]);
   if (!book) notFound();
-  const [turns, covers] = await Promise.all([
-    getTurns(book.id),
-    getCoverPaths([book.id]),
-  ]);
-  const coverPath = covers.get(book.id);
+  const turns = await getTurns(book.id);
   const team = book.book_players
     .slice()
     .sort((a, b) => a.position - b.position);
@@ -198,13 +193,9 @@ export default async function BookPage({
                   : "← Retour aux livres à rejoindre"}
           </Link>
 
-          {coverPath && (
-            <img
-              src={`/couvertures/${encodeURIComponent(coverPath)}`}
-              alt=""
-              className="aspect-[3/4] w-36 rounded-l-md rounded-r-[14px] border border-line border-l-[6px] border-l-ink object-cover"
-            />
-          )}
+          <div className="w-24 sm:w-28">
+            <BookCover seed={book.legacy_code ?? book.id} title={heading.main} size="page" />
+          </div>
 
           <p className={EYEBROW}>{facts.join(" · ")}</p>
           <h1 className="break-words font-display text-4xl font-bold leading-[1.05] tracking-tight sm:text-[50px]">

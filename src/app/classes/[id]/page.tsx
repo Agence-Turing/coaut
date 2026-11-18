@@ -8,7 +8,7 @@ import { AddStudentsForm, ConfirmButton } from "@/components/classes/ClassForms"
 import { Cta, EYEBROW, LINK, PageHeading } from "@/components/ui";
 import { regenerateCode, removeStudent } from "@/app/classes/actions";
 import { getCurrentUser } from "@/lib/auth";
-import { BOOK_SUMMARY, getCoverPaths, type BookSummary } from "@/lib/books";
+import { BOOK_SUMMARY, type BookSummary } from "@/lib/books";
 import { getOwnedClass, listStudents } from "@/lib/classes";
 import { createClient } from "@/lib/supabase/server";
 
@@ -41,7 +41,6 @@ export default async function ClassPage({ params }: { params: Promise<{ id: stri
       .order("created_at", { ascending: false }),
   ]);
   const books = (booksData ?? []) as unknown as BookSummary[];
-  const covers = await getCoverPaths(books.map((b) => b.id));
   const written = (authorId: string) =>
     (turns ?? []).filter((t) => t.author_id === authorId && t.is_ended && t.content).length;
   const open = books.some((b) => b.status === "launched");
@@ -139,7 +138,7 @@ export default async function ClassPage({ params }: { params: Promise<{ id: stri
           ) : (
             <BookShelf>
               {books.map((b) => (
-                <BookCard key={b.id} book={b} coverPath={covers.get(b.id)} flags={{}} />
+                <BookCard key={b.id} book={b} flags={{}} />
               ))}
             </BookShelf>
           )}

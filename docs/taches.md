@@ -56,11 +56,9 @@
 - [ ] Jour J : export Notion frais, migration 0006, `scripts/import-notion.py --apply`, purge des données de démo, bascule du domaine.
 - [ ] Arrêt de l'ancien site (API .NET, Notion).
 
-### Couvertures illustrées
+### Couvertures illustrées (abandonnées)
 
-- [ ] Administration : bouton pour refaire ou retirer la couverture d'un livre (aujourd'hui : `scripts/generer-couvertures.py --refaire / --retirer`).
-- [ ] Génération automatique à la création d'un livre en production, avec un accès API au nom de la cliente (aujourd'hui : script lancé à la main avec le compte Higgsfield de l'agence).
-- [ ] Jour J : copier le dossier des couvertures sur le serveur de production et le monter dans l'app ; l'import Notion ne touche pas à `cover_path`.
+Abandonnées le 16/11 (décision de Juliette : des couleurs à la place). Les listes et la page d'un livre n'affichent que la couverture colorée composée par le code ; rien à reprendre le jour J (`cover_path` reste en base, plus lu). Plus de bouton « refaire la couverture » ni de génération automatique.
 
 ## Questions à Juliette
 

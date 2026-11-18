@@ -9,7 +9,6 @@ import {
   listBooks,
   getFilterOptions,
   getFavoriteCounts,
-  getCoverPaths,
   type BookFilters,
 } from "@/lib/books";
 import { getCurrentUser } from "@/lib/auth";
@@ -32,10 +31,7 @@ export default async function BibliothequePage({
     getCurrentUser(),
   ]);
   const ids = books.map((b) => b.id);
-  const [favCounts, covers] = await Promise.all([
-    getFavoriteCounts(ids),
-    getCoverPaths(ids),
-  ]);
+  const favCounts = await getFavoriteCounts(ids);
   // Les plus populaires d'abord (à égalité : ordre historique).
   const sorted = books
     .slice()
@@ -72,7 +68,6 @@ export default async function BibliothequePage({
                 key={b.id}
                 book={b}
                 favCount={favCounts.get(b.id) ?? 0}
-                coverPath={covers.get(b.id)}
               />
             ))}
           </BookShelf>

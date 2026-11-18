@@ -11,7 +11,6 @@ import {
   listMyFavorites,
   getCurrentWriters,
   getFavoriteCounts,
-  getCoverPaths,
   bookRef,
 } from "@/lib/books";
 import { getCurrentUser } from "@/lib/auth";
@@ -51,10 +50,9 @@ export default async function MyBooksPage() {
 
   const writing = books.filter((b) => b.status === "launched");
   const published = books.filter((b) => b.status === "published");
-  const [currentWriters, favCounts, covers] = await Promise.all([
+  const [currentWriters, favCounts] = await Promise.all([
     getCurrentWriters(writing),
     getFavoriteCounts(favorites.map((b) => b.id)),
-    getCoverPaths([...books, ...favorites].map((b) => b.id)),
   ]);
   const pendingRequests = requests.filter((r) => r.status !== "accepted");
   // Les livres où c'est à moi d'écrire passent devant.
@@ -101,7 +99,6 @@ export default async function MyBooksPage() {
               <BookCard
                 key={b.id}
                 book={b}
-                coverPath={covers.get(b.id)}
                 flags={{
                   launcher: b.launcher_id === user.authorId,
                   myTurn: currentWriters.get(b.id) === user.authorId,
@@ -122,7 +119,6 @@ export default async function MyBooksPage() {
               <BookCard
                 key={b.id}
                 book={b}
-                coverPath={covers.get(b.id)}
                 flags={{ launcher: b.launcher_id === user.authorId }}
               />
             ))}
@@ -144,7 +140,6 @@ export default async function MyBooksPage() {
               <BookCard
                 key={b.id}
                 book={b}
-                coverPath={covers.get(b.id)}
                 favCount={favCounts.get(b.id) ?? 0}
               />
             ))}

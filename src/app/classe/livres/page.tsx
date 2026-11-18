@@ -5,7 +5,7 @@ import Footer from "@/components/Footer";
 import BookCard, { BookShelf } from "@/components/BookCard";
 import { Notice, PageHeading } from "@/components/ui";
 import { getCurrentUser } from "@/lib/auth";
-import { BOOK_SUMMARY, getCoverPaths, getCurrentWriters, type BookSummary } from "@/lib/books";
+import { BOOK_SUMMARY, getCurrentWriters, type BookSummary } from "@/lib/books";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Ma classe | Co-Aut" };
@@ -33,10 +33,7 @@ export default async function ClasseLivresPage() {
   const books = (data ?? []) as unknown as BookSummary[];
   const open = books.filter((b) => b.status === "launched");
   const done = books.filter((b) => b.status === "published");
-  const [writers, covers] = await Promise.all([
-    getCurrentWriters(open),
-    getCoverPaths(books.map((b) => b.id)),
-  ]);
+  const writers = await getCurrentWriters(open);
   const mine = open.filter((b) => writers.get(b.id) === user.authorId);
 
   return (
@@ -64,7 +61,6 @@ export default async function ClasseLivresPage() {
               <BookCard
                 key={b.id}
                 book={b}
-                coverPath={covers.get(b.id)}
                 flags={{ myTurn: writers.get(b.id) === user.authorId }}
               />
             ))}
@@ -78,7 +74,7 @@ export default async function ClasseLivresPage() {
             </h2>
             <BookShelf>
               {done.map((b) => (
-                <BookCard key={b.id} book={b} coverPath={covers.get(b.id)} flags={{}} />
+                <BookCard key={b.id} book={b} flags={{}} />
               ))}
             </BookShelf>
           </>

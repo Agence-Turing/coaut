@@ -103,29 +103,6 @@ export async function getFavoriteCounts(bookIds: string[]) {
   return map;
 }
 
-/**
- * Fichier de couverture par livre (`books.cover_path`, servi sous /couvertures/).
- * Tolérant : renvoie une map vide tant que la colonne n'existe pas (migration 0008
- * non exécutée), et les livres sans couverture en sont simplement absents.
- */
-export async function getCoverPaths(bookIds: string[]) {
-  const map = new Map<string, string>();
-  if (bookIds.length === 0) return map;
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("books")
-    .select("id, cover_path")
-    .in("id", bookIds);
-  if (error) return map;
-  for (const row of (data ?? []) as unknown as {
-    id: string;
-    cover_path: string | null;
-  }[]) {
-    if (row.cover_path) map.set(row.id, row.cover_path);
-  }
-  return map;
-}
-
 /** Ids des livres mis en favori par l'auteur. */
 export async function getMyFavoriteIds(authorId: string) {
   const supabase = await createClient();

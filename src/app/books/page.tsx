@@ -8,7 +8,6 @@ import { LINK, PageHeading } from "@/components/ui";
 import {
   listBooks,
   getFilterOptions,
-  getCoverPaths,
   type BookFilters,
 } from "@/lib/books";
 import { getCurrentUser } from "@/lib/auth";
@@ -30,7 +29,6 @@ export default async function BooksPage({
     getFilterOptions("launched"),
     getCurrentUser(),
   ]);
-  const covers = await getCoverPaths(books.map((b) => b.id));
   const filtered = Boolean(filters.q || filters.theme || filters.niveau);
   const n = books.length;
 
@@ -69,7 +67,7 @@ export default async function BooksPage({
         ) : (
           <BookShelf>
             {books.map((b) => (
-              <BookCard key={b.id} book={b} coverPath={covers.get(b.id)} />
+              <BookCard key={b.id} book={b} />
             ))}
           </BookShelf>
         )}

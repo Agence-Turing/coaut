@@ -7,6 +7,7 @@ import {
   signIn,
   signUp,
 } from "@/app/auth/actions";
+import ProfessionalFields from "@/components/ProfessionalFields";
 import { BTN_PRIMARY, HINT, INPUT, LABEL, LINK, Notice } from "@/components/ui";
 
 /** Renvoi du mail de confirmation, proposé tant que l'adresse n'est pas confirmée. */
@@ -136,13 +137,8 @@ export default function AuthForm({
                 required
                 minLength={3}
                 autoComplete="username"
-                aria-describedby="signup-nickname-hint"
                 className={INPUT}
               />
-              <p id="signup-nickname-hint" className={HINT}>
-                C&rsquo;est lui que les autres co-auteurs verront, jamais ton
-                nom.
-              </p>
             </div>
             <div className="flex flex-col gap-1.5">
               <label htmlFor="signup-email" className={LABEL}>
@@ -191,6 +187,7 @@ export default function AuthForm({
                 className={INPUT}
               />
             </div>
+            <ProfessionalFields idPrefix="signup" />
             <Notice error={signupState.error} info={signupState.info} />
             <button
               type="submit"

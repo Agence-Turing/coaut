@@ -1,21 +1,21 @@
 "use client";
 
-import { useActionState, useState } from "react";
-import { updateProfessional } from "@/app/profil/actions";
-import { BTN_PRIMARY, INPUT, LABEL, Notice } from "@/components/ui";
+import { useState } from "react";
+import { INPUT, LABEL } from "@/components/ui";
 
-/** Case « professionnel » du profil : ouvre « Mes classes », sans validation. */
-export default function ProfessionalForm({
-  isProfessional,
-  organization,
+/** Case « je travaille avec des enfants » + établissement : ouvre « Mes classes », sans validation. */
+export default function ProfessionalFields({
+  idPrefix,
+  isProfessional = false,
+  organization = null,
 }: {
-  isProfessional: boolean;
-  organization: string | null;
+  idPrefix: string;
+  isProfessional?: boolean;
+  organization?: string | null;
 }) {
-  const [state, action, pending] = useActionState(updateProfessional, {});
   const [checked, setChecked] = useState(isProfessional);
   return (
-    <form action={action} className="mt-2 flex flex-col gap-3">
+    <div className="flex flex-col gap-3">
       <label className="flex min-h-11 items-start gap-3 text-[15px] text-ink">
         <input
           type="checkbox"
@@ -28,12 +28,12 @@ export default function ProfessionalForm({
         <span>Je suis enseignant ou professionnel et j&rsquo;écris avec des enfants</span>
       </label>
       {checked && (
-        <div>
-          <label htmlFor="organization" className={`${LABEL} mb-1.5`}>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor={`${idPrefix}-organization`} className={LABEL}>
             Établissement ou structure
           </label>
           <input
-            id="organization"
+            id={`${idPrefix}-organization`}
             name="organization"
             type="text"
             required
@@ -44,12 +44,6 @@ export default function ProfessionalForm({
           />
         </div>
       )}
-      <div>
-        <button type="submit" disabled={pending} className={`${BTN_PRIMARY} min-h-12`}>
-          {pending ? "Enregistrement…" : "Enregistrer"}
-        </button>
-      </div>
-      <Notice error={state.error} info={state.info} />
-    </form>
+    </div>
   );
 }

@@ -51,18 +51,24 @@ export async function getBirthDate(
   return (data?.birth_date as string | null) ?? null;
 }
 
+export type ProfileValues = {
+  birth_date?: string;
+  is_professional?: boolean;
+  organization?: string | null;
+};
+
 /**
- * Enregistre la date de naissance dans le profil privé (créé au besoin).
+ * Enregistre des champs du profil privé (créé au besoin).
  * La table n'est lisible et modifiable que par son auteur (RLS).
  */
-export async function saveBirthDate(
+export async function saveProfile(
   supabase: SupabaseClient,
   authorId: string,
-  birthDate: string
+  values: ProfileValues
 ): Promise<{ error?: string }> {
   const { data: updated, error: updateError } = await supabase
     .from("author_profiles")
-    .update({ birth_date: birthDate })
+    .update(values)
     .eq("author_id", authorId)
     .select("author_id");
   if (updateError) return { error: updateError.message };
@@ -70,6 +76,17 @@ export async function saveBirthDate(
 
   const { error: insertError } = await supabase
     .from("author_profiles")
-    .insert({ author_id: authorId, birth_date: birthDate });
+    .insert({ author_id: authorId, ...values });
   return insertError ? { error: insertError.message } : {};
+}
+
+/** Case « professionnel » + établissement d'un formulaire (inscription ou profil). */
+export function parseProfessional(
+  formData: FormData
+): { is_professional: boolean; organization: string | null } | { error: string } {
+  const isProfessional = formData.get("is_professional") === "1";
+  const organization = String(formData.get("organization") ?? "").trim().slice(0, 120) || null;
+  if (isProfessional && !organization)
+    return { error: "Indique ton établissement ou ta structure (école, cabinet, association…)." };
+  return { is_professional: isProfessional, organization: isProfessional ? organization : null };
 }

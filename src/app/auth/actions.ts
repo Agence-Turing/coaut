@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { parseBirthDate, saveBirthDate } from "@/lib/profile";
+import { parseBirthDate, parseProfessional, saveProfile } from "@/lib/profile";
 import { createClient } from "@/lib/supabase/server";
 import { findContact } from "@/lib/moderation/contacts";
 
@@ -57,6 +57,8 @@ export async function signUp(
 
   const birth = parseBirthDate(String(formData.get("birth_date") ?? ""));
   if ("error" in birth) return { error: birth.error };
+  const pro = parseProfessional(formData);
+  if ("error" in pro) return { error: pro.error };
 
   const supabase = await createClient();
 
@@ -73,7 +75,7 @@ export async function signUp(
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { nickname, birth_date: birth.date } },
+    options: { data: { nickname, birth_date: birth.date, ...pro } },
   });
   if (error) {
     return {
@@ -107,7 +109,7 @@ export async function signUp(
           .insert({ nickname, user_id: data.user.id })
           .select("id")
           .maybeSingle();
-    if (author) await saveBirthDate(supabase, author.id, birth.date);
+    if (author) await saveProfile(supabase, author.id, { birth_date: birth.date, ...pro });
     redirect("/books");
   }
 

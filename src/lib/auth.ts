@@ -1,4 +1,4 @@
-import { parseBirthDate, saveBirthDate } from "@/lib/profile";
+import { parseBirthDate, saveProfile, type ProfileValues } from "@/lib/profile";
 import { createClient } from "@/lib/supabase/server";
 
 export type CurrentUser = {
@@ -34,6 +34,15 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   const signupBirthDate = parseBirthDate(
     String(user.user_metadata?.birth_date ?? "")
   );
+  // Ce qui a été saisi à l'inscription, recopié une seule fois dans le profil (avec la date).
+  const signupProfile = (date: string): ProfileValues =>
+    user.user_metadata?.is_professional
+      ? {
+          birth_date: date,
+          is_professional: true,
+          organization: String(user.user_metadata?.organization ?? "").slice(0, 120) || null,
+        }
+      : { birth_date: date };
 
   if (author) {
     const { data: profile } = await supabase
@@ -42,15 +51,20 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
       .eq("author_id", author.id)
       .maybeSingle();
     let birthDate = (profile?.birth_date as string | null) ?? null;
+    let isProfessional = Boolean(profile?.is_professional);
     if (!birthDate && "date" in signupBirthDate) {
-      const { error } = await saveBirthDate(supabase, author.id, signupBirthDate.date);
-      if (!error) birthDate = signupBirthDate.date;
+      const values = signupProfile(signupBirthDate.date);
+      const { error } = await saveProfile(supabase, author.id, values);
+      if (!error) {
+        birthDate = signupBirthDate.date;
+        isProfessional = isProfessional || Boolean(values.is_professional);
+      }
     }
     return {
       nickname: author.nickname,
       authorId: author.id,
       needsBirthDate: !birthDate,
-      isProfessional: Boolean(profile?.is_professional),
+      isProfessional,
     };
   }
 
@@ -66,14 +80,18 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     .maybeSingle();
 
   let hasBirthDate = false;
+  let isProfessional = false;
   if (created && "date" in signupBirthDate) {
-    const { error } = await saveBirthDate(supabase, created.id, signupBirthDate.date);
+    const values = signupProfile(signupBirthDate.date);
+    const { error } = await saveProfile(supabase, created.id, values);
     hasBirthDate = !error;
+    isProfessional = !error && Boolean(values.is_professional);
   }
 
   return {
     nickname: created?.nickname ?? nickname,
     authorId: created?.id ?? null,
     needsBirthDate: !hasBirthDate,
+    isProfessional,
   };
 }

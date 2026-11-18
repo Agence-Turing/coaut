@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import BirthDateForm from "@/components/BirthDateForm";
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
-import ProfessionalForm from "@/components/classes/ProfessionalForm";
+import ProfileForm from "@/components/ProfileForm";
 import { EYEBROW, Notice, PageHeading } from "@/components/ui";
 import { getCurrentUser } from "@/lib/auth";
 import { ageFrom, getBirthDate } from "@/lib/profile";
@@ -57,16 +56,18 @@ export default async function ProfilPage() {
           <Row label="Âge">
             {birthDate ? `${ageFrom(birthDate)} ans` : "Inconnu pour l'instant"}
           </Row>
-          <Row label="Date de naissance">
-            <BirthDateForm birthDate={birthDate} maxDate={today} />
-          </Row>
-          <Row label="Enseignant ou professionnel">
-            <ProfessionalForm
-              isProfessional={Boolean(pro?.is_professional)}
-              organization={(pro?.organization as string | null) ?? null}
-            />
-          </Row>
         </div>
+        <section aria-labelledby="modifier" className="flex flex-col gap-4">
+          <h2 id="modifier" className="font-display text-2xl font-bold">
+            Modifier mon profil
+          </h2>
+          <ProfileForm
+            birthDate={birthDate}
+            maxDate={today}
+            isProfessional={Boolean(pro?.is_professional)}
+            organization={(pro?.organization as string | null) ?? null}
+          />
+        </section>
       </main>
       <Footer />
     </>

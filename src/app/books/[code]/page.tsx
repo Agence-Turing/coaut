@@ -409,6 +409,7 @@ export default async function BookPage({
               <>
                 <Step marker={writing.number} tone="brand" last={!nextNickname}>
                   <TurnEditor
+                    key={writing.number}
                     bookRef={ref}
                     draft={writing.openTurn?.content ?? ""}
                     nickname={user.nickname}

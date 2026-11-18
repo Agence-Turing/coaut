@@ -39,14 +39,14 @@
 - [x] Contrôle de chaque tour par IA : insultes, spam, contenu déplacé, coordonnées ou prise de contact (2026-11-18 : repérage par le code + Claude Haiku avant publication, sur les tours, les demandes et les livres lancés ; voir « Modération » dans `AGENTS.md`).
 - [x] Correction des fautes par IA sans changer le sens des phrases (2026-11-18 : liste de corrections mot par mot par Claude Haiku, filtrée par le code, relue et validée par l'auteur avant l'envoi ; voir « Correction » dans `AGENTS.md`).
 - [ ] Réglage par livre : tout automatique, contrôle seul, ou validation à la main par Juliette (classes d'enfants dyslexiques).
-- [ ] Compte super-administrateur de Juliette, rattaché à son profil d'auteur « Armonie ».
-- [ ] Interface d'administration : spécification validée dans `docs/administration.md` (18/11).
-- [ ] Administration en tableaux filtrables : utilisateurs, livres, tours, demandes.
-- [ ] Actions d'administration : valider ou supprimer un texte, bloquer ou supprimer un utilisateur, changer un pseudo, changer le nombre de co-auteurs, archiver un livre, passer le tour d'un auteur absent.
+- [ ] Compte super-administrateur de Juliette, rattaché à son profil d'auteur « Armonie ». Le rôle existe (table `admins`, voir AGENTS.md) ; à donner à son compte : « Armonie » n'a pas de compte de connexion en préprod et quatre comptes à son nom existent (pomme2025 / contact@co-aut.com, cocotte / juliettelejeune2@free.fr, Minipuce, Anonyme_CoAut), lequel ?
+- [x] Interface d'administration : spécification validée dans `docs/administration.md` (18/11), en préprod le 18/11 sur `/admin` (Livres, Auteurs, Tours, Classes).
+- [x] Administration en tableaux filtrables : auteurs, livres, tours, classes (tri, recherche, pagination côté serveur, export CSV des auteurs). Les demandes à rejoindre n'ont pas de tableau (hors spécification du 18/11).
+- [x] Actions d'administration : modifier ou supprimer un texte, bloquer ou supprimer un utilisateur, changer un pseudo, changer le nombre de co-auteurs, archiver un livre, passer le tour d'un auteur absent. Pas de « valider » : aucune file de validation (spécification du 18/11).
 
 ### Hors devis : livres privés pour les élèves
 
-- [x] Comptes professionnels, « Mes classes », un code par élève, livres réservés à une classe, page co-aut.com/classe : voir `docs/livres-prives-eleves.md` (décidé à la démo du 16/11, en préprod le 18/11). Reste : case « professionnel » à l'inscription (aujourd'hui dans « Mon profil » seulement), glisser-déposer de l'ordre (flèches aujourd'hui), classes dans l'administration.
+- [x] Comptes professionnels, « Mes classes », un code par élève, livres réservés à une classe, page co-aut.com/classe : voir `docs/livres-prives-eleves.md` (décidé à la démo du 16/11, en préprod le 18/11). Reste : case « professionnel » à l'inscription (aujourd'hui dans « Mon profil » seulement), glisser-déposer de l'ordre (flèches aujourd'hui).
 
 ### Semaine 3 : finitions et mise en ligne
 

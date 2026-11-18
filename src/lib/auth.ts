@@ -11,6 +11,8 @@ export type CurrentUser = {
   isStudent?: boolean;
   /** Enseignant ou professionnel (case du profil) : menu « Mes classes ». */
   isProfessional?: boolean;
+  /** Compte administrateur (affiche le lien « Administration » ; les pages /admin revérifient). */
+  isAdmin?: boolean;
 };
 
 /** Utilisateur connecté (ou null). Crée sa fiche auteur au premier passage si besoin. */
@@ -21,11 +23,11 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const { data: author } = await supabase
-    .from("authors")
-    .select("id, nickname, kind")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const [{ data: author }, { data: adminFlag }] = await Promise.all([
+    supabase.from("authors").select("id, nickname, kind").eq("user_id", user.id).maybeSingle(),
+    supabase.rpc("is_admin"),
+  ]);
+  const isAdmin = adminFlag === true;
   if (author?.kind === "student") {
     return { nickname: author.nickname, authorId: author.id, needsBirthDate: false, isStudent: true };
   }
@@ -65,6 +67,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
       authorId: author.id,
       needsBirthDate: !birthDate,
       isProfessional,
+      isAdmin,
     };
   }
 
@@ -93,5 +96,6 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     authorId: created?.id ?? null,
     needsBirthDate: !hasBirthDate,
     isProfessional,
+    isAdmin,
   };
 }

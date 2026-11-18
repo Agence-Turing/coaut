@@ -13,6 +13,7 @@ type HeaderUser = {
   needsBirthDate?: boolean;
   isStudent?: boolean;
   isProfessional?: boolean;
+  isAdmin?: boolean;
 } | null;
 
 function navLinks(user: HeaderUser) {
@@ -23,6 +24,7 @@ function navLinks(user: HeaderUser) {
     { href: "/bibliotheque", label: "Bibliothèque" },
     ...(user ? [{ href: "/books/mes-livres", label: "Mes livres" }] : []),
     ...(user?.isProfessional ? [{ href: "/classes", label: "Mes classes" }] : []),
+    ...(user?.isAdmin ? [{ href: "/admin", label: "Administration" }] : []),
   ];
 }
 

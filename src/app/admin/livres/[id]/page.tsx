@@ -1,0 +1,287 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import {
+  addPlayer,
+  booksAction,
+  removePlayer,
+  setMaxPlayers,
+  updateBook,
+} from "@/app/admin/actions";
+import { ConfirmButton } from "@/components/admin/client";
+import { SMALL_BTN, SMALL_BTN_DANGER, Tag } from "@/components/admin/table";
+import { BTN_PRIMARY, BTN_SECONDARY, EYEBROW, INPUT, LABEL, LINK, Notice } from "@/components/ui";
+import {
+  STATUS_LABELS,
+  UUID_RE,
+  bookCode,
+  daysSince,
+  formatDate,
+  type AdminBookRow,
+} from "@/lib/admin/data";
+import { requireAdminPage } from "@/lib/admin/guard";
+import { noticeFrom } from "@/lib/admin/messages";
+
+const SECTION = "flex flex-col gap-4 rounded-2xl border border-line p-4 sm:p-6";
+const H2 = "font-display text-2xl font-bold text-ink";
+
+export default async function AdminBookPage({ params, searchParams }: PageProps<"/admin/livres/[id]">) {
+  const { db, authorId } = await requireAdminPage();
+  const { id } = await params;
+  if (!UUID_RE.test(id)) notFound();
+  const sp = await searchParams;
+
+  const [{ data: bookData }, { data: teamData }, { data: nicknames }] = await Promise.all([
+    db.from("admin_books").select("*").eq("id", id).maybeSingle(),
+    db
+      .from("book_players")
+      .select("author_id, position, joined_at, authors(nickname, deleted_at)")
+      .eq("book_id", id)
+      .order("position")
+      .order("joined_at"),
+    db
+      .from("authors")
+      .select("nickname")
+      .eq("kind", "adult")
+      .is("deleted_at", null)
+      .order("nickname")
+      .limit(5000),
+  ]);
+  if (!bookData) notFound();
+  const book = bookData as AdminBookRow;
+  const team = (teamData ?? []) as unknown as {
+    author_id: string;
+    position: number;
+    authors: { nickname: string; deleted_at: string | null } | null;
+  }[];
+  const back = `/admin/livres/${id}`;
+  const notice = noticeFrom(sp);
+  const launched = book.status === "launched";
+  const since = daysSince(book.last_activity_at);
+  const meInTeam = Boolean(authorId && team.some((p) => p.author_id === authorId));
+  const currentIdx = team.findIndex((p) => p.author_id === book.current_writer_id);
+  const next = currentIdx >= 0 && team.length > 1 ? team[(currentIdx + 1) % team.length] : null;
+
+  return (
+    <div className="flex max-w-3xl flex-col gap-6">
+      <div className="flex flex-col gap-2">
+        <Link href="/admin/livres" className={`${LINK} text-sm`}>
+          Retour aux livres
+        </Link>
+        <p className={EYEBROW}>
+          Livre {book.legacy_code ?? "nouveau"} · lancé le {formatDate(book.created_at)}
+        </p>
+        <h1 className="font-display text-3xl font-bold leading-tight text-ink">{book.title}</h1>
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <Tag tone={book.status === "archived" ? "warn" : "neutral"}>{STATUS_LABELS[book.status]}</Tag>
+          {book.class_id ? (
+            <Link href={`/admin/classes/${book.class_id}`} className={LINK}>
+              Livre de la classe {book.class_name}
+              {book.teacher_review ? " (relu par le prof)" : ""}
+            </Link>
+          ) : (
+            <span className="text-muted">Public</span>
+          )}
+          {book.status !== "archived" && (
+            <Link href={`/books/${bookCode(book)}`} className={LINK}>
+              Voir la page du livre
+            </Link>
+          )}
+          <Link href={`/admin/tours?livre_id=${book.id}&tri=numero&ordre=asc`} className={LINK}>
+            Voir ses {book.turns_count} tours
+          </Link>
+        </div>
+      </div>
+
+      <Notice info={notice.info} error={notice.error} />
+
+      {launched && (
+        <section className={SECTION} aria-labelledby="ecriture">
+          <h2 id="ecriture" className={H2}>
+            Écriture
+          </h2>
+          {book.current_writer_nickname ? (
+            <p className="text-[17px] text-ink">
+              C&apos;est au tour de <strong>{book.current_writer_nickname}</strong>
+              {since !== null && <span className="text-muted"> (dernier mouvement il y a {since} j)</span>}.
+              {next && (
+                <>
+                  {" "}
+                  Ensuite : {next.authors?.nickname}.
+                </>
+              )}
+            </p>
+          ) : (
+            <p className="text-muted">Personne pour l&apos;instant : l&apos;équipe est vide.</p>
+          )}
+          {team.length > 1 && (
+            <form action={booksAction}>
+              <input type="hidden" name="back" value={back} />
+              <ConfirmButton
+                name="do"
+                value={`passe:${book.id}`}
+                className={BTN_SECONDARY}
+                message={`Passer le tour de ${book.current_writer_nickname ?? "l'auteur actuel"} ? Son brouillon en cours sera supprimé.`}
+              >
+                Passer le tour
+              </ConfirmButton>
+            </form>
+          )}
+        </section>
+      )}
+
+      <section className={SECTION} aria-labelledby="equipe">
+        <h2 id="equipe" className={H2}>
+          Équipe ({team.length}
+          {book.max_players ? ` sur ${book.max_players}` : ""})
+        </h2>
+        <p className="text-sm text-muted">Dans l&apos;ordre de passage.</p>
+        <ol className="flex flex-col">
+          {team.map((p, i) => (
+            <li
+              key={p.author_id}
+              className="flex flex-wrap items-center justify-between gap-2 border-b border-line py-2 last:border-0"
+            >
+              <span className="text-[16px] text-ink">
+                {i + 1}.{" "}
+                <Link href={`/admin/auteurs/${p.author_id}`} className={LINK}>
+                  {p.authors?.nickname}
+                </Link>
+                {p.author_id === book.launcher_id && <span className="text-muted"> · lanceur</span>}
+                {launched && p.author_id === book.current_writer_id && (
+                  <>
+                    {" "}
+                    <Tag tone="soft">son tour</Tag>
+                  </>
+                )}
+              </span>
+              <form action={removePlayer}>
+                <input type="hidden" name="back" value={back} />
+                <input type="hidden" name="book_id" value={book.id} />
+                <input type="hidden" name="author_id" value={p.author_id} />
+                <ConfirmButton
+                  className={SMALL_BTN_DANGER}
+                  message={`Retirer ${p.authors?.nickname} de l'équipe ? Ses tours écrits restent ; son brouillon en cours est supprimé.`}
+                >
+                  Retirer
+                </ConfirmButton>
+              </form>
+            </li>
+          ))}
+        </ol>
+
+        <form action={addPlayer} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <input type="hidden" name="back" value={back} />
+          <input type="hidden" name="book_id" value={book.id} />
+          <label className="flex flex-1 flex-col gap-1.5">
+            <span className={LABEL}>Ajouter un co-auteur (pseudo exact)</span>
+            <input name="nickname" list="pseudos" required className={INPUT} autoComplete="off" />
+          </label>
+          <button type="submit" className={BTN_SECONDARY}>
+            Ajouter
+          </button>
+        </form>
+        <datalist id="pseudos">
+          {(nicknames ?? []).map((a) => (
+            <option key={a.nickname as string} value={a.nickname as string} />
+          ))}
+        </datalist>
+        {!meInTeam && authorId && (
+          <form action={addPlayer}>
+            <input type="hidden" name="back" value={back} />
+            <input type="hidden" name="book_id" value={book.id} />
+            <input type="hidden" name="me" value="1" />
+            <button type="submit" className={SMALL_BTN}>
+              M&apos;ajouter à l&apos;équipe
+            </button>
+          </form>
+        )}
+
+        <form action={setMaxPlayers} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <input type="hidden" name="back" value={back} />
+          <input type="hidden" name="id" value={book.id} />
+          <label className="flex flex-col gap-1.5">
+            <span className={LABEL}>Nombre de co-auteurs souhaité</span>
+            <input
+              type="number"
+              name="max_players"
+              min={Math.max(1, team.length)}
+              max={30}
+              defaultValue={book.max_players ?? team.length}
+              className={`${INPUT} sm:w-40`}
+            />
+          </label>
+          <button type="submit" className={BTN_SECONDARY}>
+            Enregistrer
+          </button>
+        </form>
+      </section>
+
+      <section className={SECTION} aria-labelledby="texte">
+        <h2 id="texte" className={H2}>
+          Titre et résumé
+        </h2>
+        <form action={updateBook} className="flex flex-col gap-4">
+          <input type="hidden" name="back" value={back} />
+          <input type="hidden" name="id" value={book.id} />
+          <label className="flex flex-col gap-1.5">
+            <span className={LABEL}>Titre</span>
+            <input name="title" required minLength={3} defaultValue={book.title} className={INPUT} />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className={LABEL}>Résumé</span>
+            <textarea
+              name="synopsis"
+              rows={6}
+              defaultValue={book.synopsis ?? ""}
+              className={`${INPUT} min-h-32`}
+            />
+          </label>
+          <button type="submit" className={`${BTN_PRIMARY} self-start`}>
+            Enregistrer
+          </button>
+        </form>
+      </section>
+
+      <section className={SECTION} aria-labelledby="statut">
+        <h2 id="statut" className={H2}>
+          Statut
+        </h2>
+        <form action={booksAction} className="flex flex-wrap gap-2">
+          <input type="hidden" name="back" value={back} />
+          <input type="hidden" name="back_after_delete" value="/admin/livres" />
+          {book.status !== "published" && (
+            <ConfirmButton
+              name="do"
+              value={`publie:${book.id}`}
+              className={BTN_SECONDARY}
+              message="Publier ce livre ? Le brouillon en cours est clos, l'équipe reçoit le mail « livre publié »."
+            >
+              Publier
+            </ConfirmButton>
+          )}
+          {book.status !== "launched" && (
+            <button type="submit" name="do" value={`relance:${book.id}`} className={BTN_SECONDARY}>
+              Remettre en cours
+            </button>
+          )}
+          {book.status !== "archived" && (
+            <button type="submit" name="do" value={`archive:${book.id}`} className={BTN_SECONDARY}>
+              Archiver
+            </button>
+          )}
+          <ConfirmButton
+            name="do"
+            value={`supprime:${book.id}`}
+            className={`${SMALL_BTN_DANGER} min-h-11 px-5 text-[15px]`}
+            message={`Supprimer définitivement « ${book.title} », son équipe et ses ${book.turns_count} tours ?`}
+          >
+            Supprimer le livre
+          </ConfirmButton>
+        </form>
+        <p className="text-sm text-muted">
+          Archiver retire le livre du site sans rien effacer. Supprimer efface tout, sans retour possible.
+        </p>
+      </section>
+    </div>
+  );
+}

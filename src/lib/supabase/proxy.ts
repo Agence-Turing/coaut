@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 /** Chemins réservés aux utilisateurs connectés. */
-const PROTECTED_PREFIXES = ["/books", "/bibliotheque", "/profil", "/classes"];
+const PROTECTED_PREFIXES = ["/books", "/bibliotheque", "/profil", "/classes", "/admin"];
 
 /** Pages sans objet pour un élève (il garde l'accès à /books/<livre> pour lire et écrire). */
 function isAdultOnly(pathname: string) {

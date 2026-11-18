@@ -30,7 +30,9 @@ export async function signIn(
           ? "Email ou mot de passe incorrect. Co-Aut a une nouvelle version : si tu avais déjà un compte, clique sur « Mot de passe oublié » pour retrouver ton accès."
           : error.code === "email_not_confirmed"
             ? "Confirme d'abord ton adresse email : clique sur le lien reçu par mail."
-            : `Connexion impossible : ${error.message}`,
+            : error.code === "user_banned"
+              ? "Ton compte est bloqué. Pour en savoir plus, écris à contact@co-aut.com."
+              : `Connexion impossible : ${error.message}`,
     };
   }
   redirect("/books");

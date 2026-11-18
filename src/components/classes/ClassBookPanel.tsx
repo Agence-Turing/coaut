@@ -127,10 +127,6 @@ export default function ClassBookPanel({
             </li>
           ))}
         </ol>
-        <p className="text-sm text-muted">
-          Les élèves n&rsquo;ont pas de mail : ils
-          voient « À toi d&rsquo;écrire » en entrant avec leur code, et tu reçois un récapitulatif chaque soir.
-        </p>
       </div>
     </section>
   );

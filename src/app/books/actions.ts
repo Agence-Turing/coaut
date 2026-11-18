@@ -14,9 +14,16 @@ import {
   notifyJoinRequest,
   notifyYourTurn,
 } from "@/lib/mail/notify";
-import { checkText, recordPublished } from "@/lib/moderation";
+import { checkText, recordPublished, type CheckResult } from "@/lib/moderation";
+import { verifierReconstruction, type Correction } from "@/lib/correction/filtre";
+import { lireRevue, signerRevue } from "@/lib/correction/jeton";
 
-export type ActionState = { error?: string; info?: string };
+export type ActionState = {
+  error?: string;
+  info?: string;
+  /** Fautes trouvées à l'envoi d'un tour : l'auteur les relit avant d'envoyer. */
+  revue?: { texte: string; corrections: Correction[]; jeton: string | null };
+};
 
 const AUTHOR_MISSING =
   "Ta fiche auteur n'existe pas encore (policies RLS manquantes côté Supabase). Exécute supabase/migrations/0004_auth_policies.sql puis recharge la page.";
@@ -216,8 +223,11 @@ export async function saveTurn(
       error: `Ce n'est pas ton tour d'écrire${state.currentNickname ? ` — c'est celui de ${state.currentNickname}` : ""}.`,
     };
 
-  // Modération au moment où le tour devient visible (le brouillon, lui, n'est montré à personne).
-  // Bloqué : rien n'est enregistré, le texte reste dans l'éditeur pour être corrigé.
+  // Modération et correction des fautes au moment où le tour devient visible (le brouillon,
+  // lui, n'est montré à personne), en un seul passage. Bloqué : rien n'est enregistré, le texte
+  // reste dans l'éditeur. Des fautes : l'auteur les relit (CorrectionsRevue) puis renvoie son
+  // texte avec le jeton signé ; s'il ne diffère de l'original que par les corrections, la
+  // modération n'est pas refaite.
   const moderated = {
     text: content,
     kind: "turn" as const,
@@ -225,7 +235,35 @@ export async function saveTurn(
     bookId: book.id,
     bookTitle: book.title,
   };
-  const check = finish ? await checkText(moderated) : null;
+  let check: CheckResult | null = null;
+  if (finish && formData.get("revu") === "1") {
+    const revue = lireRevue(String(formData.get("jeton") ?? ""), {
+      auteur: user.authorId,
+      livre: book.id,
+    });
+    check =
+      revue && verifierReconstruction(revue.texte, content, revue.corrections)
+        ? { ok: true, status: revue.statut }
+        : await checkText(moderated);
+  } else if (finish) {
+    check = await checkText({
+      ...moderated,
+      correction: {
+        resume: book.synopsis,
+        tours: turns.filter((t) => t.id !== state.openTurn?.id).map((t) => t.content),
+      },
+    });
+    if (check.ok && check.corrections?.length) {
+      const jeton = signerRevue({
+        texte: content,
+        corrections: check.corrections,
+        statut: check.status,
+        auteur: user.authorId,
+        livre: book.id,
+      });
+      return { revue: { texte: content, corrections: check.corrections, jeton } };
+    }
+  }
   if (check && !check.ok) return { error: check.message };
 
   const supabase = await createClient();
@@ -271,7 +309,7 @@ export async function saveTurn(
   return finish
     ? book.teacher_review
       ? { info: "Ton tour est terminé ! Ton enseignant va le relire avant de passer la plume." }
-      : { info: "Ton tour est terminé ! Au suivant d'écrire la suite. ✍️" }
+      : { info: "Ton tour est terminé ! Au suivant d'écrire la suite." }
     : { info: "Brouillon enregistré. Tu peux reprendre quand tu veux." };
 }
 

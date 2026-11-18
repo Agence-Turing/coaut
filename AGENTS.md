@@ -75,7 +75,7 @@ Spécification : `docs/livres-prives-eleves.md`. Migration `0009_livres_prives_e
 
 ## Modération
 
-Tout texte saisi par un auteur et visible par d'autres passe par `checkText()` (`src/lib/moderation/index.ts`) avant d'être enregistré : tour terminé (et brouillon du lanceur publié avec le livre), message d'une demande pour rejoindre, titre + thèmes + résumé d'un livre lancé. Le pseudonyme, à l'inscription, ne passe que le repérage par le code. Les brouillons ne sont pas vérifiés (montrés à personne). La correction orthographique se branchera dans `checkText()`, même passage.
+Tout texte saisi par un auteur et visible par d'autres passe par `checkText()` (`src/lib/moderation/index.ts`) avant d'être enregistré : tour terminé (et brouillon du lanceur publié avec le livre), message d'une demande pour rejoindre, titre + thèmes + résumé d'un livre lancé. Le pseudonyme, à l'inscription, ne passe que le repérage par le code. Les brouillons ne sont pas vérifiés (montrés à personne). La correction des fautes des tours passe dans le même appel (voir « Correction »).
 
 - **Étage 1, code** (`contacts.ts`, tests `contacts.test.ts`, `npm test`) : liens, e-mails, téléphones FR et internationaux, numéro dicté en lettres, réseau suivi d'un identifiant, `@pseudo`. Bloque tout de suite.
 - **Étage 2, Claude Haiku** (`ai.ts`, modèle `claude-haiku-5-5`, sortie JSON verdict + catégorie + raison, sans réflexion, 300 jetons de sortie max, 5 s max, sans nouvel essai) : coordonnées déguisées, insulte à une vraie personne, sexuel, malsain, spam, hors sujet. Fiction : violence et insultes entre personnages permises. Coût mesuré : ~1 600 jetons en entrée, ~0,0002 $ par texte. Jeu d'essai contre l'IA réelle : `ANTHROPIC_API_KEY=… npm run essai-moderation`.
@@ -84,6 +84,16 @@ Tout texte saisi par un auteur et visible par d'autres passe par `checkText()` (
 - `turns.moderation_status` : null = pas contrôlé (tours d'avant), `ok`, `review`, `blocked` — mêmes noms que la migration 0010 de l'administration.
 - **Clé** : `ANTHROPIC_API_KEY` dans `/opt/coaut/app/.env`. En préprod c'est la clé de l'agence (coffre Bitwarden « Turing — Claude API ») ; **en production il faudra une clé au nom de Co-Aut**. Sans clé, tout passe en `review`.
 - Limite connue : la RLS laisse un auteur écrire ses tours directement par l'API Supabase, sans passer par l'action serveur ni la modération.
+
+## Correction
+
+Fautes d'orthographe et de grammaire des tours, **sans jamais réécrire le texte** (beaucoup d'auteurs sont des enfants : tournures, répétitions et style restent). Code dans `src/lib/correction/`, lancé par `checkText()` (option `correction`) en parallèle de la modération : un seul temps d'attente à « Terminer mon tour ».
+
+- **IA** (`ia.ts`, `claude-haiku-5-5`, réflexion adaptative, effort `low`, sortie JSON, 8 s max, sans nouvel essai) : ne renvoie jamais le texte, seulement des propositions `extrait` (3-6 mots copiés pour situer) / `fautif` (1-2 mots) / `correction` / `type` (orthographe, accord, conjugaison, homophone, ponctuation, majuscule). Reçoit les noms propres du livre. Sans réponse à temps ou sans clé : envoi direct, sans correction. Coût mesuré : ~1 500 jetons en entrée, ~400 en sortie, ~0,0004 $ par tour ; médiane 2,5 s, textes très fautifs 5-8 s.
+- **Filtre** (`filtre.ts`, pur, tests `filtre.test.ts`, `npm test`) : rejette plus de deux mots, ajout ou suppression de mot, mot remplacé par un autre mot (acceptés seulement : mêmes lettres aux accents/majuscules/apostrophes près, même clé phonétique française simplifiée, même racine + terminaison d'accord ou de conjugaison, mots-outils de la même famille le/la/les, faute de frappe d'une lettre dès 5 lettres ou de deux dès 8), passage introuvable ou ambigu, chiffres, onomatopées (lettre triplée), mot à majuscule hors début de phrase (nom propre), faute d'« orthographe » sur un mot déjà écrit ailleurs dans le livre. Le texte corrigé est reconstruit par le code et vérifié (`verifierReconstruction`).
+- **Interface** (`CorrectionsRevue.tsx`, dans `TurnEditor`) : s'il y a des corrections, l'auteur voit son texte avec les mots corrigés surlignés (ancien barré, nouveau en gras, boutons de 44 px), touche un mot pour garder sa version, puis « Envoyer » (corrections acceptées par défaut) ou « Revenir à mon texte ». Aucune correction : envoi direct.
+- **Un seul passage** : la relecture renvoie un jeton signé (`jeton.ts`, HMAC avec `CORRECTION_SECRET`, sinon `SUPABASE_SERVICE_ROLE_SECRET` ou `CRON_SECRET`) qui porte le texte vérifié, ses corrections et le verdict de la modération ; à l'envoi, si le texte reçu n'en diffère que par ces corrections, la modération n'est pas refaite. Sinon (jeton absent, expiré, texte modifié) elle repasse.
+- Jeu d'essai contre l'IA réelle (11 pièges : homophones, participes, noms inventés, onomatopées, langage parlé, texte sans faute) : `ANTHROPIC_API_KEY=… npm run essai-correction`.
 
 ## Couvertures des livres
 

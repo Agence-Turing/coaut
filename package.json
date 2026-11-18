@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "node --test 'src/**/*.test.ts'",
-    "essai-moderation": "node --no-warnings scripts/essai-moderation.ts"
+    "essai-moderation": "node --no-warnings scripts/essai-moderation.ts",
+    "essai-correction": "node --no-warnings scripts/essai-correction.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.10.0",

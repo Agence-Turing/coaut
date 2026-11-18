@@ -3,13 +3,15 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { reviewWithClaude, type AiCategory, type TextKind } from "./ai";
 import { findContact } from "./contacts";
 import { categoryMessage, contactMessage, type BlockCategory } from "./messages";
+import { corrigerTour, type Correction } from "@/lib/correction";
 
 export type { TextKind } from "./ai";
 
 /**
  * Vérification d'un texte avant envoi : point d'entrée unique, appelé par chaque action serveur
  * qui publie un texte saisi par un utilisateur (tour, demande pour rejoindre, lancement de livre).
- * Le prochain chantier (correction orthographique) se branchera ici, dans le même passage.
+ * La correction orthographique (src/lib/correction/) passe dans le même appel, en parallèle de
+ * la lecture par l'IA, quand l'appelant la demande (tours) : un seul temps d'attente.
  *
  * 1. Repérage des coordonnées par le code (contacts.ts), sans IA : bloque tout de suite.
  * 2. Lecture par Claude Haiku (ai.ts). Panne ou délai dépassé : le texte passe, « à revoir »
@@ -25,6 +27,8 @@ export type TextToCheck = {
   bookId?: string | null;
   /** Titre du livre, donné à l'IA comme contexte. */
   bookTitle?: string | null;
+  /** Demande aussi la correction des fautes (tours), avec le reste du livre comme contexte. */
+  correction?: { resume?: string | null; tours?: (string | null)[] };
 };
 
 export type CheckResult =
@@ -34,6 +38,8 @@ export type CheckResult =
       status: "ok" | "review";
       /** Panne de l'IA, pour le journal. */
       aiError?: string;
+      /** Fautes à proposer à l'auteur (vide si non demandé ou si l'IA n'a pas répondu). */
+      corrections?: Correction[];
     }
   | {
       ok: false;
@@ -47,6 +53,11 @@ export type CheckResult =
 
 export async function checkText(input: TextToCheck): Promise<CheckResult> {
   const text = input.text.trim();
+  // Correction lancée tout de suite, en parallèle de la modération.
+  const correction = input.correction
+    ? corrigerTour(text, { titre: input.bookTitle, ...input.correction })
+    : null;
+  const corrections = async () => (correction ? (await correction).corrections : []);
 
   const contact = findContact(text);
   if (contact) {
@@ -66,9 +77,10 @@ export async function checkText(input: TextToCheck): Promise<CheckResult> {
   });
   if (review.status === "error") {
     console.error(`Modération IA indisponible (${input.kind}) : ${review.error}`);
-    return { ok: true, status: "review", aiError: review.error };
+    return { ok: true, status: "review", aiError: review.error, corrections: await corrections() };
   }
-  if (review.verdict.verdict === "ok") return { ok: true, status: "ok" };
+  if (review.verdict.verdict === "ok")
+    return { ok: true, status: "ok", corrections: await corrections() };
 
   const category = review.verdict.categorie as BlockCategory;
   const result: CheckResult = {

@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { saveTurn, type ActionState } from "@/app/books/actions";
 import { BTN_PRIMARY, BTN_SECONDARY, Notice } from "@/components/ui";
+import CorrectionsRevue from "@/components/CorrectionsRevue";
 
 /** Coups de pouce : une phrase d'aide, sans IA ni appel réseau. */
 const TIPS = [
@@ -38,6 +39,27 @@ export default function TurnEditor({
   // modération doit rester dans l'éditeur pour être corrigé.
   const [text, setText] = useState(draft);
   const length = text.length;
+  // Fautes trouvées à l'envoi : relecture tant que l'auteur ne revient pas à son texte.
+  const [revueFermee, setRevueFermee] = useState<ActionState | null>(null);
+  const revue = state.revue && revueFermee !== state ? state.revue : null;
+
+  if (revue)
+    return (
+      <CorrectionsRevue
+        key={revue.jeton ?? revue.texte}
+        texte={revue.texte}
+        corrections={revue.corrections}
+        jeton={revue.jeton}
+        bookRef={bookRef}
+        action={action}
+        pending={pending}
+        onTexte={setText}
+        onRetour={(final) => {
+          setText(final);
+          setRevueFermee(state);
+        }}
+      />
+    );
 
   return (
     <form action={action} className="flex flex-col gap-4">

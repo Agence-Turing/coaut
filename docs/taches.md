@@ -37,7 +37,7 @@
 ### Semaine 2 : IA et administration
 
 - [x] Contrôle de chaque tour par IA : insultes, spam, contenu déplacé, coordonnées ou prise de contact (2026-11-18 : repérage par le code + Claude Haiku avant publication, sur les tours, les demandes et les livres lancés ; voir « Modération » dans `AGENTS.md`).
-- [ ] Correction des fautes par IA sans changer le sens des phrases.
+- [x] Correction des fautes par IA sans changer le sens des phrases (2026-11-18 : liste de corrections mot par mot par Claude Haiku, filtrée par le code, relue et validée par l'auteur avant l'envoi ; voir « Correction » dans `AGENTS.md`).
 - [ ] Réglage par livre : tout automatique, contrôle seul, ou validation à la main par Juliette (classes d'enfants dyslexiques).
 - [ ] Compte super-administrateur de Juliette, rattaché à son profil d'auteur « Armonie ».
 - [ ] Interface d'administration : spécification validée dans `docs/administration.md` (18/11).

@@ -1,6 +1,6 @@
 # Livres privés pour les élèves (classes)
 
-Demandé par Juliette à la démo du 16/11 : un enseignant ou un professionnel qui travaille avec des enfants (école, orthophoniste, psy…) crée un livre où seuls ses élèves écrivent. Les enfants n'ont ni e-mail ni téléphone, et un code commun à la classe ne marche pas : un élève écrirait à la place d'un autre (c'est arrivé à l'école EDI). Donc **un code personnel par élève**. Hors devis D-2026-1121.
+Demandé par Juliette à la démo du 16/11 : un enseignant ou un professionnel qui travaille avec des enfants (école, orthophoniste, psy…) crée un livre où seuls ses élèves écrivent. Les enfants n'ont ni e-mail ni téléphone, et un code commun à la classe ne marche pas : un élève écrirait à la place d'un autre (c'est arrivé à l'école EDI). Donc **un code personnel par élève**. Hors devis D-2026-1121, non facturé.
 
 Aujourd'hui, les élèves se connectent avec le compte de l'enseignant : ils voient son e-mail et l'enseignant reçoit toutes les notifications.
 
@@ -42,7 +42,7 @@ CM1 — École Jules Ferry                  [Imprimer les codes]
 Dans « Lancer un livre », le professionnel voit un choix en plus : **Public** (comme aujourd'hui) ou **Réservé à ma classe** (+ choix de la classe).
 
 - Pas de demandes à rejoindre : les élèves de la classe sont dans l'équipe d'office. Le prof règle l'ordre de passage (glisser-déposer, ou au hasard) et peut passer le tour d'un absent.
-- Le livre n'apparaît pas dans « Rejoindre un livre ». Une fois publié, le prof choisit : visible dans la bibliothèque publique, ou seulement pour la classe.
+- Le livre n'apparaît pas dans « Rejoindre un livre ». Une fois publié, il est visible de tous dans la bibliothèque publique.
 - Validation : le prof peut relire chaque tour avant qu'il soit ajouté (classes d'enfants dyslexiques), en plus du contrôle par IA prévu.
 
 ### 4. Le côté élève
@@ -70,10 +70,9 @@ Les élèves n'ont pas d'e-mail : pas de « à ton tour » ni de relances pour e
 - RLS : un élève ne lit et n'écrit que les livres de sa classe ; un livre de classe n'est lisible que par la classe et son prof tant qu'il n'est pas publié en public.
 - Cron des relances et mails « à ton tour » : ignorer les auteurs `student`, ajouter le récap quotidien du prof.
 
-## À trancher avec Juliette
+## Décisions (Toni, 18/11)
 
-1. Un élève peut-il lire la bibliothèque publique (sans écrire) ?
-2. Livre de classe publié : visible publiquement par défaut ou non ?
-3. Que deviennent les comptes élèves en fin d'année (archivage de la classe, codes désactivés) ?
-
-Côté agence : facturation de ce lot hors devis.
+- Un élève ne voit que les livres de sa classe, rien d'autre (pas de bibliothèque publique).
+- Un livre de classe publié est visible de tous dans la bibliothèque publique.
+- Le code d'un élève reste valable tant qu'il a un livre de sa classe encore ouvert (ou que la classe n'a pas encore de livre) ; quand tous les livres de la classe sont publiés ou archivés, le code ne marche plus (message « Ton livre est terminé »). Le prof peut relancer un livre pour la même classe, ce qui réactive les codes.
+- Lot non facturé (geste commercial).

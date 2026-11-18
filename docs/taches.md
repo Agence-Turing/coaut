@@ -40,6 +40,7 @@
 - [ ] Correction des fautes par IA sans changer le sens des phrases.
 - [ ] Réglage par livre : tout automatique, contrôle seul, ou validation à la main par Juliette (classes d'enfants dyslexiques).
 - [ ] Compte super-administrateur de Juliette, rattaché à son profil d'auteur « Armonie ».
+- [ ] Interface d'administration : spécification validée dans `docs/administration.md` (18/11).
 - [ ] Administration en tableaux filtrables : utilisateurs, livres, tours, demandes.
 - [ ] Actions d'administration : valider ou supprimer un texte, bloquer ou supprimer un utilisateur, changer un pseudo, changer le nombre de co-auteurs, archiver un livre, passer le tour d'un auteur absent.
 

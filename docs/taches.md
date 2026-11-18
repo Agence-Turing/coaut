@@ -64,6 +64,8 @@
 
 ## Questions à Juliette
 
+- (point du vendredi 20/11) Correction des fautes : la liste de corrections mot par mot validée par l'auteur lui suffit-elle, ou veut-elle un texte réécrit par l'IA ?
+
 - A-t-elle accès au Bitbucket de l'ancien développeur (sources de l'ancien site) ?
 - Resend ou Brevo pour les mails automatiques ?
 - Lancer un livre : libre, ou validé par elle ?

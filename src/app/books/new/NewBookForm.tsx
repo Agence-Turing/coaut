@@ -123,15 +123,6 @@ export default function NewBookForm({
                 </div>
                 <p className={HINT}>Tu pourras le changer ensuite sur la page du livre.</p>
               </div>
-              <label className="flex min-h-11 items-start gap-3 text-[15px]">
-                <input
-                  type="checkbox"
-                  name="teacher_review"
-                  value="1"
-                  className="mt-0.5 h-5 w-5 flex-none accent-ink"
-                />
-                <span>Je relis chaque tour avant qu&rsquo;il soit ajouté au livre</span>
-              </label>
             </div>
           )}
         </fieldset>

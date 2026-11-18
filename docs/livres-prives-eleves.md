@@ -43,7 +43,7 @@ Dans « Lancer un livre », le professionnel voit un choix en plus : **Public** 
 
 - Pas de demandes à rejoindre : les élèves de la classe sont dans l'équipe d'office. Le prof règle l'ordre de passage (glisser-déposer, ou au hasard) et peut passer le tour d'un absent.
 - Le livre n'apparaît pas dans « Rejoindre un livre ». Une fois publié, il est visible de tous dans la bibliothèque publique.
-- Validation : le prof peut relire chaque tour avant qu'il soit ajouté (classes d'enfants dyslexiques), en plus du contrôle par IA prévu.
+- Pas de relecture par le prof (décision du 18/11) : chaque tour passe par la modération et la correction IA, comme un tour classique.
 
 ### 4. Le côté élève
 

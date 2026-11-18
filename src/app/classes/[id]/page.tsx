@@ -17,9 +17,6 @@ export const metadata: Metadata = { title: "Ma classe | Co-Aut" };
 const SMALL_BTN =
   "inline-flex min-h-11 items-center justify-center rounded-[10px] border border-line-strong bg-paper px-3.5 text-sm font-semibold text-ink hover:border-ink";
 
-/** Élèves affichés avant « Voir les autres ». */
-const VISIBLE_STUDENTS = 8;
-
 export default async function ClassPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const user = await getCurrentUser();
@@ -111,40 +108,7 @@ export default async function ClassPage({ params }: { params: Promise<{ id: stri
           </div>
         </PageHeading>
 
-        <section aria-labelledby="eleves" className="flex flex-col gap-3">
-          <h2 id="eleves" className="font-display text-2xl font-bold">
-            {students.length} élève{students.length > 1 ? "s" : ""}
-          </h2>
-          {students.length === 0 ? (
-            <p className="text-[17px] text-muted">Pas encore d&rsquo;élève dans cette classe.</p>
-          ) : (
-            <>
-              <ul className="flex flex-col rounded-2xl border border-line">
-                {students.slice(0, VISIBLE_STUDENTS).map(studentRow)}
-              </ul>
-              {students.length > VISIBLE_STUDENTS && (
-                <details className="group">
-                  <summary className={`${LINK} inline-flex min-h-11 cursor-pointer items-center text-[15px] group-open:hidden`}>
-                    Voir les {students.length - VISIBLE_STUDENTS} autres élèves
-                  </summary>
-                  <ul className="flex flex-col rounded-2xl border border-line">
-                    {students.slice(VISIBLE_STUDENTS).map(studentRow)}
-                  </ul>
-                </details>
-              )}
-            </>
-          )}
-          <details className="rounded-2xl border border-line p-5 sm:p-6">
-            <summary className={`${LINK} inline-flex min-h-11 cursor-pointer items-center text-[15px]`}>
-              Ajouter des élèves
-            </summary>
-            <div className="mt-4">
-              <AddStudentsForm classId={cls.id} />
-            </div>
-          </details>
-        </section>
-
-        <section aria-labelledby="livres" className="flex flex-col gap-5 border-t border-line pt-8">
+        <section aria-labelledby="livres" className="flex flex-col gap-5">
           <h2 id="livres" className="font-display text-2xl font-bold">
             Livres de la classe
           </h2>
@@ -160,6 +124,27 @@ export default async function ClassPage({ params }: { params: Promise<{ id: stri
             </BookShelf>
           )}
           <p className={EYEBROW}>Un livre publié rejoint la bibliothèque publique de Co-Aut.</p>
+        </section>
+
+        <section aria-labelledby="eleves" className="flex flex-col gap-3 border-t border-line pt-8">
+          <h2 id="eleves" className="font-display text-2xl font-bold">
+            {students.length} élève{students.length > 1 ? "s" : ""}
+          </h2>
+          {students.length === 0 ? (
+            <p className="text-[17px] text-muted">Pas encore d&rsquo;élève dans cette classe.</p>
+          ) : (
+            <ul className="flex flex-col rounded-2xl border border-line">
+              {students.map(studentRow)}
+            </ul>
+          )}
+          <details className="rounded-2xl border border-line p-5 sm:p-6">
+            <summary className={`${LINK} inline-flex min-h-11 cursor-pointer items-center text-[15px]`}>
+              Ajouter des élèves
+            </summary>
+            <div className="mt-4">
+              <AddStudentsForm classId={cls.id} />
+            </div>
+          </details>
         </section>
       </main>
       <Footer />

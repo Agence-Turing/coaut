@@ -253,7 +253,7 @@ export async function createClassBook(
       launcher_id: pro.authorId,
       max_players: order.length,
       class_id: classId,
-      teacher_review: formData.get("teacher_review") === "1",
+      teacher_review: false, // tours validés par l'IA comme un tour classique, pas de relecture du prof
     })
     .select("id")
     .single();

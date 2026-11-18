@@ -36,7 +36,7 @@
 
 ### Semaine 2 : IA et administration
 
-- [ ] Contrôle de chaque tour par IA : insultes, spam, contenu déplacé, coordonnées ou prise de contact.
+- [x] Contrôle de chaque tour par IA : insultes, spam, contenu déplacé, coordonnées ou prise de contact (2026-11-18 : repérage par le code + Claude Haiku avant publication, sur les tours, les demandes et les livres lancés ; voir « Modération » dans `AGENTS.md`).
 - [ ] Correction des fautes par IA sans changer le sens des phrases.
 - [ ] Réglage par livre : tout automatique, contrôle seul, ou validation à la main par Juliette (classes d'enfants dyslexiques).
 - [ ] Compte super-administrateur de Juliette, rattaché à son profil d'auteur « Armonie ».

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { randomInt } from "node:crypto";
 import { getCurrentUser } from "@/lib/auth";
@@ -13,6 +14,7 @@ import {
   listStudents,
   parseFirstNames,
 } from "@/lib/classes";
+import { checkText, recordPublished } from "@/lib/moderation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -224,6 +226,15 @@ export async function createClassBook(
   if (synopsis.length < 20)
     return { error: "Écris un résumé un peu plus complet (20 caractères minimum) : c'est le point de départ des élèves." };
 
+  // Modération : titre, thèmes et résumé sont lus par les élèves, puis par tous une fois publié.
+  const moderated = {
+    text: `Titre : ${title}\nThèmes : ${themes.join(", ") || "aucun"}\nRésumé : ${synopsis}`,
+    kind: "book" as const,
+    authorId: pro.authorId,
+  };
+  const check = await checkText(moderated);
+  if (!check.ok) return { error: check.message };
+
   const students = await listStudents(classId);
   if (students.length === 0) return { error: "Cette classe n'a pas encore d'élèves." };
   const order = students.slice();
@@ -258,6 +269,7 @@ export async function createClassBook(
     .from("book_players")
     .insert(order.map((s, i) => ({ book_id: book.id, author_id: s.author_id, position: i })));
   if (teamError) console.error("Équipe du livre de classe :", teamError.message);
+  after(() => recordPublished({ ...moderated, bookId: book.id, refId: book.id }, check));
 
   revalidatePath(`/classes/${classId}`);
   redirect(`/books/${book.id}`);

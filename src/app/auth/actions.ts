@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { parseBirthDate, saveBirthDate } from "@/lib/profile";
 import { createClient } from "@/lib/supabase/server";
+import { findContact } from "@/lib/moderation/contacts";
 
 export type AuthState = {
   error?: string;
@@ -45,6 +46,13 @@ export async function signUp(
 
   if (nickname.length < 3) {
     return { error: "Choisis un pseudonyme d'au moins 3 caractères." };
+  }
+  // Le pseudonyme est visible de tous : pas de coordonnées dedans (repérage par le code seul).
+  if (findContact(nickname)) {
+    return {
+      error:
+        "Ton pseudonyme ressemble à une coordonnée (e-mail, numéro, lien ou réseau social). Choisis-en un autre.",
+    };
   }
 
   const birth = parseBirthDate(String(formData.get("birth_date") ?? ""));

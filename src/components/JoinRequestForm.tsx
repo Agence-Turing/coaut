@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { requestJoin, type ActionState } from "@/app/books/actions";
 import { BTN_PRIMARY, INPUT, Notice } from "@/components/ui";
 
@@ -15,6 +15,8 @@ export default function JoinRequestForm({
     requestJoin,
     {}
   );
+  // Champ contrôlé : le message refusé par la modération reste affiché pour être corrigé.
+  const [message, setMessage] = useState("");
 
   if (state.info) return <Notice info={state.info} />;
 
@@ -35,6 +37,8 @@ export default function JoinRequestForm({
         required
         minLength={10}
         rows={3}
+        value={message}
+        onChange={(e) => setMessage(e.target.value)}
         className={INPUT}
       />
       <Notice error={state.error} />

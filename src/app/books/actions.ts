@@ -14,6 +14,7 @@ import {
   notifyJoinRequest,
   notifyYourTurn,
 } from "@/lib/mail/notify";
+import { checkText, recordPublished } from "@/lib/moderation";
 
 export type ActionState = { error?: string; info?: string };
 
@@ -46,6 +47,15 @@ export async function createBook(
   if (!maxPlayers || maxPlayers < 2 || maxPlayers > 10)
     return { error: "Choisis un nombre de co-auteurs entre 2 et 10 (toi compris)." };
 
+  // Modération : titre, thèmes et résumé sont visibles de tous.
+  const moderated = {
+    text: `Titre : ${title}\nThèmes : ${themes.join(", ") || "aucun"}\nRésumé : ${synopsis}`,
+    kind: "book" as const,
+    authorId: user.authorId,
+  };
+  const check = await checkText(moderated);
+  if (!check.ok) return { error: check.message };
+
   const supabase = await createClient();
   const { data: book, error } = await supabase
     .from("books")
@@ -70,6 +80,8 @@ export async function createBook(
     position: 0,
   });
 
+  after(() => recordPublished({ ...moderated, bookId: book.id, refId: book.id }, check));
+
   redirect(`/books/${book.id}`);
 }
 
@@ -87,12 +99,25 @@ export async function requestJoin(
   if (message.length < 10)
     return { error: "Écris un petit message au lanceur (10 caractères minimum) pour te présenter." };
 
+  const moderated = {
+    text: message,
+    kind: "join_request" as const,
+    authorId: user.authorId,
+    bookId,
+  };
+  const check = await checkText(moderated);
+  if (!check.ok) return { error: check.message };
+
   const supabase = await createClient();
-  const { error } = await supabase.from("join_requests").insert({
-    book_id: bookId,
-    author_id: user.authorId,
-    message,
-  });
+  const { data: created, error } = await supabase
+    .from("join_requests")
+    .insert({
+      book_id: bookId,
+      author_id: user.authorId,
+      message,
+    })
+    .select("id")
+    .single();
   if (error) {
     if (error.code === "23505")
       return { error: "Tu as déjà envoyé une demande pour ce livre." };
@@ -100,7 +125,10 @@ export async function requestJoin(
   }
 
   const requesterId = user.authorId;
-  after(() => notifyJoinRequest(bookId, requesterId));
+  after(async () => {
+    await recordPublished({ ...moderated, refId: created?.id ?? null }, check);
+    await notifyJoinRequest(bookId, requesterId);
+  });
 
   revalidatePath(`/books/${bookRef}`);
   return { info: "Demande envoyée ! Le lanceur du livre va te répondre." };
@@ -188,6 +216,18 @@ export async function saveTurn(
       error: `Ce n'est pas ton tour d'écrire${state.currentNickname ? ` — c'est celui de ${state.currentNickname}` : ""}.`,
     };
 
+  // Modération au moment où le tour devient visible (le brouillon, lui, n'est montré à personne).
+  // Bloqué : rien n'est enregistré, le texte reste dans l'éditeur pour être corrigé.
+  const moderated = {
+    text: content,
+    kind: "turn" as const,
+    authorId: user.authorId,
+    bookId: book.id,
+    bookTitle: book.title,
+  };
+  const check = finish ? await checkText(moderated) : null;
+  if (check && !check.ok) return { error: check.message };
+
   const supabase = await createClient();
   const payload = {
     content,
@@ -195,23 +235,36 @@ export async function saveTurn(
     // Livre de classe avec relecture : le tour attend la validation du prof.
     is_validated: finish && !book.teacher_review,
   };
-  const { error } = state.openTurn
-    ? await supabase.from("turns").update(payload).eq("id", state.openTurn.id)
-    : await supabase.from("turns").insert({
-        ...payload,
-        book_id: book.id,
-        number: state.number,
-        author_id: user.authorId,
-      });
+  const { data: saved, error } = state.openTurn
+    ? await supabase
+        .from("turns")
+        .update(payload)
+        .eq("id", state.openTurn.id)
+        .select("id")
+        .maybeSingle()
+    : await supabase
+        .from("turns")
+        .insert({
+          ...payload,
+          book_id: book.id,
+          number: state.number,
+          author_id: user.authorId,
+        })
+        .select("id")
+        .single();
   if (error) {
     if (error.code === "23505")
       return { error: "Un autre tour vient d'être enregistré, recharge la page." };
     return { error: `Enregistrement impossible : ${error.message}` };
   }
 
-  if (finish) {
+  if (finish && check?.ok) {
     const writerId = user.authorId;
-    after(() => notifyYourTurn(book.id, writerId));
+    const turnId = saved?.id ?? state.openTurn?.id ?? null;
+    after(async () => {
+      await recordPublished({ ...moderated, refId: turnId }, check);
+      await notifyYourTurn(book.id, writerId);
+    });
   }
 
   revalidatePath(`/books/${bookRef}`);
@@ -251,6 +304,19 @@ export async function publishBook(
       error: "Un tour d'écriture est en cours : attends qu'il soit terminé pour publier.",
     };
 
+  // Ton brouillon devient visible à la publication : il passe la même vérification qu'un tour.
+  const draftCheck = openTurn?.content?.trim()
+    ? await checkText({
+        text: openTurn.content,
+        kind: "turn",
+        authorId: user.authorId,
+        bookId: book.id,
+        bookTitle: book.title,
+      })
+    : null;
+  if (draftCheck && !draftCheck.ok)
+    return { error: `Ton brouillon n'a pas pu être publié. ${draftCheck.message}` };
+
   const supabase = await createClient();
   if (openTurn) {
     // Ton propre brouillon : on le clôt (il ne sera affiché que s'il a du contenu).
@@ -266,7 +332,21 @@ export async function publishBook(
   if (error) return { error: `Publication impossible : ${error.message}` };
 
   const publisherId = user.authorId;
-  after(() => notifyBookPublished(book.id, publisherId));
+  after(async () => {
+    if (openTurn?.content && draftCheck?.ok) {
+      await recordPublished(
+        {
+          text: openTurn.content,
+          kind: "turn",
+          authorId: publisherId,
+          bookId: book.id,
+          refId: openTurn.id,
+        },
+        draftCheck
+      );
+    }
+    await notifyBookPublished(book.id, publisherId);
+  });
 
   revalidatePath(`/books/${bookRef}`);
   return { info: "📖 Ton livre est publié ! Il rejoint la bibliothèque de Co-Aut." };

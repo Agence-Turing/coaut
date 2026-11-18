@@ -34,7 +34,10 @@ export default function TurnEditor({
     {}
   );
   const [tip, setTip] = useState<number | null>(null);
-  const [length, setLength] = useState(draft.length);
+  // Champ contrôlé : React vide les formulaires après une action ; un texte refusé par la
+  // modération doit rester dans l'éditeur pour être corrigé.
+  const [text, setText] = useState(draft);
+  const length = text.length;
 
   return (
     <form action={action} className="flex flex-col gap-4">
@@ -88,9 +91,9 @@ export default function TurnEditor({
         id="turn-content"
         name="content"
         rows={8}
-        defaultValue={draft}
+        value={text}
         placeholder="Que se passe-t-il ensuite ?"
-        onChange={(e) => setLength(e.target.value.length)}
+        onChange={(e) => setText(e.target.value)}
         className="block w-full resize-y rounded-xl border-2 border-ink bg-paper p-4 font-display text-xl leading-relaxed text-ink placeholder:text-subtle focus:outline-none focus:ring-2 focus:ring-ink/20"
       />
 

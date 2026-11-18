@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, type ChangeEvent } from "react";
 import { createBook, type ActionState } from "@/app/books/actions";
 import { BTN_PRIMARY, HINT, INPUT, LABEL, Notice } from "@/components/ui";
 
@@ -39,6 +39,22 @@ export default function NewBookForm({
     defaultClassId && classes.some((c) => c.id === defaultClassId) ? "class" : "public"
   );
   const forClass = visibility === "class";
+  // Champs contrôlés : React vide le formulaire après l'action ; en cas de refus (modération ou
+  // champ invalide), ce qui a été saisi doit rester pour être corrigé.
+  const [fields, setFields] = useState({
+    title: "",
+    themes: "",
+    scolar_level: "",
+    max_players: "2",
+    synopsis: "",
+  });
+  const bind = (name: keyof typeof fields) => ({
+    name,
+    value: fields[name],
+    onChange: (
+      e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+    ) => setFields((f) => ({ ...f, [name]: e.target.value })),
+  });
 
   return (
     <form action={action} className="space-y-5">
@@ -126,7 +142,7 @@ export default function NewBookForm({
         </label>
         <input
           id="title"
-          name="title"
+          {...bind("title")}
           type="text"
           required
           minLength={3}
@@ -141,7 +157,7 @@ export default function NewBookForm({
         </label>
         <input
           id="themes"
-          name="themes"
+          {...bind("themes")}
           type="text"
           placeholder="Ex : Aventure, Fantastique"
           className={INPUT}
@@ -156,7 +172,7 @@ export default function NewBookForm({
           >
             {forClass ? "Niveau" : "Ton niveau"}
           </label>
-          <select id="scolar_level" name="scolar_level" className={INPUT} defaultValue="">
+          <select id="scolar_level" {...bind("scolar_level")} className={INPUT}>
             <option value="">Choisis un niveau</option>
             {LEVELS.map((l) => (
               <option key={l} value={l}>
@@ -175,12 +191,11 @@ export default function NewBookForm({
           </label>
           <input
             id="max_players"
-            name="max_players"
+            {...bind("max_players")}
             type="number"
             required
             min={2}
             max={10}
-            defaultValue={2}
             className={INPUT}
           />
         </div>
@@ -193,7 +208,7 @@ export default function NewBookForm({
         </label>
         <textarea
           id="synopsis"
-          name="synopsis"
+          {...bind("synopsis")}
           required
           minLength={20}
           rows={6}

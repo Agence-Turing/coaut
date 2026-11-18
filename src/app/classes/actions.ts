@@ -33,15 +33,11 @@ async function currentPro() {
   return { user, authorId: user.authorId } as const;
 }
 
-/** Prénoms du formulaire : liste saisie, ou « Élève 1, 2… » si le prof donne un nombre. */
-function namesFrom(formData: FormData, startAt = 1): string[] | { error: string } {
+/** Prénoms du formulaire : un par ligne. */
+function namesFrom(formData: FormData): string[] | { error: string } {
   const typed = parseFirstNames(String(formData.get("first_names") ?? ""));
-  const count = Number(formData.get("count") ?? 0);
   if (typed.length > 0) return typed;
-  if (Number.isInteger(count) && count > 0) {
-    return Array.from({ length: Math.min(count, MAX_STUDENTS) }, (_, i) => `Élève ${startAt + i}`);
-  }
-  return { error: "Écris les prénoms des élèves (un par ligne), ou indique un nombre d'élèves." };
+  return { error: "Écris les prénoms des élèves, un par ligne." };
 }
 
 /** Ajoute les élèves aux livres en cours de la classe (en fin d'ordre de passage). */
@@ -117,7 +113,7 @@ export async function addStudents(
   if (!cls) return { error: "Classe introuvable." };
 
   const current = await listStudents(classId);
-  const names = namesFrom(formData, current.length + 1);
+  const names = namesFrom(formData);
   if ("error" in names) return names;
   const taken = new Set(current.map((s) => s.first_name.toLocaleLowerCase("fr")));
   const fresh = names.filter((n) => !taken.has(n.toLocaleLowerCase("fr")));

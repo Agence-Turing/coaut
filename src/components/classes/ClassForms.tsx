@@ -22,19 +22,6 @@ function StudentsFields({ idPrefix }: { idPrefix: string }) {
           Pas de nom de famille. Deux prénoms identiques : ajoute une initiale.
         </p>
       </div>
-      <div>
-        <label htmlFor={`${idPrefix}-count`} className={`${LABEL} mb-1.5`}>
-          Ou seulement un nombre d&rsquo;élèves (« Élève 1 », « Élève 2 »…)
-        </label>
-        <input
-          id={`${idPrefix}-count`}
-          name="count"
-          type="number"
-          min={1}
-          max={40}
-          className={`${INPUT} w-32`}
-        />
-      </div>
     </>
   );
 }

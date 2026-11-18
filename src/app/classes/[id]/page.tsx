@@ -17,6 +17,9 @@ export const metadata: Metadata = { title: "Ma classe | Co-Aut" };
 const SMALL_BTN =
   "inline-flex min-h-11 items-center justify-center rounded-[10px] border border-line-strong bg-paper px-3.5 text-sm font-semibold text-ink hover:border-ink";
 
+/** Élèves affichés avant « Voir les autres ». */
+const VISIBLE_STUDENTS = 8;
+
 export default async function ClassPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const user = await getCurrentUser();
@@ -45,6 +48,43 @@ export default async function ClassPage({ params }: { params: Promise<{ id: stri
     (turns ?? []).filter((t) => t.author_id === authorId && t.is_ended && t.content).length;
   const open = books.some((b) => b.status === "launched");
   const codesWork = books.length === 0 || open;
+
+  const studentRow = (s: (typeof students)[number]) => (
+    <li
+      key={s.id}
+      className="flex flex-col gap-3 border-b border-line px-5 py-4 last:border-0 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className="break-words text-[17px] font-semibold text-ink">{s.first_name}</span>
+        <span className="text-sm text-muted">
+          <span className="font-semibold tracking-[0.08em] text-ink">{s.code ?? "Sans code"}</span>
+          {" · "}
+          {written(s.author_id)} tour{written(s.author_id) > 1 ? "s" : ""} écrit
+          {written(s.author_id) > 1 ? "s" : ""}
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <form action={regenerateCode}>
+          <input type="hidden" name="student_id" value={s.id} />
+          <ConfirmButton
+            message={`Donner un nouveau code à ${s.first_name} ? L'ancien ne marchera plus.`}
+            className={SMALL_BTN}
+          >
+            Nouveau code
+          </ConfirmButton>
+        </form>
+        <form action={removeStudent}>
+          <input type="hidden" name="student_id" value={s.id} />
+          <ConfirmButton
+            message={`Retirer ${s.first_name} de la classe ? Son code ne marchera plus ; ses tours déjà écrits restent dans les livres.`}
+            className={SMALL_BTN}
+          >
+            Retirer
+          </ConfirmButton>
+        </form>
+      </div>
+    </li>
+  );
 
   return (
     <>
@@ -78,44 +118,21 @@ export default async function ClassPage({ params }: { params: Promise<{ id: stri
           {students.length === 0 ? (
             <p className="text-[17px] text-muted">Pas encore d&rsquo;élève dans cette classe.</p>
           ) : (
-            <ul className="flex flex-col rounded-2xl border border-line">
-              {students.map((s) => (
-                <li
-                  key={s.id}
-                  className="flex flex-col gap-3 border-b border-line px-5 py-4 last:border-0 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="flex min-w-0 flex-col gap-0.5">
-                    <span className="break-words text-[17px] font-semibold text-ink">{s.first_name}</span>
-                    <span className="text-sm text-muted">
-                      <span className="font-semibold tracking-[0.08em] text-ink">{s.code ?? "Sans code"}</span>
-                      {" · "}
-                      {written(s.author_id)} tour{written(s.author_id) > 1 ? "s" : ""} écrit
-                      {written(s.author_id) > 1 ? "s" : ""}
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <form action={regenerateCode}>
-                      <input type="hidden" name="student_id" value={s.id} />
-                      <ConfirmButton
-                        message={`Donner un nouveau code à ${s.first_name} ? L'ancien ne marchera plus.`}
-                        className={SMALL_BTN}
-                      >
-                        Nouveau code
-                      </ConfirmButton>
-                    </form>
-                    <form action={removeStudent}>
-                      <input type="hidden" name="student_id" value={s.id} />
-                      <ConfirmButton
-                        message={`Retirer ${s.first_name} de la classe ? Son code ne marchera plus ; ses tours déjà écrits restent dans les livres.`}
-                        className={SMALL_BTN}
-                      >
-                        Retirer
-                      </ConfirmButton>
-                    </form>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <>
+              <ul className="flex flex-col rounded-2xl border border-line">
+                {students.slice(0, VISIBLE_STUDENTS).map(studentRow)}
+              </ul>
+              {students.length > VISIBLE_STUDENTS && (
+                <details className="group">
+                  <summary className={`${LINK} inline-flex min-h-11 cursor-pointer items-center text-[15px] group-open:hidden`}>
+                    Voir les {students.length - VISIBLE_STUDENTS} autres élèves
+                  </summary>
+                  <ul className="flex flex-col rounded-2xl border border-line">
+                    {students.slice(VISIBLE_STUDENTS).map(studentRow)}
+                  </ul>
+                </details>
+              )}
+            </>
           )}
           <details className="rounded-2xl border border-line p-5 sm:p-6">
             <summary className={`${LINK} inline-flex min-h-11 cursor-pointer items-center text-[15px]`}>

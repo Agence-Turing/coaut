@@ -10,6 +10,10 @@ export type BookSummary = {
   status: "launched" | "published";
   launcher_id: string | null;
   max_players: number | null;
+  /** Livre réservé à une classe (null = public). */
+  class_id: string | null;
+  /** Livre de classe : le prof relit chaque tour avant qu'il soit ajouté. */
+  teacher_review: boolean;
   book_players: {
     position: number;
     author_id: string;
@@ -36,13 +40,14 @@ export type Turn = {
   number: number;
   content: string | null;
   is_ended: boolean;
+  is_validated: boolean;
   created_at: string;
   author_id: string | null;
   authors: { nickname: string } | null;
 };
 
-const BOOK_SUMMARY = `id, legacy_code, title, synopsis, themes, scolar_level, status,
-  launcher_id, max_players,
+export const BOOK_SUMMARY = `id, legacy_code, title, synopsis, themes, scolar_level, status,
+  launcher_id, max_players, class_id, teacher_review,
   book_players(position, author_id, authors(nickname)), turns(count)`;
 
 export type BookFilters = {
@@ -61,6 +66,8 @@ export async function listBooks(
     .select(BOOK_SUMMARY)
     .eq("status", status)
     .order("legacy_code", { ascending: true });
+  // Livre de classe en cours : jamais à rejoindre (son prof le voit, la RLS le lui permet).
+  if (status === "launched") query = query.is("class_id", null);
 
   if (filters.q) {
     const q = filters.q.replaceAll("%", "").replaceAll(",", " ");
@@ -145,10 +152,9 @@ export async function listMyFavorites(authorId: string) {
 /** Thèmes et niveaux distincts d'un statut, pour alimenter les filtres. */
 export async function getFilterOptions(status: "launched" | "published") {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("books")
-    .select("themes, scolar_level")
-    .eq("status", status);
+  let query = supabase.from("books").select("themes, scolar_level").eq("status", status);
+  if (status === "launched") query = query.is("class_id", null);
+  const { data, error } = await query;
   if (error) throw error;
 
   const themes = new Set<string>();
@@ -212,7 +218,7 @@ export async function getTurns(bookId: string) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("turns")
-    .select("id, number, content, is_ended, created_at, author_id, authors(nickname)")
+    .select("id, number, content, is_ended, is_validated, created_at, author_id, authors(nickname)")
     .eq("book_id", bookId)
     .order("number", { ascending: true });
   if (error) throw error;
@@ -257,7 +263,7 @@ export async function getCurrentWriters(books: BookSummary[]) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("turns")
-    .select("book_id, number, is_ended, author_id")
+    .select("book_id, number, is_ended, is_validated, author_id")
     .in(
       "book_id",
       books.map((b) => b.id)
@@ -266,6 +272,11 @@ export async function getCurrentWriters(books: BookSummary[]) {
 
   for (const book of books) {
     const turns = (data ?? []).filter((t) => t.book_id === book.id);
+    // Livre de classe en relecture : personne n'écrit tant que le prof n'a pas validé.
+    if (book.teacher_review && turns.some((t) => t.is_ended && !t.is_validated)) {
+      map.set(book.id, null);
+      continue;
+    }
     const open = turns.find((t) => !t.is_ended);
     if (open) {
       map.set(book.id, open.author_id as string | null);
@@ -304,7 +315,22 @@ export type WritingState = {
   currentNickname: string | null;
   /** Numéro du tour à écrire. */
   number: number;
+  /** Livre de classe avec relecture : tour terminé qui attend la validation du prof. */
+  pendingReview?: Turn | null;
 };
+
+/** Tour terminé qui attend la relecture du prof (livre de classe avec relecture), sinon null. */
+export function pendingReviewOf(book: BookSummary, turns: Turn[]): Turn | null {
+  if (!book.teacher_review) return null;
+  return turns.find((t) => t.is_ended && !t.is_validated && t.content) ?? null;
+}
+
+/** Tours à afficher : écrits et terminés, et validés par le prof si le livre est relu. */
+export function shownTurns(book: BookSummary, turns: Turn[]): Turn[] {
+  return turns.filter(
+    (t) => t.content && t.is_ended && (!book.teacher_review || t.is_validated)
+  );
+}
 
 /**
  * À qui le tour ? S'il y a un tour ouvert, c'est le sien ; sinon la rotation
@@ -317,6 +343,11 @@ export function writingState(book: BookSummary, turns: Turn[]): WritingState {
   const ended = turns.filter((t) => t.is_ended);
   const openTurn = turns.find((t) => !t.is_ended) ?? null;
   const maxNumber = turns.reduce((m, t) => Math.max(m, t.number), 0);
+
+  const pendingReview = pendingReviewOf(book, turns);
+  if (pendingReview) {
+    return { openTurn: null, currentAuthorId: null, currentNickname: null, number: maxNumber + 1, pendingReview };
+  }
 
   if (openTurn) {
     const player = players.find((p) => p.author_id === openTurn.author_id);

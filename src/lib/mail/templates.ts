@@ -122,3 +122,14 @@ export function bookPublishedMail(book: BookInfo): MailContent {
     cta: { label: "Lire le livre", path: book.path },
   });
 }
+
+/** Récapitulatif quotidien d'un prof : un seul mail par jour pour toutes ses classes. */
+export function classDigestMail(lines: string[]): MailContent {
+  return layout({
+    subject: "Tes classes sur Co-Aut : le point du jour",
+    title: "Le point du jour",
+    paragraphs: lines,
+    cta: { label: "Voir mes classes", path: "/classes" },
+    footer: "Tu reçois ce récapitulatif parce que tes élèves écrivent sur Co-Aut. Un seul mail par jour, et seulement s'il s'est passé quelque chose.",
+  });
+}

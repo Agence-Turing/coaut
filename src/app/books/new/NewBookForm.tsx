@@ -1,8 +1,10 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { createBook, type ActionState } from "@/app/books/actions";
-import { BTN_PRIMARY, INPUT, LABEL, Notice } from "@/components/ui";
+import { BTN_PRIMARY, HINT, INPUT, LABEL, Notice } from "@/components/ui";
+
+export type ClassOption = { id: string; name: string; students: number };
 
 const LEVELS = [
   "CP",
@@ -21,14 +23,103 @@ const LEVELS = [
   "Adulte",
 ];
 
-export default function NewBookForm() {
+/** `classes` : les classes du professionnel connecté (vide pour les autres : pas de choix Public / Classe). */
+export default function NewBookForm({
+  classes = [],
+  defaultClassId,
+}: {
+  classes?: ClassOption[];
+  defaultClassId?: string;
+}) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
     createBook,
     {}
   );
+  const [visibility, setVisibility] = useState<"public" | "class">(
+    defaultClassId && classes.some((c) => c.id === defaultClassId) ? "class" : "public"
+  );
+  const forClass = visibility === "class";
 
   return (
     <form action={action} className="space-y-5">
+      {classes.length > 0 && (
+        <fieldset className="space-y-3 rounded-2xl border border-line p-4 sm:p-5">
+          <legend className={`${LABEL} px-1`}>Pour qui ?</legend>
+          <label className="flex min-h-11 items-start gap-3 text-[15px]">
+            <input
+              type="radio"
+              name="visibility"
+              value="public"
+              checked={!forClass}
+              onChange={() => setVisibility("public")}
+              className="mt-0.5 h-5 w-5 flex-none accent-ink"
+            />
+            <span>
+              <strong className="font-semibold">Public</strong> : tout le monde peut demander à rejoindre
+            </span>
+          </label>
+          <label className="flex min-h-11 items-start gap-3 text-[15px]">
+            <input
+              type="radio"
+              name="visibility"
+              value="class"
+              checked={forClass}
+              onChange={() => setVisibility("class")}
+              className="mt-0.5 h-5 w-5 flex-none accent-ink"
+            />
+            <span>
+              <strong className="font-semibold">Réservé à ma classe</strong> : les élèves sont dans
+              l&rsquo;équipe d&rsquo;office, personne d&rsquo;autre ne voit le livre avant sa publication
+            </span>
+          </label>
+
+          {forClass && (
+            <div className="space-y-4 border-t border-line pt-4">
+              <div>
+                <label htmlFor="class_id" className={`${LABEL} mb-1.5`}>
+                  La classe
+                </label>
+                <select
+                  id="class_id"
+                  name="class_id"
+                  required
+                  defaultValue={defaultClassId ?? classes[0]?.id}
+                  className={INPUT}
+                >
+                  {classes.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({c.students} élève{c.students > 1 ? "s" : ""})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <p className={`${LABEL} mb-1.5`}>Ordre de passage</p>
+                <div className="flex flex-wrap gap-x-6">
+                  <label className="flex min-h-11 items-center gap-2 text-[15px]">
+                    <input type="radio" name="order" value="list" defaultChecked className="h-5 w-5 accent-ink" />
+                    Ordre de la liste
+                  </label>
+                  <label className="flex min-h-11 items-center gap-2 text-[15px]">
+                    <input type="radio" name="order" value="random" className="h-5 w-5 accent-ink" />
+                    Au hasard
+                  </label>
+                </div>
+                <p className={HINT}>Tu pourras le changer ensuite sur la page du livre.</p>
+              </div>
+              <label className="flex min-h-11 items-start gap-3 text-[15px]">
+                <input
+                  type="checkbox"
+                  name="teacher_review"
+                  value="1"
+                  className="mt-0.5 h-5 w-5 flex-none accent-ink"
+                />
+                <span>Je relis chaque tour avant qu&rsquo;il soit ajouté au livre</span>
+              </label>
+            </div>
+          )}
+        </fieldset>
+      )}
       <div>
         <label htmlFor="title" className={`${LABEL} mb-1.5`}>
           Le titre de ton histoire
@@ -63,7 +154,7 @@ export default function NewBookForm() {
             htmlFor="scolar_level"
             className={`${LABEL} mb-1.5`}
           >
-            Ton niveau
+            {forClass ? "Niveau" : "Ton niveau"}
           </label>
           <select id="scolar_level" name="scolar_level" className={INPUT} defaultValue="">
             <option value="">Choisis un niveau</option>
@@ -74,6 +165,7 @@ export default function NewBookForm() {
             ))}
           </select>
         </div>
+        {!forClass && (
         <div>
           <label
             htmlFor="max_players"
@@ -92,6 +184,7 @@ export default function NewBookForm() {
             className={INPUT}
           />
         </div>
+        )}
       </div>
 
       <div>

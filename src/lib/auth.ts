@@ -1,4 +1,4 @@
-import { getBirthDate, parseBirthDate, saveBirthDate } from "@/lib/profile";
+import { parseBirthDate, saveBirthDate } from "@/lib/profile";
 import { createClient } from "@/lib/supabase/server";
 
 export type CurrentUser = {
@@ -7,6 +7,10 @@ export type CurrentUser = {
   authorId: string | null;
   /** true si la date de naissance n'est pas renseignée (anciens comptes) : invitation à compléter le profil. */
   needsBirthDate: boolean;
+  /** Élève d'une classe (compte technique, connecté par son code) : ne voit que sa classe. */
+  isStudent?: boolean;
+  /** Enseignant ou professionnel (case du profil) : menu « Mes classes ». */
+  isProfessional?: boolean;
 };
 
 /** Utilisateur connecté (ou null). Crée sa fiche auteur au premier passage si besoin. */
@@ -19,9 +23,12 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
 
   const { data: author } = await supabase
     .from("authors")
-    .select("id, nickname")
+    .select("id, nickname, kind")
     .eq("user_id", user.id)
     .maybeSingle();
+  if (author?.kind === "student") {
+    return { nickname: author.nickname, authorId: author.id, needsBirthDate: false, isStudent: true };
+  }
   // Date de naissance saisie à l'inscription : elle voyage dans les métadonnées du compte
   // tant que la fiche auteur n'existe pas (confirmation d'e-mail), puis va dans le profil privé.
   const signupBirthDate = parseBirthDate(
@@ -29,7 +36,12 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   );
 
   if (author) {
-    let birthDate = await getBirthDate(supabase, author.id);
+    const { data: profile } = await supabase
+      .from("author_profiles")
+      .select("birth_date, is_professional")
+      .eq("author_id", author.id)
+      .maybeSingle();
+    let birthDate = (profile?.birth_date as string | null) ?? null;
     if (!birthDate && "date" in signupBirthDate) {
       const { error } = await saveBirthDate(supabase, author.id, signupBirthDate.date);
       if (!error) birthDate = signupBirthDate.date;
@@ -38,6 +50,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
       nickname: author.nickname,
       authorId: author.id,
       needsBirthDate: !birthDate,
+      isProfessional: Boolean(profile?.is_professional),
     };
   }
 

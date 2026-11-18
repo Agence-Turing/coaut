@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import BirthDateForm from "@/components/BirthDateForm";
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
+import ProfessionalForm from "@/components/classes/ProfessionalForm";
 import { EYEBROW, Notice, PageHeading } from "@/components/ui";
 import { getCurrentUser } from "@/lib/auth";
 import { ageFrom, getBirthDate } from "@/lib/profile";
@@ -31,6 +32,13 @@ export default async function ProfilPage() {
     ? await getBirthDate(supabase, user.authorId)
     : null;
   const today = new Date().toISOString().slice(0, 10);
+  const { data: pro } = user.authorId
+    ? await supabase
+        .from("author_profiles")
+        .select("is_professional, organization")
+        .eq("author_id", user.authorId)
+        .maybeSingle()
+    : { data: null };
 
   return (
     <>
@@ -51,6 +59,12 @@ export default async function ProfilPage() {
           </Row>
           <Row label="Date de naissance">
             <BirthDateForm birthDate={birthDate} maxDate={today} />
+          </Row>
+          <Row label="Enseignant ou professionnel">
+            <ProfessionalForm
+              isProfessional={Boolean(pro?.is_professional)}
+              organization={(pro?.organization as string | null) ?? null}
+            />
           </Row>
         </div>
       </main>

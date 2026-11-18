@@ -8,6 +8,7 @@ import JoinRequestForm from "@/components/JoinRequestForm";
 import TurnEditor from "@/components/TurnEditor";
 import PublishBookButton from "@/components/PublishBookButton";
 import FavoriteButton from "@/components/FavoriteButton";
+import ClassBookPanel from "@/components/classes/ClassBookPanel";
 import { BTN_PRIMARY, BTN_SECONDARY, EYEBROW, LINK, Notice } from "@/components/ui";
 import { acceptRequest, rejectRequest } from "@/app/books/actions";
 import {
@@ -20,10 +21,12 @@ import {
   getCoverPaths,
   bookRef,
   writingState,
+  shownTurns,
   splitTitle,
   type Turn,
 } from "@/lib/books";
 import { getCurrentUser } from "@/lib/auth";
+import { deName } from "@/lib/fr";
 
 /** Au-delà de ce nombre de tours écrits, les premiers sont repliés (livre en cours). */
 const FOLD_ABOVE = 5;
@@ -116,7 +119,10 @@ export default async function BookPage({
   const team = book.book_players
     .slice()
     .sort((a, b) => a.position - b.position);
-  const writtenTurns = turns.filter((t) => t.content && t.is_ended);
+  const writtenTurns = shownTurns(book, turns);
+  // Livre réservé à une classe : pas de demandes à rejoindre, pas de mail aux élèves.
+  const isClassBook = Boolean(book.class_id);
+  const isStudent = Boolean(user?.isStudent);
   const ref = bookRef(book);
   const published = book.status === "published";
   const writing = book.status === "launched" ? writingState(book, turns) : null;
@@ -133,7 +139,7 @@ export default async function BookPage({
     writing && user?.authorId && writing.currentAuthorId === user.authorId && isPlayer
   );
 
-  const joinRequests = isLauncher ? await getJoinRequests(book.id) : [];
+  const joinRequests = isLauncher && !isClassBook ? await getJoinRequests(book.id) : [];
   const pendingRequests = joinRequests.filter((r) => r.status === "pending");
   const answeredRequests = joinRequests.filter((r) => r.status !== "pending");
   const myRequest =
@@ -162,6 +168,7 @@ export default async function BookPage({
   const facts = [
     ...book.themes,
     book.scolar_level ? `Niveau ${book.scolar_level}` : null,
+    isClassBook && !published ? "Réservé à la classe" : null,
     published ? "Publié" : "En cours d'écriture",
   ].filter(Boolean);
 
@@ -171,10 +178,24 @@ export default async function BookPage({
       <main className="mx-auto flex w-full max-w-[800px] flex-1 flex-col gap-10 px-4 pb-20 pt-10 sm:px-6">
         <div className="flex flex-col gap-5">
           <Link
-            href={published ? "/bibliotheque" : "/books"}
+            href={
+              isStudent
+                ? "/classe/livres"
+                : isClassBook && isLauncher
+                  ? `/classes/${book.class_id}`
+                  : published
+                    ? "/bibliotheque"
+                    : "/books"
+            }
             className={`${LINK} inline-flex min-h-11 items-center self-start text-[15px]`}
           >
-            {published ? "← Retour à la bibliothèque" : "← Retour aux livres à rejoindre"}
+            {isStudent
+              ? "← Les livres de ma classe"
+              : isClassBook && isLauncher
+                ? "← Ma classe"
+                : published
+                  ? "← Retour à la bibliothèque"
+                  : "← Retour aux livres à rejoindre"}
           </Link>
 
           {coverPath && (
@@ -234,7 +255,7 @@ export default async function BookPage({
             <PublishBookButton bookRef={ref} />
           )}
 
-          {published && user?.authorId && (
+          {published && user?.authorId && !isStudent && (
             <FavoriteButton
               bookId={book.id}
               bookRef={ref}
@@ -244,7 +265,7 @@ export default async function BookPage({
           )}
         </div>
 
-        {book.status === "launched" && !isLauncher && !isPlayer && (
+        {book.status === "launched" && !isLauncher && !isPlayer && !isClassBook && (
           <section className="rounded-2xl border border-line p-5 sm:p-6">
             {myRequest ? (
               <Notice
@@ -266,7 +287,18 @@ export default async function BookPage({
           </section>
         )}
 
-        {isLauncher && book.status === "launched" && (
+        {isLauncher && isClassBook && book.status === "launched" && writing && (
+          <ClassBookPanel
+            bookRef={ref}
+            classId={book.class_id!}
+            team={team.map((p) => ({ author_id: p.author_id, nickname: p.authors?.nickname ?? "Élève" }))}
+            currentAuthorId={writing.currentAuthorId}
+            currentNickname={writing.currentNickname}
+            pendingReview={writing.pendingReview ?? null}
+          />
+        )}
+
+        {isLauncher && !isClassBook && book.status === "launched" && (
           <section className="rounded-2xl border border-line p-5 sm:p-6">
             <h2 className="flex items-center gap-3 font-display text-2xl font-bold leading-tight">
               Demandes pour rejoindre ton livre
@@ -395,8 +427,8 @@ export default async function BookPage({
                   <Step marker={writing.number + 1} tone="dashed" last>
                     <p className="text-[15px] text-muted">
                       Ensuite :{" "}
-                      <strong className="font-semibold text-ink">{nextNickname}</strong>,
-                      prévenu par mail dès que tu as terminé.
+                      <strong className="font-semibold text-ink">{nextNickname}</strong>
+                      {isClassBook ? "." : ", prévenu par mail dès que tu as terminé."}
                     </p>
                   </Step>
                 )}
@@ -404,13 +436,17 @@ export default async function BookPage({
             ) : (
               <Step marker={writing.number} tone="outline" last>
                 <p className="text-[17px] font-medium">
-                  {writing.currentNickname
-                    ? `C'est au tour de ${writing.currentNickname} d'écrire la suite.`
-                    : "L'histoire attend ses co-auteurs."}
+                  {writing.pendingReview
+                    ? `Le tour ${deName(writing.pendingReview.authors?.nickname ?? "l'élève")} est en relecture par l'enseignant.`
+                    : writing.currentNickname
+                      ? `C'est au tour ${deName(writing.currentNickname)} d'écrire la suite.`
+                      : "L'histoire attend ses co-auteurs."}
                 </p>
                 {isPlayer && writing.currentNickname && (
                   <p className="mt-1 text-[15px] text-muted">
-                    Tu recevras un mail quand ce sera ton tour.
+                    {isClassBook
+                      ? "Reviens plus tard : « À toi d'écrire » s'affichera sur la page de ta classe."
+                      : "Tu recevras un mail quand ce sera ton tour."}
                   </p>
                 )}
               </Step>

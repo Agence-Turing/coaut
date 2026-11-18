@@ -46,7 +46,7 @@
 
 ### Hors devis : livres privés pour les élèves
 
-- [ ] Comptes professionnels, « Mes classes », un code par élève, livres réservés à une classe, page co-aut.com/classe : voir `docs/livres-prives-eleves.md` (décidé à la démo du 16/11, questions à Juliette dans le doc).
+- [x] Comptes professionnels, « Mes classes », un code par élève, livres réservés à une classe, page co-aut.com/classe : voir `docs/livres-prives-eleves.md` (décidé à la démo du 16/11, en préprod le 18/11). Reste : case « professionnel » à l'inscription (aujourd'hui dans « Mon profil » seulement), glisser-déposer de l'ordre (flèches aujourd'hui), classes dans l'administration.
 
 ### Semaine 3 : finitions et mise en ligne
 

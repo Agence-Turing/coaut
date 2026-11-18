@@ -2,16 +2,41 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import NewBookForm from "@/app/books/new/NewBookForm";
+import NewBookForm, { type ClassOption } from "@/app/books/new/NewBookForm";
 import { LINK, PageHeading } from "@/components/ui";
 import { getCurrentUser } from "@/lib/auth";
+import { listOwnedClasses } from "@/lib/classes";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
   title: "Lancer un livre | Co-Aut",
 };
 
-export default async function NewBookPage() {
-  const user = await getCurrentUser();
+export default async function NewBookPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ classe?: string }>;
+}) {
+  const [user, { classe }] = await Promise.all([getCurrentUser(), searchParams]);
+
+  // Professionnel : choix Public / Réservé à ma classe.
+  let classes: ClassOption[] = [];
+  if (user?.isProfessional && user.authorId) {
+    const owned = await listOwnedClasses(user.authorId);
+    if (owned.length) {
+      const supabase = await createClient();
+      const { data: students } = await supabase
+        .from("class_students")
+        .select("class_id")
+        .in("class_id", owned.map((c) => c.id))
+        .eq("active", true);
+      classes = owned.map((c) => ({
+        id: c.id,
+        name: c.name,
+        students: (students ?? []).filter((s) => s.class_id === c.id).length,
+      }));
+    }
+  }
 
   return (
     <>
@@ -24,7 +49,7 @@ export default async function NewBookPage() {
           title="Lancer un livre"
           intro="Trouve un titre, écris le résumé et choisis la taille de ton équipe. Les co-auteurs écriront chacun leur tour, jusqu'au mot fin."
         />
-        <NewBookForm />
+        <NewBookForm classes={classes} defaultClassId={classe} />
       </main>
       <Footer />
     </>

@@ -369,7 +369,7 @@ end $guard$;
 
 -- 1. Auteurs ---------------------------------------------------------------
 with u as (update public.authors a set legacy_id = p.id from _p p
-           where a.legacy_id is null and a.nickname = p.pseudo
+           where a.legacy_id is null and a.nickname = p.pseudo and a.kind = 'adult'
              and not exists (select 1 from public.authors o where o.legacy_id = p.id) returning 1)
 insert into _r (label, n) select 'auteurs déjà en base rattachés à leur fiche Notion', count(*) from u;
 

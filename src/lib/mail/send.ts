@@ -11,7 +11,8 @@ export type MailKind =
   | "join_request"
   | "join_accepted"
   | "join_rejected"
-  | "book_published";
+  | "book_published"
+  | "class_digest";
 
 let transport: nodemailer.Transporter | null = null;
 
@@ -66,10 +67,12 @@ export async function sendToAuthor(opts: {
 
     const { data: author } = await admin
       .from("authors")
-      .select("user_id")
+      .select("user_id, kind")
       .eq("id", opts.authorId)
       .maybeSingle();
     if (!author?.user_id) return finish("skipped", "auteur sans compte");
+    // Élève d'une classe : pas d'adresse (compte technique), jamais de mail. Son prof a le récap du jour.
+    if (author.kind === "student") return finish("skipped", "élève");
 
     const { data: account } = await admin.auth.admin.getUserById(author.user_id);
     const email = account?.user?.email;

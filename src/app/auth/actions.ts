@@ -56,6 +56,7 @@ export async function signUp(
     .from("authors")
     .select("id")
     .eq("nickname", nickname)
+    .eq("kind", "adult") // les élèves s'affichent sous leur prénom, sans réserver de pseudonyme
     .maybeSingle();
   if (taken) {
     return { error: "Ce pseudonyme est déjà pris, choisis-en un autre." };

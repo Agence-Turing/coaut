@@ -76,3 +76,17 @@ Les élèves n'ont pas d'e-mail : pas de « à ton tour » ni de relances pour e
 - Un livre de classe publié est visible de tous dans la bibliothèque publique.
 - Le code d'un élève reste valable tant qu'il a un livre de sa classe encore ouvert (ou que la classe n'a pas encore de livre) ; quand tous les livres de la classe sont publiés ou archivés, le code ne marche plus (message « Ton livre est terminé »). Le prof peut relancer un livre pour la même classe, ce qui réactive les codes.
 - Lot non facturé (geste commercial).
+
+## Mise en œuvre (18/11)
+
+En préprod depuis le 18/11 (migration 0009). Choix faits en cours de route :
+
+- La case « professionnel » est dans « Mon profil » seulement, pas encore dans le formulaire d'inscription.
+- Le code reste lisible par le prof (il doit pouvoir réimprimer les étiquettes) : il est stocké en clair, lisible par le seul prof de la classe, et jamais modifiable par l'API (tiré côté serveur). La connexion passe par un lien magique généré et vérifié côté serveur : pas de mot de passe pour les comptes élèves.
+- Le prof lance le livre mais n'est pas dans l'équipe : seuls les élèves écrivent.
+- Ordre de passage : flèches monter / descendre et « Mélanger » (pas de glisser-déposer).
+- Passer le tour d'un absent crée un tour vide (son brouillon éventuel est effacé) : la numérotation des tours visibles saute ce numéro.
+- Relecture : le tour attend la validation du prof et personne d'autre n'écrit entre-temps ; « Rendre à l'élève » le lui rouvre en brouillon. Publication bloquée tant qu'un tour attend.
+- Retirer un élève : son code ne marche plus, il quitte l'équipe des livres en cours (son tour ouvert est passé), ses tours écrits restent à son prénom.
+- Limites de tentatives : 30 codes faux par adresse IP en 10 minutes (une classe partage souvent la même adresse), 300 au total.
+- Récap du prof : chaque soir à partir de 18 h, uniquement s'il y a eu un tour écrit (date de début du tour) ou une relecture en attente.

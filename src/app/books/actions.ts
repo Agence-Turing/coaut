@@ -5,7 +5,8 @@ import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
-import { getBook, getTurns, writingState } from "@/lib/books";
+import { getBook, getTurns, pendingReviewOf, writingState } from "@/lib/books";
+import { createClassBook } from "@/app/classes/actions";
 import {
   notifyBookPublished,
   notifyBookStarts,
@@ -23,6 +24,9 @@ export async function createBook(
   _prev: ActionState,
   formData: FormData
 ): Promise<ActionState> {
+  // Livre réservé à une classe : voir src/app/classes/actions.ts.
+  if (formData.get("visibility") === "class") return createClassBook(_prev, formData);
+
   const user = await getCurrentUser();
   if (!user) redirect("/?mode=login");
   if (!user.authorId) return { error: AUTHOR_MISSING };
@@ -177,6 +181,8 @@ export async function saveTurn(
 
   const turns = await getTurns(book.id);
   const state = writingState(book, turns);
+  if (state.pendingReview)
+    return { error: "Le tour précédent est en relecture par l'enseignant. Reviens un peu plus tard." };
   if (state.currentAuthorId !== user.authorId)
     return {
       error: `Ce n'est pas ton tour d'écrire${state.currentNickname ? ` — c'est celui de ${state.currentNickname}` : ""}.`,
@@ -186,7 +192,8 @@ export async function saveTurn(
   const payload = {
     content,
     is_ended: finish,
-    is_validated: finish,
+    // Livre de classe avec relecture : le tour attend la validation du prof.
+    is_validated: finish && !book.teacher_review,
   };
   const { error } = state.openTurn
     ? await supabase.from("turns").update(payload).eq("id", state.openTurn.id)
@@ -209,7 +216,9 @@ export async function saveTurn(
 
   revalidatePath(`/books/${bookRef}`);
   return finish
-    ? { info: "Ton tour est terminé ! Au suivant d'écrire la suite. ✍️" }
+    ? book.teacher_review
+      ? { info: "Ton tour est terminé ! Ton enseignant va le relire avant de passer la plume." }
+      : { info: "Ton tour est terminé ! Au suivant d'écrire la suite. ✍️" }
     : { info: "Brouillon enregistré. Tu peux reprendre quand tu veux." };
 }
 
@@ -232,6 +241,9 @@ export async function publishBook(
   const ended = turns.filter((t) => t.is_ended && t.content);
   if (ended.length === 0)
     return { error: "Impossible de publier un livre sans aucun tour écrit." };
+
+  if (pendingReviewOf(book, turns))
+    return { error: "Un tour attend ta relecture : valide-le ou renvoie-le avant de publier." };
 
   const openTurn = turns.find((t) => !t.is_ended);
   if (openTurn && openTurn.author_id !== user.authorId)

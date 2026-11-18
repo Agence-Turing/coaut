@@ -6,14 +6,23 @@ import { useState } from "react";
 import Logo from "@/components/Logo";
 import { Cta, BTN_SECONDARY } from "@/components/ui";
 import { signOut } from "@/app/auth/actions";
+import { leaveClass } from "@/app/classe/actions";
 
-type HeaderUser = { nickname: string; needsBirthDate?: boolean } | null;
+type HeaderUser = {
+  nickname: string;
+  needsBirthDate?: boolean;
+  isStudent?: boolean;
+  isProfessional?: boolean;
+} | null;
 
 function navLinks(user: HeaderUser) {
+  // Élève : sa classe, rien d'autre.
+  if (user?.isStudent) return [{ href: "/classe/livres", label: "Les livres de ma classe" }];
   return [
     { href: "/books", label: "Rejoindre un livre" },
     { href: "/bibliotheque", label: "Bibliothèque" },
     ...(user ? [{ href: "/books/mes-livres", label: "Mes livres" }] : []),
+    ...(user?.isProfessional ? [{ href: "/classes", label: "Mes classes" }] : []),
   ];
 }
 
@@ -30,6 +39,13 @@ function isActive(pathname: string, href: string) {
 }
 
 function ProfileLink({ user }: { user: NonNullable<HeaderUser> }) {
+  if (user.isStudent) {
+    return (
+      <span className="inline-flex min-h-11 items-center text-[15px] font-semibold text-ink">
+        {user.nickname}
+      </span>
+    );
+  }
   return (
     <Link
       href="/profil"
@@ -45,9 +61,9 @@ function ProfileLink({ user }: { user: NonNullable<HeaderUser> }) {
   );
 }
 
-function SignOut() {
+function SignOut({ student = false }: { student?: boolean }) {
   return (
-    <form action={signOut}>
+    <form action={student ? leaveClass : signOut}>
       <button
         type="submit"
         className="inline-flex min-h-11 items-center text-[15px] font-medium text-muted hover:text-ink"
@@ -66,7 +82,11 @@ export default function Header({ user = null }: { user?: HeaderUser }) {
   return (
     <header className="border-b border-line bg-paper">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
-        <Link href={user ? "/books" : "/"} aria-label="Co-Aut, accueil" className="shrink-0">
+        <Link
+          href={user?.isStudent ? "/classe/livres" : user ? "/books" : "/"}
+          aria-label="Co-Aut, accueil"
+          className="shrink-0"
+        >
           <Logo />
         </Link>
 
@@ -93,9 +113,9 @@ export default function Header({ user = null }: { user?: HeaderUser }) {
         <div className="hidden items-center gap-5 lg:flex">
           {user ? (
             <>
-              <Cta href="/books/new">Lancer un livre</Cta>
+              {!user.isStudent && <Cta href="/books/new">Lancer un livre</Cta>}
               <ProfileLink user={user} />
-              <SignOut />
+              <SignOut student={user.isStudent} />
             </>
           ) : (
             <>
@@ -158,12 +178,14 @@ export default function Header({ user = null }: { user?: HeaderUser }) {
           <div className="mt-3 flex flex-col gap-3 border-t border-line pt-4">
             {user ? (
               <>
-                <Cta href="/books/new" onClick={() => setOpen(false)}>
-                  Lancer un livre
-                </Cta>
+                {!user.isStudent && (
+                  <Cta href="/books/new" onClick={() => setOpen(false)}>
+                    Lancer un livre
+                  </Cta>
+                )}
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <ProfileLink user={user} />
-                  <SignOut />
+                  <SignOut student={user.isStudent} />
                 </div>
               </>
             ) : (

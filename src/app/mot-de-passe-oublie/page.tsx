@@ -13,6 +13,7 @@ export default async function MotDePasseOublie({
   const { erreur } = await searchParams;
   return (
     <AuthShell
+      studentLink
       title="Mot de passe oublié"
       intro="Indique l'email de ton compte : tu recevras un lien pour choisir un nouveau mot de passe. Si tu avais un compte sur l'ancienne version de Co-Aut, c'est aussi par ici que tu retrouves ton accès."
     >

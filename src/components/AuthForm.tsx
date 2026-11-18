@@ -118,10 +118,6 @@ export default function AuthForm({
           {loginState.pendingEmail && (
             <ResendConfirmation email={loginState.pendingEmail} />
           )}
-          <p className="mt-5 rounded-[10px] bg-tint-cream px-3.5 py-3 text-sm leading-relaxed text-muted">
-            Co-Aut a une nouvelle version. Si tu avais déjà un compte, passe par
-            «&nbsp;Mot de passe oublié&nbsp;» pour retrouver ton accès.
-          </p>
         </>
       ) : (
         <>

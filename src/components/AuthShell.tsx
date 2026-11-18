@@ -1,23 +1,37 @@
 import Link from "next/link";
 import Logo from "@/components/Logo";
+import { LINK } from "@/components/ui";
 
-/** Cadre commun des pages d'accès au compte : logo, carte centrée. */
+/**
+ * Cadre commun des pages d'accès au compte : logo, carte centrée.
+ * `studentLink` : lien « Espace élève » dans l'en-tête, pour les pages vues sans être connecté.
+ */
 export default function AuthShell({
   title,
   intro,
   children,
+  studentLink = false,
 }: {
   title: string;
   intro?: string;
+  studentLink?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <>
       <header className="border-b border-line">
-        <div className="mx-auto flex max-w-6xl items-center px-4 py-4 sm:px-6">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
           <Link href="/" aria-label="Co-Aut, accueil">
             <Logo />
           </Link>
+          {studentLink && (
+            <Link
+              href="/classe"
+              className={`${LINK} inline-flex min-h-11 items-center whitespace-nowrap text-[15px]`}
+            >
+              Espace élève
+            </Link>
+          )}
         </div>
       </header>
       <main className="flex flex-1 flex-col items-center px-4 py-14">

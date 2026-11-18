@@ -21,12 +21,20 @@ export default async function Home({
           <Link href="/" aria-label="Co-Aut, accueil">
             <Logo />
           </Link>
-          <a
-            href="https://www.co-aut.com"
-            className={`${LINK} inline-flex min-h-11 items-center text-[15px]`}
-          >
-            Découvrir Co-Aut
-          </a>
+          <nav aria-label="Liens" className="flex items-center gap-3 sm:gap-6">
+            <Link
+              href="/classe"
+              className={`${LINK} inline-flex min-h-11 items-center whitespace-nowrap text-sm sm:text-[15px]`}
+            >
+              Espace élève
+            </Link>
+            <a
+              href="https://www.co-aut.com"
+              className={`${LINK} inline-flex min-h-11 items-center whitespace-nowrap text-sm sm:text-[15px]`}
+            >
+              Découvrir<span className="sr-only sm:not-sr-only">&nbsp;Co-Aut</span>
+            </a>
+          </nav>
         </div>
       </header>
 

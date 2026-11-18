@@ -43,6 +43,10 @@
 - [ ] Administration en tableaux filtrables : utilisateurs, livres, tours, demandes.
 - [ ] Actions d'administration : valider ou supprimer un texte, bloquer ou supprimer un utilisateur, changer un pseudo, changer le nombre de co-auteurs, archiver un livre, passer le tour d'un auteur absent.
 
+### Hors devis : livres privés pour les élèves
+
+- [ ] Comptes professionnels, « Mes classes », un code par élève, livres réservés à une classe, page co-aut.com/classe : voir `docs/livres-prives-eleves.md` (décidé à la démo du 16/11, questions à Juliette dans le doc).
+
 ### Semaine 3 : finitions et mise en ligne
 
 - [ ] Tests de bout en bout (écrire un livre jusqu'à la publication, à plusieurs comptes).

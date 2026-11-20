@@ -64,7 +64,7 @@ export default async function BibliothequePage({
         ) : (
           <BookShelf>
             {sorted.map((b) => (
-              <BookCard
+              <BookCard from="biblio"
                 key={b.id}
                 book={b}
                 favCount={favCounts.get(b.id) ?? 0}

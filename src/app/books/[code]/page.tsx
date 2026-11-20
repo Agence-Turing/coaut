@@ -26,6 +26,7 @@ import {
 } from "@/lib/books";
 import { getCurrentUser } from "@/lib/auth";
 import { deName } from "@/lib/fr";
+import { navFromHref } from "@/lib/nav";
 
 /** Au-delà de ce nombre de tours écrits, les premiers sont repliés (livre en cours). */
 const FOLD_ABOVE = 5;
@@ -104,10 +105,13 @@ function TurnStep({ turn }: { turn: Turn }) {
 
 export default async function BookPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ code: string }>;
+  searchParams: Promise<{ from?: string | string[] }>;
 }) {
   const { code } = await params;
+  const { from } = await searchParams;
   const [book, user] = await Promise.all([getBook(code), getCurrentUser()]);
   if (!book) notFound();
   const turns = await getTurns(book.id);
@@ -129,6 +133,19 @@ export default async function BookPage({
   const teamFull = Boolean(
     book.max_players && book.book_players.length >= book.max_players
   );
+
+  // Onglet du menu : celui de la liste d'où l'on vient (?from=…), sinon le plus
+  // probable pour ce livre et ce lecteur.
+  const navActive = isStudent
+    ? "/classe/livres"
+    : (navFromHref(from) ??
+      (isClassBook && isLauncher
+        ? "/classes"
+        : isLauncher || isPlayer
+          ? "/books/mes-livres"
+          : published
+            ? "/bibliotheque"
+            : "/books"));
 
   const myTurn = Boolean(
     writing && user?.authorId && writing.currentAuthorId === user.authorId && isPlayer
@@ -169,7 +186,7 @@ export default async function BookPage({
 
   return (
     <>
-      <Header user={user} />
+      <Header user={user} activeHref={navActive} />
       <main className="mx-auto flex w-full max-w-[800px] flex-1 flex-col gap-10 px-4 pb-20 pt-10 sm:px-6">
         <div className="flex flex-col gap-5">
           <Link

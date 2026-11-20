@@ -96,7 +96,7 @@ export default async function MyBooksPage() {
         ) : (
           <BookShelf>
             {writingSorted.map((b) => (
-              <BookCard
+              <BookCard from="mes-livres"
                 key={b.id}
                 book={b}
                 flags={{
@@ -116,7 +116,7 @@ export default async function MyBooksPage() {
         ) : (
           <BookShelf>
             {published.map((b) => (
-              <BookCard
+              <BookCard from="mes-livres"
                 key={b.id}
                 book={b}
                 flags={{ launcher: b.launcher_id === user.authorId }}
@@ -137,7 +137,7 @@ export default async function MyBooksPage() {
         ) : (
           <BookShelf>
             {favorites.map((b) => (
-              <BookCard
+              <BookCard from="mes-livres"
                 key={b.id}
                 book={b}
                 favCount={favCounts.get(b.id) ?? 0}

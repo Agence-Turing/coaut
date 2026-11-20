@@ -119,7 +119,7 @@ export default async function ClassPage({ params }: { params: Promise<{ id: stri
           ) : (
             <BookShelf>
               {books.map((b) => (
-                <BookCard key={b.id} book={b} flags={{}} />
+                <BookCard from="classes" key={b.id} book={b} flags={{}} />
               ))}
             </BookShelf>
           )}

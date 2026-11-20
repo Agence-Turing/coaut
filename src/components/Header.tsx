@@ -28,15 +28,14 @@ function navLinks(user: HeaderUser) {
   ];
 }
 
-/** Lien de navigation actif : le plus précis l'emporte (/books/mes-livres avant /books). */
-function isActive(pathname: string, href: string) {
-  if (href === "/books") {
-    return (
-      pathname === "/books" ||
-      (pathname.startsWith("/books/") &&
-        !pathname.startsWith("/books/mes-livres"))
-    );
-  }
+/**
+ * Lien de navigation actif. `/books` (« Rejoindre un livre ») ne vaut que pour
+ * la liste elle-même : la page d'un livre (/books/[code]) passe son onglet
+ * d'origine via `activeHref`.
+ */
+function isActive(pathname: string, href: string, active?: string | null) {
+  if (active !== undefined) return active === href;
+  if (href === "/books") return pathname === "/books";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -76,7 +75,14 @@ function SignOut({ student = false }: { student?: boolean }) {
   );
 }
 
-export default function Header({ user = null }: { user?: HeaderUser }) {
+export default function Header({
+  user = null,
+  activeHref,
+}: {
+  user?: HeaderUser;
+  /** Onglet à souligner, quand l'adresse ne suffit pas à le savoir (page d'un livre). */
+  activeHref?: string | null;
+}) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const links = navLinks(user);
@@ -94,7 +100,7 @@ export default function Header({ user = null }: { user?: HeaderUser }) {
 
         <nav aria-label="Navigation principale" className="hidden items-center gap-7 lg:flex">
           {links.map((l) => {
-            const active = isActive(pathname, l.href);
+            const active = isActive(pathname, l.href, activeHref);
             return (
               <Link
                 key={l.href}
@@ -160,7 +166,7 @@ export default function Header({ user = null }: { user?: HeaderUser }) {
         >
           <ul className="flex flex-col">
             {links.map((l) => {
-              const active = isActive(pathname, l.href);
+              const active = isActive(pathname, l.href, activeHref);
               return (
                 <li key={l.href}>
                   <Link

@@ -2,6 +2,7 @@ import Link from "next/link";
 import BookCover, { CoverBadge } from "@/components/BookCover";
 import { EYEBROW } from "@/components/ui";
 import { BookSummary, bookRef, playersOf, splitTitle, turnsCountOf } from "@/lib/books";
+import type { NavFrom } from "@/lib/nav";
 
 /**
  * Un livre dans une liste : fiche en largeur, toute cliquable.
@@ -12,10 +13,13 @@ export default function BookCard({
   book,
   flags,
   favCount = 0,
+  from,
 }: {
   book: BookSummary;
   flags?: { launcher?: boolean; myTurn?: boolean };
   favCount?: number;
+  /** Onglet de la liste, gardé actif dans le menu sur la page du livre. */
+  from?: NavFrom;
 }) {
   const players = playersOf(book);
   const turns = turnsCountOf(book);
@@ -45,7 +49,7 @@ export default function BookCard({
 
   return (
     <Link
-      href={`/books/${bookRef(book)}`}
+      href={`/books/${bookRef(book)}${from ? `?from=${from}` : ""}`}
       className="group flex min-w-0 gap-3.5 rounded-xl border border-line bg-paper p-3.5 text-ink transition-colors hover:border-line-strong sm:gap-5 sm:p-4"
     >
       <div className="w-[68px] shrink-0 transition-transform duration-200 group-hover:-translate-y-0.5 sm:w-[92px]">

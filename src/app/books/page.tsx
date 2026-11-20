@@ -24,11 +24,20 @@ export default async function BooksPage({
   searchParams: Promise<{ q?: string; theme?: string; niveau?: string }>;
 }) {
   const filters: BookFilters = await searchParams;
-  const [books, options, user] = await Promise.all([
+  const [launched, options, user] = await Promise.all([
     listBooks("launched", filters),
     getFilterOptions("launched"),
     getCurrentUser(),
   ]);
+  // Seulement les livres que l'on peut vraiment rejoindre : pas les siens
+  // (lancés ou déjà dans l'équipe), pas ceux dont l'équipe est complète.
+  const me = user?.authorId;
+  const books = launched.filter(
+    (b) =>
+      (!me ||
+        (b.launcher_id !== me && !b.book_players.some((p) => p.author_id === me))) &&
+      !(b.max_players && b.book_players.length >= b.max_players)
+  );
   const filtered = Boolean(filters.q || filters.theme || filters.niveau);
   const n = books.length;
 
@@ -40,9 +49,9 @@ export default async function BooksPage({
           title={
             filtered
               ? `${n} histoire${n > 1 ? "s" : ""} trouvée${n > 1 ? "s" : ""}`
-              : `${n} histoire${n > 1 ? "s" : ""} en cours d'écriture`
+              : `${n} histoire${n > 1 ? "s" : ""} à écrire`
           }
-          intro="Choisis-en une et demande à rejoindre l'équipe. Dès que le lanceur accepte, tu écris à ton tour."
+          intro="Choisis-en une et demande à rejoindre l'équipe. Dès que le lanceur accepte, vous écrivez chacun votre tour."
         />
 
         <BookFiltersBar
@@ -67,7 +76,7 @@ export default async function BooksPage({
         ) : (
           <BookShelf>
             {books.map((b) => (
-              <BookCard key={b.id} book={b} />
+              <BookCard from="rejoindre" key={b.id} book={b} />
             ))}
           </BookShelf>
         )}

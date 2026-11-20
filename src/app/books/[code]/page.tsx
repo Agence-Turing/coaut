@@ -19,6 +19,7 @@ import {
   getFavoriteCounts,
   getMyFavoriteIds,
   bookRef,
+  placesLeft,
   writingState,
   shownTurns,
   splitTitle,
@@ -133,6 +134,12 @@ export default async function BookPage({
   const teamFull = Boolean(
     book.max_players && book.book_players.length >= book.max_players
   );
+  // Places encore libres dans un livre public : la suite attend que l'équipe soit au complet.
+  const openPlaces =
+    !isClassBook && book.max_players
+      ? Math.max(book.max_players - book.book_players.length, 0)
+      : 0;
+  const waiting = writing?.waitingForTeam ?? null;
 
   // Onglet du menu : celui de la liste d'où l'on vient (?from=…), sinon le plus
   // probable pour ce livre et ce lecteur.
@@ -432,7 +439,14 @@ export default async function BookPage({
                     nickname={user.nickname}
                   />
                 </Step>
-                {nextNickname && (
+                {openPlaces > 0 && book.max_players ? (
+                  <Step marker={writing.number + 1} tone="dashed" last>
+                    <p className="text-[15px] text-muted">
+                      Ensuite : la suite s&rsquo;écrit quand l&rsquo;équipe est au complet (
+                      {placesLeft({ size: book.max_players, missing: openPlaces })}).
+                    </p>
+                  </Step>
+                ) : nextNickname && (
                   <Step marker={writing.number + 1} tone="dashed" last>
                     <p className="text-[15px] text-muted">
                       Ensuite :{" "}
@@ -444,6 +458,22 @@ export default async function BookPage({
               </>
             ) : (
               <Step marker={writing.number} tone="outline" last>
+                {waiting ? (
+                  <>
+                    <p className="text-[17px] font-medium">
+                      {isLauncher ? "En attente de ton équipe" : "En attente de l'équipe"}
+                      {" "}: {placesLeft(waiting)}.
+                    </p>
+                    <p className="mt-1 text-[15px] text-muted">
+                      {isLauncher
+                        ? "Co-Aut s'écrit à plusieurs : la suite s'écrit dès que l'équipe est au complet. Accepte les demandes pour rejoindre ton livre."
+                        : isPlayer
+                          ? "La suite s'écrit dès que l'équipe est au complet. Tu recevras un mail quand ce sera ton tour."
+                          : "La suite s'écrit dès que l'équipe est au complet."}
+                    </p>
+                  </>
+                ) : (
+                <>
                 <p className="text-[17px] font-medium">
                   {writing.pendingReview
                     ? `Le tour ${deName(writing.pendingReview.authors?.nickname ?? "l'élève")} est en relecture par l'enseignant.`
@@ -457,6 +487,8 @@ export default async function BookPage({
                       ? "Reviens plus tard : « À toi d'écrire » s'affichera sur la page de ta classe."
                       : "Tu recevras un mail quand ce sera ton tour."}
                   </p>
+                )}
+                </>
                 )}
               </Step>
             ))}

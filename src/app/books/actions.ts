@@ -5,7 +5,7 @@ import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
-import { getBook, getTurns, pendingReviewOf, writingState } from "@/lib/books";
+import { getBook, getTurns, pendingReviewOf, placesLeft, writingState } from "@/lib/books";
 import { createClassBook } from "@/app/classes/actions";
 import {
   notifyBookPublished,
@@ -168,22 +168,28 @@ export async function acceptRequest(formData: FormData) {
   if ("error" in result) return;
   const { supabase, request } = result;
 
+  const [{ count }, { data: bookRow }] = await Promise.all([
+    supabase
+      .from("book_players")
+      .select("*", { count: "exact", head: true })
+      .eq("book_id", request.book_id),
+    supabase.from("books").select("max_players").eq("id", request.book_id).maybeSingle(),
+  ]);
+  // Équipe déjà au complet : la demande reste en attente.
+  if (bookRow?.max_players && (count ?? 0) >= bookRow.max_players) return;
+
   await supabase
     .from("join_requests")
     .update({ status: "accepted" })
     .eq("id", requestId);
-
-  const { count } = await supabase
-    .from("book_players")
-    .select("*", { count: "exact", head: true })
-    .eq("book_id", request.book_id);
   await supabase.from("book_players").insert({
     book_id: request.book_id,
     author_id: request.author_id,
     position: count ?? 0,
   });
 
-  // Mails : réponse au demandeur, et « à toi d'écrire » si le livre peut démarrer.
+  // Mails : réponse au demandeur, et « à toi d'écrire » si le livre peut démarrer ou reprendre
+  // (équipe qui vient d'être au complet).
   after(async () => {
     await notifyJoinAnswer(request.book_id, request.author_id, true);
     await notifyBookStarts(request.book_id);
@@ -218,6 +224,10 @@ export async function saveTurn(
   const state = writingState(book, turns);
   if (state.pendingReview)
     return { error: "Le tour précédent est en relecture par l'enseignant. Reviens un peu plus tard." };
+  if (state.waitingForTeam)
+    return {
+      error: `En attente de l'équipe : ${placesLeft(state.waitingForTeam)}. L'écriture reprend dès que l'équipe est au complet.`,
+    };
   if (state.currentAuthorId !== user.authorId)
     return {
       error: `Ce n'est pas ton tour d'écrire${state.currentNickname ? ` — c'est celui de ${state.currentNickname}` : ""}.`,
@@ -337,6 +347,15 @@ export async function publishBook(
     return { error: "Un tour attend ta relecture : valide-le ou renvoie-le avant de publier." };
 
   const openTurn = turns.find((t) => !t.is_ended);
+  // Un livre Co-Aut s'écrit à plusieurs : pas de publication d'un livre écrit seul.
+  if (!book.class_id) {
+    const writers = new Set(ended.map((t) => t.author_id));
+    if (openTurn?.content?.trim()) writers.add(openTurn.author_id);
+    if (writers.size < 2)
+      return {
+        error: "Un livre Co-Aut s'écrit à plusieurs : il pourra être publié quand au moins un co-auteur aura écrit son tour.",
+      };
+  }
   if (openTurn && openTurn.author_id !== user.authorId)
     return {
       error: "Un tour d'écriture est en cours : attends qu'il soit terminé pour publier.",

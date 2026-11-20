@@ -50,6 +50,8 @@
 
 ### Semaine 3 : finitions et mise en ligne
 
+- [x] Retour de Juliette du 20/11 « je peux écrire seule » : le lanceur écrit le tour 1, puis l'écriture attend que l'équipe soit au complet (règle imposée par la base, message « En attente de ton équipe… »), publication impossible pour un livre écrit seul. Voir « Équipe au complet » dans `AGENTS.md`.
+
 - [ ] Tests de bout en bout (écrire un livre jusqu'à la publication, à plusieurs comptes).
 - [ ] Retours de Juliette sur la préprod.
 - [ ] Serveur de production : le VPS Infomaniak (2 Go de mémoire, aucune sauvegarde, expiration affichée au 04/12) doit recevoir l'app et la pile Supabase ; vérifier que ça tient, mettre une sauvegarde.
@@ -61,6 +63,10 @@
 Abandonnées le 16/11 (décision de Juliette : des couleurs à la place). Les listes et la page d'un livre n'affichent que la couverture colorée composée par le code ; rien à reprendre le jour J (`cover_path` reste en base, plus lu). Plus de bouton « refaire la couverture » ni de génération automatique.
 
 ## Questions à Juliette
+
+- (équipe au complet, 20/11) Un co-auteur quitte un livre en route : aujourd'hui l'écriture s'arrête jusqu'à ce qu'un nouveau co-auteur prenne la place (ou qu'elle baisse le nombre de places dans l'administration). Ou faut-il continuer avec ceux qui restent ?
+- (équipe au complet) Équipe qui ne se complète jamais : laisser le lanceur baisser lui-même le nombre de places, ou fermer le livre au bout d'un délai ?
+- (équipe au complet) Les livres repris de l'ancien site n'ont pas de nombre de places : ils ne sont pas concernés par la règle. Faut-il leur en fixer un ?
 
 - (point du vendredi 20/11) Correction des fautes : la liste de corrections mot par mot validée par l'auteur lui suffit-elle, ou veut-elle un texte réécrit par l'IA ?
 

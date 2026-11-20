@@ -254,6 +254,11 @@ export async function getCurrentWriters(books: BookSummary[]) {
       map.set(book.id, null);
       continue;
     }
+    // Équipe pas au complet après le premier tour : personne n'écrit.
+    if (teamWaiting(book, turns)) {
+      map.set(book.id, null);
+      continue;
+    }
     const open = turns.find((t) => !t.is_ended);
     if (open) {
       map.set(book.id, open.author_id as string | null);
@@ -294,7 +299,34 @@ export type WritingState = {
   number: number;
   /** Livre de classe avec relecture : tour terminé qui attend la validation du prof. */
   pendingReview?: Turn | null;
+  /** Équipe pas au complet après le premier tour : personne n'écrit (teamWaiting). */
+  waitingForTeam?: TeamWaiting | null;
 };
+
+export type TeamWaiting = { size: number; missing: number };
+
+/**
+ * Le livre attend-il son équipe ? Le lanceur écrit le tour 1 ; ensuite personne n'écrit tant que
+ * l'équipe n'a pas le nombre de co-auteurs choisi au lancement. Hors règle : livres de classe et
+ * livres repris de l'ancien site (max_players null). Même règle que book_waiting_for_team()
+ * (migration 0012), qui l'impose aussi dans la base.
+ */
+export function teamWaiting(
+  book: BookSummary,
+  turns: { is_ended: boolean }[]
+): TeamWaiting | null {
+  if (book.status !== "launched" || book.class_id || !book.max_players) return null;
+  const missing = book.max_players - book.book_players.length;
+  if (missing <= 0 || !turns.some((t) => t.is_ended)) return null;
+  return { size: book.max_players, missing };
+}
+
+/** « 2 places sur 4 restent à pourvoir » */
+export function placesLeft(w: TeamWaiting): string {
+  return w.missing > 1
+    ? `${w.missing} places sur ${w.size} restent à pourvoir`
+    : `1 place sur ${w.size} reste à pourvoir`;
+}
 
 /** Tour terminé qui attend la relecture du prof (livre de classe avec relecture), sinon null. */
 export function pendingReviewOf(book: BookSummary, turns: Turn[]): Turn | null {
@@ -324,6 +356,11 @@ export function writingState(book: BookSummary, turns: Turn[]): WritingState {
   const pendingReview = pendingReviewOf(book, turns);
   if (pendingReview) {
     return { openTurn: null, currentAuthorId: null, currentNickname: null, number: maxNumber + 1, pendingReview };
+  }
+
+  const waitingForTeam = teamWaiting(book, turns);
+  if (waitingForTeam) {
+    return { openTurn, currentAuthorId: null, currentNickname: null, number: openTurn?.number ?? maxNumber + 1, waitingForTeam };
   }
 
   if (openTurn) {

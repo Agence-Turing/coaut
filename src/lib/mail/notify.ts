@@ -38,26 +38,40 @@ const info = (book: BookRow) => ({
   path: `/books/${book.legacy_code ?? book.id}`,
 });
 
-/** À qui le tour (même règle que writingState) : tour ouvert, sinon rotation de l'équipe. */
+/**
+ * À qui le tour (même règle que writingState) : personne si le livre attend son équipe
+ * (teamWaiting), sinon tour ouvert, sinon rotation de l'équipe.
+ */
 async function currentTurn(admin: SupabaseClient, bookId: string) {
-  const [{ data: players }, { data: turns }] = await Promise.all([
+  const [{ data: players }, { data: turns }, { data: book }] = await Promise.all([
     admin.from("book_players").select("author_id, position").eq("book_id", bookId).order("position"),
     admin.from("turns").select("number, is_ended, author_id").eq("book_id", bookId),
+    admin.from("books").select("status, class_id, max_players").eq("id", bookId).maybeSingle(),
   ]);
   const team = players ?? [];
   const all = turns ?? [];
   const ended = all.filter((t) => t.is_ended).length;
   const open = all.find((t) => !t.is_ended);
   const maxNumber = all.reduce((m, t) => Math.max(m, t.number), 0);
+  const waiting = Boolean(
+    book?.status === "launched" &&
+      !book.class_id &&
+      book.max_players &&
+      team.length < book.max_players &&
+      ended > 0
+  );
+  const full = Boolean(book?.max_players && team.length >= book.max_players);
+  if (waiting) return { authorId: null, number: open?.number ?? maxNumber + 1, ended, team, full };
   if (open) {
-    return { authorId: open.author_id as string | null, number: open.number as number, ended, team };
+    return { authorId: open.author_id as string | null, number: open.number as number, ended, team, full };
   }
-  if (team.length === 0) return { authorId: null, number: maxNumber + 1, ended, team };
+  if (team.length === 0) return { authorId: null, number: maxNumber + 1, ended, team, full };
   return {
     authorId: team[ended % team.length].author_id as string,
     number: maxNumber + 1,
     ended,
     team,
+    full,
   };
 }
 
@@ -86,13 +100,19 @@ export async function notifyYourTurn(bookId: string, exceptAuthorId?: string) {
   }
 }
 
-/** Le livre démarre : un co-auteur vient d'être accepté et rien n'est encore écrit. */
+/**
+ * Un co-auteur vient d'entrer dans l'équipe : le livre démarre (rien n'est encore écrit) ou
+ * reprend (l'équipe vient d'être au complet après le premier tour). currentTurn ne renvoie
+ * personne tant que le livre attend son équipe ; le journal évite tout doublon.
+ */
 export async function notifyBookStarts(bookId: string, exceptAuthorId?: string) {
   try {
     const admin = createAdminClient();
     if (!admin) return;
     const turn = await currentTurn(admin, bookId);
-    if (turn.ended > 0 || turn.team.length < 2) return;
+    if (turn.team.length < 2) return;
+    // Livre déjà commencé : seulement si l'équipe est maintenant au complet.
+    if (turn.ended > 0 && !turn.full) return;
     await notifyYourTurn(bookId, exceptAuthorId);
   } catch (e) {
     console.error("notifyBookStarts :", e);

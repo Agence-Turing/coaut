@@ -182,8 +182,11 @@ export async function setMaxPlayers(formData: FormData) {
     .select("*", { count: "exact", head: true })
     .eq("book_id", id);
   if (!Number.isInteger(max) || max < 1 || max > 30 || max < (count ?? 0)) fail(back, "max_joueurs");
+  const before = await currentWriter(ctx.db, id);
   const { error } = await ctx.db.from("books").update({ max_players: max }).eq("id", id);
   if (error) fail(back, "technique");
+  // Moins de places : un livre qui attendait son équipe peut reprendre (mail « à toi d'écrire »).
+  notifyIfWriterChanged(id, before, await currentWriter(ctx.db, id));
   done(back, "max_joueurs");
 }
 

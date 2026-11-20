@@ -435,6 +435,7 @@ export default async function BookPage({
                   <TurnEditor
                     key={writing.number}
                     bookRef={ref}
+                    number={writing.number}
                     draft={writing.openTurn?.content ?? ""}
                     nickname={user.nickname}
                   />

@@ -194,8 +194,45 @@ test("propositions mal formées ou chevauchantes", () => {
     p("enfant", "enfants", "accord"),
     p("enfant joue", "enfants jouent", "accord"),
     p("joue", "jouent", "accord"),
+    p("joue", "jouer", "conjugaison"),
   ]);
+  // Les propositions compatibles fusionnent, la contradictoire est écartée.
   assert.equal(appliquer(texte, corrections), "Les enfants jouent.");
   assert.ok(rejets.some((r) => r.raison === "type inconnu"));
   assert.ok(rejets.some((r) => r.raison === "chevauche une autre correction"));
+});
+
+test("lettre en trop dans une faute de frappe (ellle → elle), mais pas une onomatopée", () => {
+  assert.equal(raisonDeRejet("ellle", "elle"), null);
+  assert.equal(raisonDeRejet("Aaaah", "Ah"), "onomatopée");
+});
+
+test("espaces et traits d'union autour de la ponctuation", () => {
+  const texte = "Bon bref,elle continua. Bah alors,répond ! Et toi,qu'est-ce-que tu fais ? Parce-que...C'est privé.";
+  const { corrections, rejets } = filtrer(texte, [
+    p("bref,elle", "bref, elle", "ponctuation"),
+    p(",répond", ", répond", "ponctuation", "alors,répond !"),
+    p("répond", "réponds", "conjugaison", "alors,répond !"),
+    p("toi,qu'est-ce-que", "toi, qu'est-ce que", "ponctuation"),
+    p("Parce-que...C'est", "Parce que... C'est", "ponctuation"),
+  ]);
+  assert.deepEqual(rejets, []);
+  assert.equal(
+    appliquer(texte, corrections),
+    "Bon bref, elle continua. Bah alors, réponds ! Et toi, qu'est-ce que tu fais ? Parce que... C'est privé."
+  );
+});
+
+test("mot à majuscule gardé tel quel : la correction voisine passe", () => {
+  const texte = "Harry lui chuchota Gardons là secrète, veut-tu ?";
+  const { corrections } = filtrer(texte, [
+    p("Gardons là", "Gardons-la", "ponctuation"),
+    p("veut-tu", "veux-tu", "conjugaison"),
+  ]);
+  assert.equal(appliquer(texte, corrections), "Harry lui chuchota Gardons-la secrète, veux-tu ?");
+});
+
+test("trait d'union qui pend : rejeté", () => {
+  assert.equal(raisonDeRejet("là", "-la"), "passage mal découpé");
+  assert.equal(raisonDeRejet("Gardons là", "Gardons-la"), null);
 });

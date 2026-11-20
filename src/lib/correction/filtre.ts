@@ -221,12 +221,24 @@ export function raisonDeRejet(avant: string, apres: string): string | null {
       ? null
       : "ajout ou suppression de mots";
   }
-  if (na > 2 || nb > 2) return "plus de deux mots";
-  if (distance(ponctuation(avant), ponctuation(apres)) > 2) return "ponctuation trop modifiée";
   const sa = squelette(avant);
   const sb = squelette(apres);
-  if (sa === sb) return null; // accents, majuscules, apostrophes, espaces
-  if (/(\p{L})\1\1/iu.test(avant)) return "onomatopée";
+  if (distance(ponctuation(avant), ponctuation(apres)) > 2) return "ponctuation trop modifiée";
+  // Trait d'union ou apostrophe qui pend au bord (là → -la) : passage mal découpé.
+  if (/^[-'’]|[-]$/.test(apres.trim()) && !/^[-'’]|[-]$/.test(avant.trim()))
+    return "passage mal découpé";
+  // Accents, majuscules, apostrophes, espaces, traits d'union : les lettres ne
+  // bougent pas, on tolère un passage un peu plus long (toi,qu'est-ce-que →
+  // toi, qu'est-ce que).
+  if (sa === sb) return na > 4 || nb > 4 ? "plus de deux mots" : null;
+  if (na > 2 || nb > 2) return "plus de deux mots";
+  // Lettre triplée : onomatopée (Aaaah), sauf faute de frappe d'une lettre
+  // en trop (ellle → elle).
+  if (
+    /(\p{L})\1\1/iu.test(avant) &&
+    !(squelette(avant).replace(/(\p{L})\1\1/gu, "$1$1") === sb && !/(\p{L})\1\1/iu.test(apres))
+  )
+    return "onomatopée";
 
   const motsA = avant.split(/\s+/).filter((m) => LETTRE.test(m));
   const motsB = apres.split(/\s+/).filter((m) => LETTRE.test(m));
@@ -246,9 +258,14 @@ export function raisonDeRejet(avant: string, apres: string): string | null {
 /* Placement dans le texte                                             */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Le passage est-il un mot entier ? Seuls ses bords en lettre comptent : un
+ * passage qui commence par une ponctuation (« ,les » dans « répondre,les »)
+ * peut suivre une lettre.
+ */
 function bornesDeMot(texte: string, debut: number, fin: number): boolean {
-  const avant = debut > 0 ? texte[debut - 1] : "";
-  const apres = fin < texte.length ? texte[fin] : "";
+  const avant = debut > 0 && LETTRE.test(texte[debut] ?? "") ? texte[debut - 1] : "";
+  const apres = fin < texte.length && LETTRE.test(texte[fin - 1] ?? "") ? texte[fin] : "";
   return !(avant && LETTRE.test(avant)) && !(apres && LETTRE.test(apres));
 }
 
@@ -346,7 +363,9 @@ export function filtrer(
     }
     for (const debut of positions) {
       // Nom propre (majuscule hors début de phrase) : on n'y touche pas.
-      if (nomPropre(texte, debut)) {
+      // Le mot à majuscule lui-même gardé (Gardons là → Gardons-la) : on corrige.
+      const premier = (m: string) => m.split(/[\s-]+/)[0];
+      if (nomPropre(texte, debut) && premier(fautif) !== premier(apres)) {
         rejeter("nom propre");
         break;
       }
@@ -360,11 +379,25 @@ export function filtrer(
   for (const c of candidates) {
     const prec = corrections[corrections.length - 1];
     if (prec && c.debut < prec.fin) {
-      if (!(c.debut === prec.debut && c.fin === prec.fin && c.apres === prec.apres))
-        rejets.push({
-          proposition: { extrait: "", fautif: c.avant, correction: c.apres, type: c.type },
-          raison: "chevauche une autre correction",
-        });
+      if (c.debut === prec.debut && c.fin === prec.fin && c.apres === prec.apres) continue;
+      // Une correction dans une autre (alors,répond → alors, répond + répond → réponds) :
+      // on les fusionne si c'est sans ambiguïté.
+      const fusion =
+        c.debut >= prec.debut && c.fin <= prec.fin
+          ? fusionner(prec, c)
+          : c.debut <= prec.debut &&
+              c.fin >= prec.fin &&
+              (corrections.at(-2)?.fin ?? 0) <= c.debut
+            ? fusionner(c, prec)
+            : null;
+      if (fusion) {
+        corrections[corrections.length - 1] = fusion;
+        continue;
+      }
+      rejets.push({
+        proposition: { extrait: "", fautif: c.avant, correction: c.apres, type: c.type },
+        raison: "chevauche une autre correction",
+      });
       continue;
     }
     corrections.push(c);
@@ -373,6 +406,21 @@ export function filtrer(
   if (!verifierReconstruction(texte, appliquer(texte, corrections), corrections))
     return { corrections: [], rejets };
   return { corrections, rejets };
+}
+
+/**
+ * Fusion d'une correction `dedans` comprise dans `dehors` : le mot fautif de
+ * `dedans` doit se retrouver une seule fois, en mot entier, dans la correction
+ * de `dehors` (ou celle-ci contient déjà la bonne graphie).
+ */
+function fusionner(dehors: Correction, dedans: Correction): Correction | null {
+  const deja = occurrences(dehors.apres, dedans.apres);
+  if (deja.length === 1 && occurrences(dehors.apres, dedans.avant).length === 0) return dehors;
+  const ici = occurrences(dehors.apres, dedans.avant);
+  if (ici.length !== 1) return null;
+  const apres =
+    dehors.apres.slice(0, ici[0]) + dedans.apres + dehors.apres.slice(ici[0] + dedans.avant.length);
+  return raisonDeRejet(dehors.avant, apres) ? null : { ...dehors, apres };
 }
 
 /**

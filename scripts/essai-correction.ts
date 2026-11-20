@@ -1,5 +1,5 @@
 /**
- * Jeu d'essai de la correction des fautes contre l'IA réelle (~0,04 centime par texte).
+ * Jeu d'essai de la correction des fautes contre l'IA réelle (~1 centime par texte).
  *
  *   ANTHROPIC_API_KEY=… npm run essai-correction
  *
@@ -113,7 +113,7 @@ for (const c of CAS) {
 }
 
 durees.sort((a, b) => a - b);
-const cout = (entree * 0.1 + sortie * 0.5) / 1e6;
+const cout = (entree * 4 + sortie * 20) / 1e6; // Opus 5.5 : 4 $ / 20 $ par million
 console.log(
   `\n${CAS.length} textes, ${ecarts} écart(s). Jetons : ${entree} en entrée, ${sortie} en sortie (~${((cout / CAS.length) * 100).toFixed(3)} centime de dollar par texte). Durée médiane ${durees[Math.floor(durees.length / 2)] ?? "-"} ms, max ${durees.at(-1) ?? "-"} ms.`
 );

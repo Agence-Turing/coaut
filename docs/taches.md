@@ -52,6 +52,11 @@
 
 - [x] Retour de Juliette du 20/11 « je peux écrire seule » : le lanceur écrit le tour 1, puis l'écriture attend que l'équipe soit au complet (règle imposée par la base, message « En attente de ton équipe… »), publication impossible pour un livre écrit seul. Voir « Équipe au complet » dans `AGENTS.md`.
 
+- [x] Retour de Juliette du 20/11 « l'IA ne détecte que très peu de fautes » : les longs textes dépassaient le délai de 8 s (aucune proposition, seuls les soulignements du navigateur restaient) et Haiku laissait passer des accords. Passage à Opus 5.5 (effort `low`), texte découpé en morceaux relus en parallèle, consigne et filtre élargis (espaces, traits d'union). Mesuré en préprod : 5/5 sur « c'est parent ne l'encourage pas… », 23 propositions sur son tour long (aucune avant). Voir « Correction » dans `AGENTS.md`.
+- [x] Retour de Juliette du 20/11 « texte perdu à la déconnexion » : brouillon enregistré tout seul + copie de secours dans le navigateur, bouton « Enregistrer le brouillon » retiré. Voir « Brouillon du tour » dans `AGENTS.md`.
+- [ ] Correction : la clé Claude de production doit être au nom de Co-Aut ; coût avec Opus 5.5 ~1 centime par tour court, ~5 centimes pour 1 500 caractères (avant : ~0,04 centime avec Haiku). À dire à Juliette.
+- [ ] Correction, option non construite : « tout corriger » qui réécrirait aussi la ponctuation des dialogues (tirets, guillemets) et le style. Aujourd'hui l'écran de relecture applique déjà toutes les corrections d'un coup (acceptées par défaut, l'auteur rend un mot d'un geste) ; une réécriture complète contredirait la règle « ne jamais changer la voix de l'auteur » et ne serait plus vérifiable mot par mot par le filtre. À trancher avec Juliette.
+
 - [ ] Tests de bout en bout (écrire un livre jusqu'à la publication, à plusieurs comptes).
 - [ ] Retours de Juliette sur la préprod.
 - [ ] Serveur de production : le VPS Infomaniak (2 Go de mémoire, aucune sauvegarde, expiration affichée au 04/12) doit recevoir l'app et la pile Supabase ; vérifier que ça tient, mettre une sauvegarde.

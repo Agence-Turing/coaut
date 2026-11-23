@@ -8,6 +8,7 @@ import { LINK, PageHeading } from "@/components/ui";
 import {
   listBooks,
   getFilterOptions,
+  openToJoin,
   type BookFilters,
 } from "@/lib/books";
 import { getCurrentUser } from "@/lib/auth";
@@ -30,13 +31,14 @@ export default async function BooksPage({
     getCurrentUser(),
   ]);
   // Seulement les livres que l'on peut vraiment rejoindre : pas les siens
-  // (lancés ou déjà dans l'équipe), pas ceux dont l'équipe est complète.
+  // (lancés ou déjà dans l'équipe), pas ceux dont l'équipe est complète
+  // (dont les livres « Commencé » de l'ancien site, voir openToJoin).
   const me = user?.authorId;
   const books = launched.filter(
     (b) =>
       (!me ||
         (b.launcher_id !== me && !b.book_players.some((p) => p.author_id === me))) &&
-      !(b.max_players && b.book_players.length >= b.max_players)
+      openToJoin(b)
   );
   const filtered = Boolean(filters.q || filters.theme || filters.niveau);
   const n = books.length;

@@ -28,7 +28,7 @@ Clé stable partout : l'identifiant de la page Notion, rangé dans `legacy_id` (
 | Joueurs · E-mail | `auth.users.email` (compte créé sans mot de passe) |
 | Joueurs · Prénom, Nom, Date de naissance, Niveau scolaire, Ville, Pays, Professionnel, Accepte communications commerciales, note libre de la fiche | `author_profiles` (table privée, nouvelle) |
 | Livres · Code, Titre, Synopsis, Thème(s), Niveau scolaire, Lanceur, Date | `books` (`legacy_code`, `title`, `synopsis`, `themes`, `scolar_level`, `launcher_id`, `created_at`) |
-| Livres · Statut | Lancé et Commencé → `launched`, Publié → `published`, vide → `archived` (nouveau, invisible sur le site) |
+| Livres · Statut | Lancé et Commencé → `launched`, Publié → `published`, vide → `archived` (nouveau, invisible sur le site). Commencé = équipe formée en cours d'écriture : `max_players` = taille de l'équipe, le livre n'est plus à rejoindre (Lancé : `max_players` null, ouvert) |
 | Livres · Joueurs | `book_players` ; l'ordre de passage est reconstruit depuis les tours |
 | Tours · Livre, Numéro, Joueur, Terminé, Validé, Date de création, texte de la page | `turns` |
 | Demandes · Code livre, Pseudo joueur, Statut, Date | `join_requests` |

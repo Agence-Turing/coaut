@@ -5,7 +5,7 @@ import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
-import { getBook, getTurns, pendingReviewOf, placesLeft, writingState } from "@/lib/books";
+import { getBook, getTurns, openToJoin, pendingReviewOf, placesLeft, writingState } from "@/lib/books";
 import { createClassBook } from "@/app/classes/actions";
 import {
   notifyBookPublished,
@@ -106,6 +106,23 @@ export async function requestJoin(
   if (message.length < 10)
     return { error: "Écris un petit message au lanceur (10 caractères minimum) pour te présenter." };
 
+  // Livre fermé (équipe au complet, terminé, de classe) ou déjà le sien : pas de demande.
+  // La base le refuse aussi (migration 0013).
+  const supabase = await createClient();
+  const { data: target } = await supabase
+    .from("books")
+    .select("status, class_id, max_players, launcher_id, book_players(author_id)")
+    .eq("id", bookId)
+    .maybeSingle();
+  if (!target) return { error: "Livre introuvable." };
+  if (
+    target.launcher_id === user.authorId ||
+    target.book_players.some((p) => p.author_id === user.authorId)
+  )
+    return { error: "Tu fais déjà partie de l'équipe de ce livre." };
+  if (!openToJoin(target))
+    return { error: "L'équipe de ce livre est au complet : il n'est plus possible de la rejoindre." };
+
   const moderated = {
     text: message,
     kind: "join_request" as const,
@@ -115,7 +132,6 @@ export async function requestJoin(
   const check = await checkText(moderated);
   if (!check.ok) return { error: check.message };
 
-  const supabase = await createClient();
   const { data: created, error } = await supabase
     .from("join_requests")
     .insert({

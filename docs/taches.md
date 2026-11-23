@@ -55,6 +55,7 @@
 - [x] Retour de Juliette du 20/11 « l'IA ne détecte que très peu de fautes » : les longs textes dépassaient le délai de 8 s (aucune proposition, seuls les soulignements du navigateur restaient) et Haiku laissait passer des accords. Passage à Opus 5.5 (effort `low`), texte découpé en morceaux relus en parallèle, consigne et filtre élargis (espaces, traits d'union). Mesuré en préprod : 5/5 sur « c'est parent ne l'encourage pas… », 23 propositions sur son tour long (aucune avant). Voir « Correction » dans `AGENTS.md`.
 - [x] Retour de Juliette du 20/11 « texte perdu à la déconnexion » : brouillon enregistré tout seul + copie de secours dans le navigateur, bouton « Enregistrer le brouillon » retiré. Voir « Brouillon du tour » dans `AGENTS.md`.
 - [x] Retour de Juliette du 20/11 « l'âge à côté du niveau scolaire » : « CP · 6 ans » … « Terminale · 17 ans », « Adulte · 18 ans et plus », « Enfant » sans âge, dans le formulaire « Lancer un livre », les filtres (triés dans l'ordre scolaire) et la page d'un livre (« Niveau 3e, 14 ans », la virgule évitant la confusion avec les autres repères séparés par « · »). Valeurs en base inchangées ; libellés dans `src/lib/niveaux.ts`.
+- [x] Retour de Juliette du 20/11 « 91 livres à rejoindre, dont certains en cours d'écriture » : les 39 livres « Commencé » de Notion (équipe formée) étaient repris comme les 52 « Lancé » sans nombre de places. La reprise leur donne maintenant `max_players` = taille de l'équipe : en préprod, 93 → 54 livres ouverts (51 repris « Lancé » + 3 nouveaux ; Juliette en voyait 91 sans les siens). Règle aussi imposée par l'action serveur et la base (migration 0013). Voir « Rejoindre un livre » dans `AGENTS.md`.
 - [ ] Correction : la clé Claude de production doit être au nom de Co-Aut ; coût avec Opus 5.5 ~1 centime par tour court, ~5 centimes pour 1 500 caractères (avant : ~0,04 centime avec Haiku). À dire à Juliette.
 - [ ] Correction, option non construite : « tout corriger » qui réécrirait aussi la ponctuation des dialogues (tirets, guillemets) et le style. Aujourd'hui l'écran de relecture applique déjà toutes les corrections d'un coup (acceptées par défaut, l'auteur rend un mot d'un geste) ; une réécriture complète contredirait la règle « ne jamais changer la voix de l'auteur » et ne serait plus vérifiable mot par mot par le filtre. À trancher avec Juliette.
 
@@ -72,9 +73,11 @@ Abandonnées le 16/11 (décision de Juliette : des couleurs à la place). Les li
 
 - (équipe au complet, 20/11) Un co-auteur quitte un livre en route : aujourd'hui l'écriture s'arrête jusqu'à ce qu'un nouveau co-auteur prenne la place (ou qu'elle baisse le nombre de places dans l'administration). Ou faut-il continuer avec ceux qui restent ?
 - (équipe au complet) Équipe qui ne se complète jamais : laisser le lanceur baisser lui-même le nombre de places, ou fermer le livre au bout d'un délai ?
-- (équipe au complet) Les livres repris de l'ancien site n'ont pas de nombre de places : ils ne sont pas concernés par la règle. Faut-il leur en fixer un ?
+- (équipe au complet) Les livres « Lancé » repris de l'ancien site n'ont pas de nombre de places : ils ne sont pas concernés par la règle. Faut-il leur en fixer un ? (Les « Commencé » ont depuis le 23/11 autant de places que de co-auteurs : fermés.)
 
 - (niveaux, 20/11) Le niveau « Enfant » (8 livres repris) n'a pas d'âge : le garder, ou le remplacer par un niveau précis ? Les libellés affichés passent à l'écriture courte (6e, 5e, 2de, 1re au lieu de 6eme, 5ème, 2nde, 1ère) : d'accord ?
+- (rejoindre un livre, 23/11) Les 52 livres « Lancé » repris restent à rejoindre, dont beaucoup créés en 2024 sans aucun tour ni co-auteur : les garder visibles, ou les archiver (ou ne montrer que ceux de moins d'un an) ?
+
 - (point du vendredi 20/11) Correction des fautes : la liste de corrections mot par mot validée par l'auteur lui suffit-elle, ou veut-elle un texte réécrit par l'IA ?
 
 - A-t-elle accès au Bitbucket de l'ancien développeur (sources de l'ancien site) ?

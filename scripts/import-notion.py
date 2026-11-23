@@ -271,6 +271,9 @@ def build(export: Export) -> tuple[dict, list[tuple[str, int]], dict]:
             "status": STATUT_LIVRE.get(r["Statut"].strip(), "archived"),
             "launcher_id": launcher[0] if launcher else None,
             "created": parse_date(r["Date de création"] or r["Date"]), "players": order,
+            # « Commencé » = l'équipe est formée et écrit : sur l'ancien site, plus personne ne
+            # pouvait demander à rejoindre (seul « Lancé » montrait le bouton).
+            "team_closed": r["Statut"].strip() == "Commencé",
         })
     book_ids = {b["id"] for b in books}
     by_code = {b["code"]: b["id"] for b in books}
@@ -285,6 +288,7 @@ def build(export: Export) -> tuple[dict, list[tuple[str, int]], dict]:
               ("Export · tours repris avec texte", sum(1 for t in turns if t["content"])),
               ("Export · livres", len(rows)), ("Export · livres repris", len(books)),
               ("Export · livres repris sans statut (→ archived, invisibles)", sum(1 for b in books if b["status"] == "archived")),
+              ("Export · livres « Commencé » (équipe fermée, pas à rejoindre)", sum(1 for b in books if b["team_closed"])),
               ("Export · places dans les équipes", sum(len(b["players"]) for b in books))]
 
     # --- Demandes de participation (pas de relation dans Notion : code du livre et pseudo en texte)
@@ -346,7 +350,7 @@ create temp table _p on commit drop as
 create temp table _b on commit drop as
   select * from jsonb_to_recordset((select d -> 'books' from _doc)) as x(
     id uuid, code text, title text, synopsis text, themes jsonb, scolar_level text,
-    status text, launcher_id uuid, created timestamptz, players jsonb);
+    status text, launcher_id uuid, created timestamptz, players jsonb, team_closed boolean);
 create temp table _t on commit drop as
   select * from jsonb_to_recordset((select d -> 'turns' from _doc)) as x(
     id uuid, book_id uuid, number integer, author_id uuid, content text,
@@ -473,6 +477,17 @@ with s as (select b.id as book_id, a.id as author_id, (e.ord - 1)::integer as po
            on conflict (book_id, author_id) do update set position = excluded.position
            where bp.position is distinct from excluded.position returning 1)
 insert into _r (label, n) select 'places d''équipe créées ou réordonnées', count(*) from i;
+
+-- Équipe fermée (« Commencé » dans Notion) : nombre de places = taille de l'équipe, pour que le
+-- livre ne soit plus à rejoindre (même règle que les nouveaux livres au complet). Les livres
+-- « Lancé » gardent max_players null : ouverts à tous, sans règle « équipe au complet ».
+-- Un nombre de places déjà posé et suffisant (rouvert par l'administration) est gardé.
+with s as (select b.id, greatest((select count(*) from public.book_players bp where bp.book_id = b.id), 1)::integer as n
+           from _b x join public.books b on b.legacy_id = x.id
+           where x.team_closed and b.status = 'launched'),
+     u as (update public.books b set max_players = s.n from s
+           where b.id = s.id and (b.max_players is null or b.max_players < s.n) returning 1)
+insert into _r (label, n) select 'livres « Commencé » fermés (places = équipe)', count(*) from u;
 
 -- 5. Tours -----------------------------------------------------------------
 create temp table _ts on commit drop as

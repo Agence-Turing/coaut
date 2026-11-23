@@ -322,6 +322,21 @@ export function teamWaiting(
   return { size: book.max_players, missing };
 }
 
+/**
+ * Le livre accepte-t-il encore des co-auteurs ? En cours, public, et une place libre
+ * (max_players null = livre « Lancé » repris de l'ancien site, ouvert ; les livres
+ * « Commencé » y ont max_players = taille de l'équipe, donc fermés). Même règle que
+ * book_open_to_join() (migration 0013), qui l'impose aussi dans la base.
+ */
+export function openToJoin(
+  book: Pick<BookSummary, "status" | "class_id" | "max_players"> & {
+    book_players: unknown[];
+  }
+): boolean {
+  if (book.status !== "launched" || book.class_id) return false;
+  return !book.max_players || book.book_players.length < book.max_players;
+}
+
 /** « 2 places sur 4 restent à pourvoir » */
 export function placesLeft(w: TeamWaiting): string {
   return w.missing > 1

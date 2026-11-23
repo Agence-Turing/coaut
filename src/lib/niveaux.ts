@@ -25,9 +25,13 @@ export const NIVEAUX: { value: string; label: string }[] = [
 const LABELS = new Map(NIVEAUX.map((n) => [n.value, n.label]));
 const ORDER = new Map(NIVEAUX.map((n, i) => [n.value, i]));
 
-/** Libellé affiché d'un niveau stocké ; une valeur inconnue est montrée telle quelle. */
-export function niveauLabel(value: string): string {
-  return LABELS.get(value) ?? value;
+/**
+ * Libellé affiché d'un niveau stocké ; une valeur inconnue est montrée telle quelle.
+ * `sep` remplace « · » là où ce point sépare déjà d'autres repères (page d'un livre).
+ */
+export function niveauLabel(value: string, sep = " · "): string {
+  const label = LABELS.get(value) ?? value;
+  return sep === " · " ? label : label.replace(" · ", sep);
 }
 
 /** Tri dans l'ordre scolaire (CP → Terminale, puis Enfant, Adulte), inconnus à la fin. */

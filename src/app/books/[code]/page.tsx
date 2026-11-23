@@ -187,7 +187,7 @@ export default async function BookPage({
   const heading = splitTitle(book.title);
   const facts = [
     ...book.themes,
-    book.scolar_level ? `Niveau ${niveauLabel(book.scolar_level)}` : null,
+    book.scolar_level ? `Niveau ${niveauLabel(book.scolar_level, ", ")}` : null,
     isClassBook && !published ? "Réservé à la classe" : null,
     published ? "Publié" : "En cours d'écriture",
   ].filter(Boolean);

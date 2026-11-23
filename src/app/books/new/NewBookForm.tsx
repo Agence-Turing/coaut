@@ -3,25 +3,9 @@
 import { useActionState, useState, type ChangeEvent } from "react";
 import { createBook, type ActionState } from "@/app/books/actions";
 import { BTN_PRIMARY, HINT, INPUT, LABEL, Notice } from "@/components/ui";
+import { NIVEAUX } from "@/lib/niveaux";
 
 export type ClassOption = { id: string; name: string; students: number };
-
-const LEVELS = [
-  "CP",
-  "CE1",
-  "CE2",
-  "CM1",
-  "CM2",
-  "6eme",
-  "5ème",
-  "4ème",
-  "3ème",
-  "2nde",
-  "1ère",
-  "Terminale",
-  "Enfant",
-  "Adulte",
-];
 
 /** `classes` : les classes du professionnel connecté (vide pour les autres : pas de choix Public / Classe). */
 export default function NewBookForm({
@@ -165,9 +149,9 @@ export default function NewBookForm({
           </label>
           <select id="scolar_level" {...bind("scolar_level")} className={INPUT}>
             <option value="">Choisis un niveau</option>
-            {LEVELS.map((l) => (
-              <option key={l} value={l}>
-                {l}
+            {NIVEAUX.map((n) => (
+              <option key={n.value} value={n.value}>
+                {n.label}
               </option>
             ))}
           </select>

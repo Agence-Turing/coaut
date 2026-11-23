@@ -54,6 +54,7 @@
 
 - [x] Retour de Juliette du 20/11 « l'IA ne détecte que très peu de fautes » : les longs textes dépassaient le délai de 8 s (aucune proposition, seuls les soulignements du navigateur restaient) et Haiku laissait passer des accords. Passage à Opus 5.5 (effort `low`), texte découpé en morceaux relus en parallèle, consigne et filtre élargis (espaces, traits d'union). Mesuré en préprod : 5/5 sur « c'est parent ne l'encourage pas… », 23 propositions sur son tour long (aucune avant). Voir « Correction » dans `AGENTS.md`.
 - [x] Retour de Juliette du 20/11 « texte perdu à la déconnexion » : brouillon enregistré tout seul + copie de secours dans le navigateur, bouton « Enregistrer le brouillon » retiré. Voir « Brouillon du tour » dans `AGENTS.md`.
+- [x] Retour de Juliette du 20/11 « l'âge à côté du niveau scolaire » : « CP · 6 ans » … « Terminale · 17 ans », « Adulte · 18 ans et plus », « Enfant » sans âge, dans le formulaire « Lancer un livre », les filtres (triés dans l'ordre scolaire) et la page d'un livre. Valeurs en base inchangées ; libellés dans `src/lib/niveaux.ts`.
 - [ ] Correction : la clé Claude de production doit être au nom de Co-Aut ; coût avec Opus 5.5 ~1 centime par tour court, ~5 centimes pour 1 500 caractères (avant : ~0,04 centime avec Haiku). À dire à Juliette.
 - [ ] Correction, option non construite : « tout corriger » qui réécrirait aussi la ponctuation des dialogues (tirets, guillemets) et le style. Aujourd'hui l'écran de relecture applique déjà toutes les corrections d'un coup (acceptées par défaut, l'auteur rend un mot d'un geste) ; une réécriture complète contredirait la règle « ne jamais changer la voix de l'auteur » et ne serait plus vérifiable mot par mot par le filtre. À trancher avec Juliette.
 
@@ -73,6 +74,7 @@ Abandonnées le 16/11 (décision de Juliette : des couleurs à la place). Les li
 - (équipe au complet) Équipe qui ne se complète jamais : laisser le lanceur baisser lui-même le nombre de places, ou fermer le livre au bout d'un délai ?
 - (équipe au complet) Les livres repris de l'ancien site n'ont pas de nombre de places : ils ne sont pas concernés par la règle. Faut-il leur en fixer un ?
 
+- (niveaux, 20/11) Le niveau « Enfant » (8 livres repris) n'a pas d'âge : le garder, ou le remplacer par un niveau précis ? Les libellés affichés passent à l'écriture courte (6e, 5e, 2de, 1re au lieu de 6eme, 5ème, 2nde, 1ère) : d'accord ?
 - (point du vendredi 20/11) Correction des fautes : la liste de corrections mot par mot validée par l'auteur lui suffit-elle, ou veut-elle un texte réécrit par l'IA ?
 
 - A-t-elle accès au Bitbucket de l'ancien développeur (sources de l'ancien site) ?

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { compareNiveaux } from "@/lib/niveaux";
 
 export type BookSummary = {
   id: string;
@@ -144,7 +145,7 @@ export async function getFilterOptions(status: "launched" | "published") {
     a.localeCompare(b, "fr", { sensitivity: "base" });
   return {
     themes: [...themes].sort(sortFr),
-    levels: [...levels].sort(sortFr),
+    levels: [...levels].sort(compareNiveaux),
   };
 }
 

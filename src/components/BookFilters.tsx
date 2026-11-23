@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useTransition } from "react";
 import type { BookFilters } from "@/lib/books";
 import { INPUT, LINK } from "@/components/ui";
+import { niveauLabel } from "@/lib/niveaux";
 
 /**
  * Filtres des listes de livres : ils s'appliquent dès qu'on change une liste,
@@ -103,7 +104,7 @@ export default function BookFiltersBar({
           <option value="">Tous les niveaux</option>
           {levels.map((l) => (
             <option key={l} value={l}>
-              {l}
+              {niveauLabel(l)}
             </option>
           ))}
         </select>

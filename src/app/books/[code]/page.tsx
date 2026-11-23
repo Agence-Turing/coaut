@@ -28,6 +28,7 @@ import {
 import { getCurrentUser } from "@/lib/auth";
 import { deName } from "@/lib/fr";
 import { navFromHref } from "@/lib/nav";
+import { niveauLabel } from "@/lib/niveaux";
 
 /** Au-delà de ce nombre de tours écrits, les premiers sont repliés (livre en cours). */
 const FOLD_ABOVE = 5;
@@ -186,7 +187,7 @@ export default async function BookPage({
   const heading = splitTitle(book.title);
   const facts = [
     ...book.themes,
-    book.scolar_level ? `Niveau ${book.scolar_level}` : null,
+    book.scolar_level ? `Niveau ${niveauLabel(book.scolar_level)}` : null,
     isClassBook && !published ? "Réservé à la classe" : null,
     published ? "Publié" : "En cours d'écriture",
   ].filter(Boolean);

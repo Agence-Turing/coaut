@@ -1,5 +1,4 @@
 const LINKS = [
-  { label: "Découvrir Co-Aut", href: "https://www.co-aut.com" },
   { label: "Instagram", href: "https://www.instagram.com/co_aut" },
   { label: "Facebook", href: "https://www.facebook.com/CoAutJuliette" },
   { label: "LinkedIn", href: "https://www.linkedin.com/in/juliette-lejeune-/" },

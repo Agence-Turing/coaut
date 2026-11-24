@@ -51,6 +51,7 @@
 
 ### Semaine 3 : finitions et mise en ligne
 
+- [x] Lien « Découvrir Co-Aut » (vers www.co-aut.com) retiré du menu de l'accueil et du pied de page (demande de Toni, 24/11).
 - [x] Retour de Juliette du 20/11 « je peux écrire seule » : le lanceur écrit le tour 1, puis l'écriture attend que l'équipe soit au complet (règle imposée par la base, message « En attente de ton équipe… »), publication impossible pour un livre écrit seul. Voir « Équipe au complet » dans `AGENTS.md`.
 
 - [x] Retour de Juliette du 20/11 « l'IA ne détecte que très peu de fautes » : les longs textes dépassaient le délai de 8 s (aucune proposition, seuls les soulignements du navigateur restaient) et Haiku laissait passer des accords. Passage à Opus 5.5 (effort `low`), texte découpé en morceaux relus en parallèle, consigne et filtre élargis (espaces, traits d'union). Mesuré en préprod : 5/5 sur « c'est parent ne l'encourage pas… », 23 propositions sur son tour long (aucune avant). Voir « Correction » dans `AGENTS.md`.

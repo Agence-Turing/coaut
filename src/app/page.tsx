@@ -29,12 +29,6 @@ export default async function Home({
             >
               Espace élève
             </Link>
-            <a
-              href="https://www.co-aut.com"
-              className={`${LINK} inline-flex min-h-11 items-center whitespace-nowrap text-sm sm:text-[15px]`}
-            >
-              Découvrir<span className="sr-only sm:not-sr-only">&nbsp;Co-Aut</span>
-            </a>
           </nav>
         </div>
       </header>

@@ -20,6 +20,10 @@ import {
 } from "@/lib/admin/data";
 import { requireAdminPage } from "@/lib/admin/guard";
 import { noticeFrom } from "@/lib/admin/messages";
+import { deName } from "@/lib/fr";
+
+/** « d' » ou « de » devant le pseudo : « au tour d'André », « au tour de Léa ». */
+const aTourDe = (pseudo: string) => deName(pseudo).slice(0, -pseudo.length);
 
 const SECTION = "flex flex-col gap-4 rounded-2xl border border-line p-4 sm:p-6";
 const H2 = "font-display text-2xl font-bold text-ink";
@@ -59,6 +63,9 @@ export default async function AdminBookPage({ params, searchParams }: PageProps<
   const since = daysSince(book.last_activity_at);
   const meInTeam = Boolean(authorId && team.some((p) => p.author_id === authorId));
   const currentIdx = team.findIndex((p) => p.author_id === book.current_writer_id);
+  // Équipe incomplète (règle « équipe au complet », hors livres de classe) : personne n'écrit.
+  const waitingFor =
+    !book.class_id && book.max_players ? Math.max(book.max_players - team.length, 0) : 0;
   const next = currentIdx >= 0 && team.length > 1 ? team[(currentIdx + 1) % team.length] : null;
 
   return (
@@ -87,7 +94,11 @@ export default async function AdminBookPage({ params, searchParams }: PageProps<
             </Link>
           )}
           <Link href={`/admin/tours?livre_id=${book.id}&tri=numero&ordre=asc`} className={LINK}>
-            Voir ses {book.turns_count} tours
+            {book.turns_count === 0
+              ? "Aucun tour"
+              : book.turns_count === 1
+                ? "Voir son tour"
+                : `Voir ses ${book.turns_count} tours`}
           </Link>
         </div>
       </div>
@@ -101,7 +112,8 @@ export default async function AdminBookPage({ params, searchParams }: PageProps<
           </h2>
           {book.current_writer_nickname ? (
             <p className="text-[17px] text-ink">
-              C&apos;est au tour de <strong>{book.current_writer_nickname}</strong>
+              C&apos;est au tour {aTourDe(book.current_writer_nickname)}
+              <strong>{book.current_writer_nickname}</strong>
               {since !== null && <span className="text-muted"> (dernier mouvement il y a {since} j)</span>}.
               {next && (
                 <>
@@ -110,10 +122,21 @@ export default async function AdminBookPage({ params, searchParams }: PageProps<
                 </>
               )}
             </p>
-          ) : (
+          ) : team.length === 0 ? (
             <p className="text-muted">Personne pour l&apos;instant : l&apos;équipe est vide.</p>
+          ) : waitingFor > 0 ? (
+            <p className="text-[17px] text-ink">
+              En attente de l&apos;équipe :{" "}
+              {waitingFor > 1
+                ? `${waitingFor} places sur ${book.max_players} restent à pourvoir`
+                : `1 place sur ${book.max_players} reste à pourvoir`}
+              . L&apos;écriture reprend dès que l&apos;équipe est au complet (ou baisse le nombre de
+              places ci-dessous).
+            </p>
+          ) : (
+            <p className="text-muted">Personne ne peut écrire pour l&apos;instant.</p>
           )}
-          {team.length > 1 && (
+          {team.length > 1 && book.current_writer_nickname && (
             <form action={booksAction}>
               <input type="hidden" name="back" value={back} />
               <ConfirmButton
@@ -273,7 +296,7 @@ export default async function AdminBookPage({ params, searchParams }: PageProps<
             name="do"
             value={`supprime:${book.id}`}
             className={`${SMALL_BTN_DANGER} min-h-11 px-5 text-[15px]`}
-            message={`Supprimer définitivement « ${book.title} », son équipe et ses ${book.turns_count} tours ?`}
+            message={`Supprimer définitivement « ${book.title} », son équipe et ${book.turns_count > 1 ? `ses ${book.turns_count} tours` : book.turns_count === 1 ? "son tour" : "aucun tour écrit"} ?`}
           >
             Supprimer le livre
           </ConfirmButton>

@@ -67,6 +67,7 @@ export type AdminBookRow = {
   class_id: string | null;
   class_name: string | null;
   teacher_review: boolean;
+  open_to_join: boolean;
 };
 
 export const BOOK_SORTS: Record<string, string> = {
@@ -99,6 +100,10 @@ export async function listAdminBooks(
   }
   const statut = param(sp, "statut");
   if (["launched", "published", "archived"].includes(statut)) query = query.eq("status", statut);
+  // « Lancé » = en cours avec une place libre (visible dans « Rejoindre un livre »),
+  // « En cours d'écriture » = en cours, équipe au complet ou livre de classe.
+  if (statut === "lance") query = query.eq("status", "launched").eq("open_to_join", true);
+  if (statut === "ecriture") query = query.eq("status", "launched").eq("open_to_join", false);
   const visibilite = param(sp, "visibilite");
   if (visibilite === "public") query = query.is("class_id", null);
   if (visibilite === "classe") query = query.not("class_id", "is", null);
@@ -440,6 +445,12 @@ export const STATUS_LABELS: Record<string, string> = {
   published: "Publié",
   archived: "Archivé",
 };
+
+/** Libellé du statut dans l'admin : « Lancé » si le livre recrute encore, sinon « En cours ». */
+export function statusLabel(b: { status: string; open_to_join?: boolean | null }) {
+  if (b.status === "launched") return b.open_to_join ? "Lancé" : "En cours d'écriture";
+  return STATUS_LABELS[b.status] ?? b.status;
+}
 
 export function bookCode(b: { legacy_code: string | null; id: string }) {
   return b.legacy_code ? b.legacy_code.replace("#", "") : b.id;

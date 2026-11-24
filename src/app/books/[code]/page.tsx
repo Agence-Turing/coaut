@@ -13,6 +13,7 @@ import { BTN_PRIMARY, BTN_SECONDARY, EYEBROW, LINK, Notice } from "@/components/
 import { acceptRequest, rejectRequest } from "@/app/books/actions";
 import {
   getBook,
+  openToJoin,
   getTurns,
   getJoinRequests,
   getMyJoinRequest,
@@ -224,7 +225,7 @@ export default async function BookPage({
     ...book.themes,
     book.scolar_level ? `Niveau ${niveauLabel(book.scolar_level, ", ")}` : null,
     isClassBook && !published ? "Réservé à la classe" : null,
-    published ? "Publié" : "En cours d'écriture",
+    published ? "Publié" : openToJoin(book) ? "Équipe à rejoindre" : "En cours d'écriture",
   ].filter(Boolean);
 
   return (

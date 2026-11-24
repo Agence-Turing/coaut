@@ -16,7 +16,7 @@ import {
 import { INPUT, LINK, Notice } from "@/components/ui";
 import {
   INACTIVE_DAYS,
-  STATUS_LABELS,
+  statusLabel,
   daysSince,
   formatDate,
   listAdminBooks,
@@ -59,7 +59,9 @@ export default async function AdminBooksPage({ searchParams }: PageProps<"/admin
           Statut
           <select name="statut" defaultValue={param(sp, "statut")} className={INPUT}>
             <option value="">Tous</option>
-            <option value="launched">En cours</option>
+            <option value="lance">Lancés (équipe à rejoindre)</option>
+            <option value="ecriture">En cours d&apos;écriture</option>
+            <option value="launched">Lancés et en cours</option>
             <option value="published">Publiés</option>
             <option value="archived">Archivés</option>
           </select>
@@ -160,7 +162,7 @@ export default async function AdminBooksPage({ searchParams }: PageProps<"/admin
                     </td>
                     <td className={TD}>
                       <Tag tone={b.status === "archived" ? "warn" : b.status === "published" ? "soft" : "neutral"}>
-                        {STATUS_LABELS[b.status]}
+                        {statusLabel(b)}
                       </Tag>
                     </td>
                     <td className={TD}>

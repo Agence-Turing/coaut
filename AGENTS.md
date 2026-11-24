@@ -35,7 +35,7 @@ Direction « Carnet » (validée par Toni le 2026-11-16) : fond blanc, le texte 
 
 - **Reprise de la base Notion de l'ancien site** (source complète : joueurs, livres, tours, demandes) : `scripts/import-notion.py` + migration `0006_reprise_notion.sql`, mode d'emploi dans `docs/reprise-notion.md`. L'export Notion ne se commite jamais (données personnelles).
 
-Statuts livres : `archived` (retiré par Juliette, invisible), `launched` (recherche co-auteurs / en cours) et `published` (terminé). Un tour avec `is_ended=false` = tour d'écriture en cours. `book_players.position` = ordre de passage.
+Statuts livres : `archived` (retiré par Juliette, invisible), `launched` (recherche co-auteurs / en cours) et `published` (terminé). Affichage (retour de Juliette du 24/11, migration `0016_admin_statut_lance.sql`) : un livre `launched` qui a encore une place (`openToJoin()`, colonne `open_to_join` de `admin_books`) s'affiche « Lancé » dans l'admin (filtre « Lancés (équipe à rejoindre) », `statusLabel()` de `src/lib/admin/data.ts`) et « Équipe à rejoindre » sur la page du livre ; sinon « En cours d'écriture ». Un tour avec `is_ended=false` = tour d'écriture en cours. `book_players.position` = ordre de passage.
 
 ## Déploiement (VM agents du dédié agence)
 

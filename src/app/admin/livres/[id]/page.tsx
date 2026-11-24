@@ -11,7 +11,7 @@ import { ConfirmButton } from "@/components/admin/client";
 import { SMALL_BTN, SMALL_BTN_DANGER, Tag } from "@/components/admin/table";
 import { BTN_PRIMARY, BTN_SECONDARY, EYEBROW, INPUT, LABEL, LINK, Notice } from "@/components/ui";
 import {
-  STATUS_LABELS,
+  statusLabel,
   UUID_RE,
   bookCode,
   daysSince,
@@ -79,7 +79,7 @@ export default async function AdminBookPage({ params, searchParams }: PageProps<
         </p>
         <h1 className="font-display text-3xl font-bold leading-tight text-ink">{book.title}</h1>
         <div className="flex flex-wrap items-center gap-3 text-sm">
-          <Tag tone={book.status === "archived" ? "warn" : "neutral"}>{STATUS_LABELS[book.status]}</Tag>
+          <Tag tone={book.status === "archived" ? "warn" : "neutral"}>{statusLabel(book)}</Tag>
           {book.class_id ? (
             <Link href={`/admin/classes/${book.class_id}`} className={LINK}>
               Livre de la classe {book.class_name}

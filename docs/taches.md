@@ -32,6 +32,7 @@
 - [ ] Livres proposés selon l'âge (un an d'écart autorisé), adultes séparés des enfants.
 - [ ] Inscrits à la newsletter envoyés dans Brevo (Juliette le fait à la main aujourd'hui).
 - [ ] Pages de l'ancien site absentes : règles du jeu, contact (formulaire), mentions légales, cookies, page d'accueil après inscription. Les liens « Mentions légales » et « Politique de confidentialité » du pied de page (pages inexistantes) ont été retirés en attendant.
+- [x] Mentions légales et politique de confidentialité (réunion du 20/11) : liens vers les pages du site de Juliette (co-aut.com/mentions-legales, co-aut.com/politique-de-confidentialite) dans le pied de page, ajouté aussi à l'accueil (connexion, inscription) et aux pages d'accès au compte (2026-11-24).
 - [ ] Proposition de livre : sur l'ancien site, lancer un livre passait par une demande envoyée à Juliette ; à trancher (libre comme aujourd'hui, ou validé par elle).
 
 ### Semaine 2 : IA et administration
@@ -56,6 +57,7 @@
 - [x] Retour de Juliette du 20/11 « texte perdu à la déconnexion » : brouillon enregistré tout seul + copie de secours dans le navigateur, bouton « Enregistrer le brouillon » retiré. Voir « Brouillon du tour » dans `AGENTS.md`.
 - [x] Retour de Juliette du 20/11 « l'âge à côté du niveau scolaire » : « CP · 6 ans » … « Terminale · 17 ans », « Adulte · 18 ans et plus », « Enfant » sans âge, dans le formulaire « Lancer un livre », les filtres (triés dans l'ordre scolaire) et la page d'un livre (« Niveau 3e, 14 ans », la virgule évitant la confusion avec les autres repères séparés par « · »). Valeurs en base inchangées ; libellés dans `src/lib/niveaux.ts`.
 - [x] Retour de Juliette du 20/11 « 91 livres à rejoindre, dont certains en cours d'écriture » : les 39 livres « Commencé » de Notion (équipe formée) étaient repris comme les 52 « Lancé » sans nombre de places. La reprise leur donne maintenant `max_players` = taille de l'équipe : en préprod, 93 → 54 livres ouverts (51 repris « Lancé » + 3 nouveaux ; Juliette en voyait 91 sans les siens). Règle aussi imposée par l'action serveur et la base (migration 0013). Voir « Rejoindre un livre » dans `AGENTS.md`.
+- [x] Retour de Juliette du 20/11 « le logo n'a pas la bonne typo » : l'en-tête affiche le logo complet officiel en image (`logo-co-aut-clair.png`, tiré de `logo-co-aut.png` de co-aut.com, « Co » passé du blanc à l'encre), plus de « Co-Aut » retapé en Zilla Slab. Baseline « Ensemble, soyons créatifs » : non ajoutée, à confirmer.
 - [ ] Correction : la clé Claude de production doit être au nom de Co-Aut ; coût avec Opus 5.5 ~1 centime par tour court, ~5 centimes pour 1 500 caractères (avant : ~0,04 centime avec Haiku). À dire à Juliette.
 - [ ] Correction, option non construite : « tout corriger » qui réécrirait aussi la ponctuation des dialogues (tirets, guillemets) et le style. Aujourd'hui l'écran de relecture applique déjà toutes les corrections d'un coup (acceptées par défaut, l'auteur rend un mot d'un geste) ; une réécriture complète contredirait la règle « ne jamais changer la voix de l'auteur » et ne serait plus vérifiable mot par mot par le filtre. À trancher avec Juliette.
 

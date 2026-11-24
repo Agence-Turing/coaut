@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Logo from "@/components/Logo";
+import Footer from "@/components/Footer";
 import { LINK } from "@/components/ui";
 
 /**
@@ -43,6 +44,7 @@ export default function AuthShell({
           {children}
         </div>
       </main>
+      <Footer />
     </>
   );
 }

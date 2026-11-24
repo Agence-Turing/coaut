@@ -3,6 +3,8 @@ const LINKS = [
   { label: "Instagram", href: "https://www.instagram.com/co_aut" },
   { label: "Facebook", href: "https://www.facebook.com/CoAutJuliette" },
   { label: "LinkedIn", href: "https://www.linkedin.com/in/juliette-lejeune-/" },
+  { label: "Mentions légales", href: "https://www.co-aut.com/mentions-legales/" },
+  { label: "Confidentialité", href: "https://www.co-aut.com/politique-de-confidentialite/" },
 ];
 
 export default function Footer() {

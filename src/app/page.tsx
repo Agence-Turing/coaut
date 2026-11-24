@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import AuthForm from "@/components/AuthForm";
 import Logo from "@/components/Logo";
+import Footer from "@/components/Footer";
 import { EYEBROW, LINK } from "@/components/ui";
 import { getCurrentUser } from "@/lib/auth";
 
@@ -62,6 +63,7 @@ export default async function Home({
           }
         />
       </main>
+      <Footer />
     </>
   );
 }

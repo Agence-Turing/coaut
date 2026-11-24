@@ -235,7 +235,12 @@ export default function TurnEditor({
         value={text}
         placeholder="Que se passe-t-il ensuite ?"
         onChange={(e) => setText(e.target.value)}
-        onBlur={() => void sauver()}
+        onBlur={(e) => {
+          // Clic sur « Terminer mon tour » : l'envoi emporte le texte, une sauvegarde du
+          // brouillon en même temps ne servirait à rien.
+          if ((e.relatedTarget as HTMLElement | null)?.dataset?.envoi === "1") return;
+          void sauver();
+        }}
         className="block w-full resize-y rounded-xl border-2 border-ink bg-paper p-4 font-display text-xl leading-relaxed text-ink placeholder:text-subtle focus:outline-none focus:ring-2 focus:ring-ink/20"
       />
 
@@ -254,6 +259,8 @@ export default function TurnEditor({
           type="submit"
           name="finish"
           value="1"
+          data-envoi="1"
+          onPointerDown={() => (envoi.current = true)}
           disabled={pending}
           className={`${BTN_PRIMARY} min-h-12`}
         >

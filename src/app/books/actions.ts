@@ -297,13 +297,10 @@ export async function saveTurn(
     // Livre de classe avec relecture : le tour attend la validation du prof.
     is_validated: finish && !book.teacher_review,
   };
-  const { data: saved, error } = state.openTurn
-    ? await supabase
-        .from("turns")
-        .update(payload)
-        .eq("id", state.openTurn.id)
-        .select("id")
-        .maybeSingle()
+  const updateTurn = (id: string) =>
+    supabase.from("turns").update(payload).eq("id", id).select("id").maybeSingle();
+  let { data: saved, error } = state.openTurn
+    ? await updateTurn(state.openTurn.id)
     : await supabase
         .from("turns")
         .insert({
@@ -314,6 +311,20 @@ export async function saveTurn(
         })
         .select("id")
         .single();
+  // 23505 : la sauvegarde automatique du brouillon (perte du focus au clic sur « Terminer »,
+  // texte collé juste avant) a ouvert ce tour entre notre lecture et notre écriture. C'est le
+  // même tour, du même auteur : on le termine au lieu d'échouer.
+  if (error?.code === "23505" && !state.openTurn) {
+    const { data: draftTurn } = await supabase
+      .from("turns")
+      .select("id")
+      .eq("book_id", book.id)
+      .eq("number", state.number)
+      .eq("author_id", user.authorId)
+      .eq("is_ended", false)
+      .maybeSingle();
+    if (draftTurn) ({ data: saved, error } = await updateTurn(draftTurn.id));
+  }
   if (error) {
     if (error.code === "23505")
       return { error: "Un autre tour vient d'être enregistré, recharge la page." };

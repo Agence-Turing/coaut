@@ -117,9 +117,15 @@ export default async function BookPage({
   const [book, user] = await Promise.all([getBook(code), getCurrentUser()]);
   if (!book) notFound();
   const turns = await getTurns(book.id);
-  const team = book.book_players
-    .slice()
-    .sort((a, b) => a.position - b.position);
+  // Ordre de passage, affiché à partir du lanceur : les positions tournent (la rotation des
+  // tours se recale quand l'administration supprime un tour ou retire un co-auteur), l'ordre
+  // cyclique, lui, ne change pas.
+  const byPosition = book.book_players.slice().sort((a, b) => a.position - b.position);
+  const launcherIdx = byPosition.findIndex((p) => p.author_id === book.launcher_id);
+  const team =
+    launcherIdx > 0
+      ? [...byPosition.slice(launcherIdx), ...byPosition.slice(0, launcherIdx)]
+      : byPosition;
   const writtenTurns = shownTurns(book, turns);
   // Livre réservé à une classe : pas de demandes à rejoindre, pas de mail aux élèves.
   const isClassBook = Boolean(book.class_id);

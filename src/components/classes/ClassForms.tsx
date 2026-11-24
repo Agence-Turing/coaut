@@ -4,7 +4,7 @@ import { useActionState } from "react";
 import { addStudents, createClass, type ClassActionState } from "@/app/classes/actions";
 import { BTN_PRIMARY, BTN_SECONDARY, HINT, INPUT, LABEL, Notice } from "@/components/ui";
 
-function StudentsFields({ idPrefix }: { idPrefix: string }) {
+function StudentsFields({ idPrefix, value }: { idPrefix: string; value?: string }) {
   return (
     <>
       <div>
@@ -15,6 +15,7 @@ function StudentsFields({ idPrefix }: { idPrefix: string }) {
           id={`${idPrefix}-names`}
           name="first_names"
           rows={6}
+          defaultValue={value}
           placeholder={"André\nLéa B.\nRobert"}
           className={INPUT}
         />
@@ -29,7 +30,8 @@ function StudentsFields({ idPrefix }: { idPrefix: string }) {
 export function CreateClassForm() {
   const [state, action, pending] = useActionState<ClassActionState, FormData>(createClass, {});
   return (
-    <form action={action} className="flex flex-col gap-5">
+    // Clé = l'état : après une erreur, le formulaire se remonte avec la saisie renvoyée.
+    <form key={state.values ? JSON.stringify(state.values) : "vide"} action={action} className="flex flex-col gap-5">
       <div>
         <label htmlFor="class-name" className={`${LABEL} mb-1.5`}>
           Nom de la classe
@@ -41,11 +43,12 @@ export function CreateClassForm() {
           required
           minLength={2}
           maxLength={80}
+          defaultValue={state.values?.name}
           placeholder="Ex : CM1 — École Jules Ferry"
           className={INPUT}
         />
       </div>
-      <StudentsFields idPrefix="new" />
+      <StudentsFields idPrefix="new" value={state.values?.first_names} />
       <Notice error={state.error} info={state.info} />
       <div>
         <button type="submit" disabled={pending} className={`${BTN_PRIMARY} min-h-12`}>
@@ -59,9 +62,9 @@ export function CreateClassForm() {
 export function AddStudentsForm({ classId }: { classId: string }) {
   const [state, action, pending] = useActionState<ClassActionState, FormData>(addStudents, {});
   return (
-    <form action={action} className="flex flex-col gap-5">
+    <form key={state.values ? JSON.stringify(state.values) : "vide"} action={action} className="flex flex-col gap-5">
       <input type="hidden" name="class_id" value={classId} />
-      <StudentsFields idPrefix="add" />
+      <StudentsFields idPrefix="add" value={state.values?.first_names} />
       <Notice error={state.error} info={state.info} />
       <div>
         <button type="submit" disabled={pending} className={`${BTN_SECONDARY} min-h-12`}>

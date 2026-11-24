@@ -61,6 +61,20 @@ export function parseFirstNames(raw: string): string[] {
   return names;
 }
 
+/** Prénoms saisis plusieurs fois (casse ignorée), dans leur première forme : « Zoé, Noah, zoé » → ["Zoé"]. */
+export function duplicateFirstNames(raw: string): string[] {
+  const seen = new Map<string, string>();
+  const dup = new Map<string, string>();
+  for (const part of raw.split(/[\n,;]+/)) {
+    const name = part.trim().replace(/\s+/g, " ").slice(0, 40);
+    if (!name) continue;
+    const key = name.toLocaleLowerCase("fr");
+    if (seen.has(key)) dup.set(key, seen.get(key)!);
+    else seen.set(key, name);
+  }
+  return [...dup.values()];
+}
+
 export type ClassRow = { id: string; name: string; owner_id: string; created_at: string };
 
 export type StudentRow = {

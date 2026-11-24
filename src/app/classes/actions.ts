@@ -12,6 +12,7 @@ import {
   createStudent,
   getOwnedClass,
   listStudents,
+  duplicateFirstNames,
   parseFirstNames,
 } from "@/lib/classes";
 import { checkText, recordPublished } from "@/lib/moderation";
@@ -19,7 +20,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { normaliserThemes } from "@/lib/themes";
 
-export type ClassActionState = { error?: string; info?: string };
+export type ClassActionState = {
+  error?: string;
+  info?: string;
+  /** Saisie renvoyée avec une erreur : le formulaire la réaffiche au lieu de se vider. */
+  values?: { name?: string; first_names?: string };
+};
 
 const NOT_PRO =
   "Les classes sont réservées aux enseignants et professionnels : coche la case dans « Mon profil ».";
@@ -34,11 +40,21 @@ async function currentPro() {
   return { user, authorId: user.authorId } as const;
 }
 
-/** Prénoms du formulaire : un par ligne. */
-function namesFrom(formData: FormData): string[] | { error: string } {
-  const typed = parseFirstNames(String(formData.get("first_names") ?? ""));
+/** Prénoms du formulaire : un par ligne. Un prénom en double est refusé, jamais fusionné en silence. */
+function namesFrom(formData: FormData): string[] | { error: string; values: ClassActionState["values"] } {
+  const raw = String(formData.get("first_names") ?? "");
+  const values = { name: String(formData.get("name") ?? ""), first_names: raw };
+  const dup = duplicateFirstNames(raw);
+  if (dup.length > 0) {
+    const list = dup.map((n) => `« ${n} »`).join(", ");
+    return {
+      error: `${list} ${dup.length > 1 ? "sont écrits" : "est écrit"} deux fois : ajoute une initiale pour distinguer les élèves (« ${dup[0]} B. »).`,
+      values,
+    };
+  }
+  const typed = parseFirstNames(raw);
   if (typed.length > 0) return typed;
-  return { error: "Écris les prénoms des élèves, un par ligne." };
+  return { error: "Écris les prénoms des élèves, un par ligne.", values };
 }
 
 /** Ajoute les élèves aux livres en cours de la classe (en fin d'ordre de passage). */

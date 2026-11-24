@@ -17,6 +17,7 @@ import {
 import { checkText, recordPublished, type CheckResult } from "@/lib/moderation";
 import { verifierReconstruction, type Correction } from "@/lib/correction/filtre";
 import { lireRevue, signerRevue } from "@/lib/correction/jeton";
+import { normaliserThemes } from "@/lib/themes";
 
 export type ActionState = {
   error?: string;
@@ -43,10 +44,7 @@ export async function createBook(
   const synopsis = String(formData.get("synopsis") ?? "").trim();
   const scolarLevel = String(formData.get("scolar_level") ?? "").trim();
   const maxPlayers = Number(formData.get("max_players") ?? 0);
-  const themes = String(formData.get("themes") ?? "")
-    .split(",")
-    .map((t) => t.trim())
-    .filter(Boolean);
+  const themes = normaliserThemes(String(formData.get("themes") ?? ""));
 
   if (title.length < 3) return { error: "Donne un titre à ton histoire (3 caractères minimum)." };
   if (synopsis.length < 20)

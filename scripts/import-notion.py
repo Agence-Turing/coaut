@@ -151,6 +151,40 @@ def clean_body(md: str) -> str | None:
     return text or None
 
 
+# « Livre commencé - Recherche 2 co-auteurs : Léo a 14 ans… » : mentions de suivi que Juliette
+# tapait en tête du synopsis dans Notion. On les retire du résumé ; le nombre de co-auteurs
+# cherchés sert à fixer le nombre de places du livre.
+SUIVI_RE = re.compile(
+    r"^\s*(?:livre\s+commenc[ée]+\s*[-–:]?\s*)?(?:recherche\s*(\d+)\s*co-?auteure?s?\s*[:\-–]?\s*)?",
+    re.IGNORECASE)
+
+
+def clean_synopsis(raw: str) -> tuple[str | None, int | None]:
+    """(résumé sans les mentions de suivi, nombre de co-auteurs cherchés ou None)."""
+    m = SUIVI_RE.match(raw or "")
+    text = (raw or "")[m.end():].strip() if m and m.end() else (raw or "").strip()
+    wanted = int(m.group(1)) if m and m.group(1) else None
+    return text or None, wanted
+
+
+# Thèmes saisis librement dans Notion : « aventure » et « Aventure » sont le même filtre.
+THEME_FIX = {"amitiè": "Amitié", "amitie": "Amitié"}
+
+
+def clean_theme(t: str) -> str:
+    t = " ".join(t.split())
+    return THEME_FIX.get(t.lower()) or (t[:1].upper() + t[1:])
+
+
+def clean_themes(raw: str) -> list[str]:
+    out: list[str] = []
+    for t in raw.split(","):
+        t = clean_theme(t) if t.strip() else ""
+        if t and t.lower() not in {o.lower() for o in out}:
+            out.append(t)
+    return out
+
+
 def base_pseudo(p: str) -> str:
     return CRAYONS.sub("", p or "").strip().casefold()
 
@@ -264,9 +298,11 @@ def build(export: Export) -> tuple[dict, list[tuple[str, int]], dict]:
             nxt = order[(order.index(mine[-1]["author_id"]) + 1) % len(order)]
             shift = (order.index(nxt) - len(mine)) % len(order)
             order = order[shift:] + order[:shift]
+        synopsis, wanted = clean_synopsis(r["Synopsis"])
         books.append({
-            "id": cand[0], "code": code, "title": r["Titre"].strip(), "synopsis": r["Synopsis"].strip() or None,
-            "themes": [t.strip() for t in r["Thème(s)"].split(",") if t.strip()],
+            "id": cand[0], "code": code, "title": r["Titre"].strip(), "synopsis": synopsis,
+            "wanted": wanted,
+            "themes": clean_themes(r["Thème(s)"]),
             "scolar_level": r["Niveau scolaire"].strip() or None,
             "status": STATUT_LIVRE.get(r["Statut"].strip(), "archived"),
             "launcher_id": launcher[0] if launcher else None,
@@ -289,6 +325,7 @@ def build(export: Export) -> tuple[dict, list[tuple[str, int]], dict]:
               ("Export · livres", len(rows)), ("Export · livres repris", len(books)),
               ("Export · livres repris sans statut (→ archived, invisibles)", sum(1 for b in books if b["status"] == "archived")),
               ("Export · livres « Commencé » (équipe fermée, pas à rejoindre)", sum(1 for b in books if b["team_closed"])),
+              ("Export · résumés avec « Recherche N co-auteurs » (mention retirée)", sum(1 for b in books if b["wanted"])),
               ("Export · places dans les équipes", sum(len(b["players"]) for b in books))]
 
     # --- Demandes de participation (pas de relation dans Notion : code du livre et pseudo en texte)
@@ -350,7 +387,7 @@ create temp table _p on commit drop as
 create temp table _b on commit drop as
   select * from jsonb_to_recordset((select d -> 'books' from _doc)) as x(
     id uuid, code text, title text, synopsis text, themes jsonb, scolar_level text,
-    status text, launcher_id uuid, created timestamptz, players jsonb, team_closed boolean);
+    status text, launcher_id uuid, created timestamptz, players jsonb, team_closed boolean, wanted integer);
 create temp table _t on commit drop as
   select * from jsonb_to_recordset((select d -> 'turns' from _doc)) as x(
     id uuid, book_id uuid, number integer, author_id uuid, content text,
@@ -488,6 +525,17 @@ with s as (select b.id, greatest((select count(*) from public.book_players bp wh
      u as (update public.books b set max_players = s.n from s
            where b.id = s.id and (b.max_players is null or b.max_players < s.n) returning 1)
 insert into _r (label, n) select 'livres « Commencé » fermés (places = équipe)', count(*) from u;
+
+-- Livre « Lancé » dont le résumé disait « Recherche N co-auteurs » : places = lanceur + N
+-- (au moins l'équipe déjà formée), pour que la règle « équipe au complet » s'applique.
+-- Un nombre de places déjà posé (nouveau site, administration) est gardé.
+with s as (select b.id, greatest(1 + (x.wanted)::integer,
+                                 (select count(*) from public.book_players bp where bp.book_id = b.id))::integer as n
+           from _b x join public.books b on b.legacy_id = x.id
+           where not x.team_closed and x.wanted is not null and b.status = 'launched'),
+     u as (update public.books b set max_players = s.n from s
+           where b.id = s.id and b.max_players is null returning 1)
+insert into _r (label, n) select 'livres « Lancé » : places fixées par « Recherche N co-auteurs »', count(*) from u;
 
 -- 5. Tours -----------------------------------------------------------------
 create temp table _ts on commit drop as

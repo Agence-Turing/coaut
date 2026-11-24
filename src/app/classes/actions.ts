@@ -17,6 +17,7 @@ import {
 import { checkText, recordPublished } from "@/lib/moderation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { normaliserThemes } from "@/lib/themes";
 
 export type ClassActionState = { error?: string; info?: string };
 
@@ -214,10 +215,7 @@ export async function createClassBook(
   const title = String(formData.get("title") ?? "").trim();
   const synopsis = String(formData.get("synopsis") ?? "").trim();
   const scolarLevel = String(formData.get("scolar_level") ?? "").trim();
-  const themes = String(formData.get("themes") ?? "")
-    .split(",")
-    .map((t) => t.trim())
-    .filter(Boolean);
+  const themes = normaliserThemes(String(formData.get("themes") ?? ""));
   if (title.length < 3) return { error: "Donne un titre à l'histoire (3 caractères minimum)." };
   if (synopsis.length < 20)
     return { error: "Écris un résumé un peu plus complet (20 caractères minimum) : c'est le point de départ des élèves." };

@@ -135,16 +135,19 @@ export async function getFilterOptions(status: "launched" | "published") {
   const { data, error } = await query;
   if (error) throw error;
 
-  const themes = new Set<string>();
+  // Clé sans casse : un thème saisi « aventure » et « Aventure » n'apparaît qu'une fois.
+  const themes = new Map<string, string>();
   const levels = new Set<string>();
   for (const row of data ?? []) {
-    (row.themes as string[]).forEach((t) => themes.add(t));
+    (row.themes as string[]).forEach((t) => {
+      if (!themes.has(t.toLowerCase())) themes.set(t.toLowerCase(), t);
+    });
     if (row.scolar_level) levels.add(row.scolar_level as string);
   }
   const sortFr = (a: string, b: string) =>
     a.localeCompare(b, "fr", { sensitivity: "base" });
   return {
-    themes: [...themes].sort(sortFr),
+    themes: [...themes.values()].sort(sortFr),
     levels: [...levels].sort(compareNiveaux),
   };
 }

@@ -19,6 +19,7 @@ import {
   getFavoriteCounts,
   getMyFavoriteIds,
   bookRef,
+  pendingReviewOf,
   placesLeft,
   writingState,
   shownTurns,
@@ -161,6 +162,34 @@ export default async function BookPage({
             ? "/bibliotheque"
             : "/books"));
 
+  // Lien du haut : vers la liste de l'onglet souligné (on revient d'où l'on vient).
+  const back =
+    navActive === "/classe/livres"
+      ? { href: navActive, label: "← Les livres de ma classe" }
+      : navActive === "/classes"
+        ? isClassBook && isLauncher
+          ? { href: `/classes/${book.class_id}`, label: "← Ma classe" }
+          : { href: navActive, label: "← Mes classes" }
+        : navActive === "/books/mes-livres"
+          ? { href: navActive, label: "← Retour à mes livres" }
+          : navActive === "/bibliotheque"
+            ? { href: navActive, label: "← Retour à la bibliothèque" }
+            : { href: "/books", label: "← Retour aux livres à rejoindre" };
+
+  // « Publier » seulement quand publishBook l'accepterait : au moins un tour écrit, pas de tour
+  // en relecture, pas le tour en cours d'un autre, et (livre public) au moins deux auteurs.
+  const endedTurns = turns.filter((t) => t.is_ended && t.content);
+  const openTurn = turns.find((t) => !t.is_ended);
+  const writers = new Set(endedTurns.map((t) => t.author_id));
+  if (openTurn?.content?.trim()) writers.add(openTurn.author_id);
+  const canPublish =
+    isLauncher &&
+    book.status === "launched" &&
+    endedTurns.length > 0 &&
+    !pendingReviewOf(book, turns) &&
+    (!openTurn || openTurn.author_id === user?.authorId) &&
+    (isClassBook || writers.size >= 2);
+
   const myTurn = Boolean(
     writing && user?.authorId && writing.currentAuthorId === user.authorId && isPlayer
   );
@@ -204,24 +233,10 @@ export default async function BookPage({
       <main className="mx-auto flex w-full max-w-[800px] flex-1 flex-col gap-10 px-4 pb-20 pt-10 sm:px-6">
         <div className="flex flex-col gap-5">
           <Link
-            href={
-              isStudent
-                ? "/classe/livres"
-                : isClassBook && isLauncher
-                  ? `/classes/${book.class_id}`
-                  : published
-                    ? "/bibliotheque"
-                    : "/books"
-            }
+            href={back.href}
             className={`${LINK} inline-flex min-h-11 items-center self-start text-[15px]`}
           >
-            {isStudent
-              ? "← Les livres de ma classe"
-              : isClassBook && isLauncher
-                ? "← Ma classe"
-                : published
-                  ? "← Retour à la bibliothèque"
-                  : "← Retour aux livres à rejoindre"}
+            {back.label}
           </Link>
 
           <div className="w-24 sm:w-28">
@@ -273,9 +288,7 @@ export default async function BookPage({
             </span>
           </div>
 
-          {isLauncher && book.status === "launched" && (
-            <PublishBookButton bookRef={ref} />
-          )}
+          {canPublish && <PublishBookButton bookRef={ref} />}
 
           {published && user?.authorId && !isStudent && (
             <FavoriteButton

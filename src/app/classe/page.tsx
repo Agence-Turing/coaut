@@ -4,7 +4,7 @@ import AuthShell from "@/components/AuthShell";
 import CodeForm from "@/components/classes/CodeForm";
 import { getCurrentUser } from "@/lib/auth";
 
-export const metadata: Metadata = { title: "Espace classe | Co-Aut" };
+export const metadata: Metadata = { title: "Espace élève | Co-Aut" };
 
 /** Entrée des élèves : un seul grand champ « Ton code ». */
 export default async function ClassePage() {
@@ -13,7 +13,7 @@ export default async function ClassePage() {
 
   return (
     <AuthShell
-      title="Espace classe"
+      title="Espace élève"
       intro="Ton enseignant t'a donné un code. Écris-le ici pour retrouver le livre de ta classe."
     >
       <CodeForm />

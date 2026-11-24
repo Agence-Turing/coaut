@@ -1,10 +1,13 @@
 import Link from "next/link";
 import Logo from "@/components/Logo";
 import { Cta, EYEBROW } from "@/components/ui";
+import { getCurrentUser } from "@/lib/auth";
 
 export const metadata = { title: "Page introuvable | Co-Aut" };
 
-export default function NotFound() {
+export default async function NotFound() {
+  // Un élève ne voit que les livres de sa classe : ses liens y mènent directement.
+  const user = await getCurrentUser().catch(() => null);
   return (
     <>
       <header className="border-b border-line">
@@ -24,10 +27,16 @@ export default function NotFound() {
           erreur.
         </p>
         <div className="flex flex-wrap justify-center gap-3">
-          <Cta href="/books">Voir les livres à rejoindre</Cta>
-          <Cta href="/bibliotheque" variant="secondary">
-            Ouvrir la bibliothèque
-          </Cta>
+          {user?.isStudent ? (
+            <Cta href="/classe/livres">Voir les livres de ma classe</Cta>
+          ) : (
+            <>
+              <Cta href="/books">Voir les livres à rejoindre</Cta>
+              <Cta href="/bibliotheque" variant="secondary">
+                Ouvrir la bibliothèque
+              </Cta>
+            </>
+          )}
         </div>
       </main>
     </>

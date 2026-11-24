@@ -94,7 +94,7 @@ export default async function ClassPage({ params }: { params: Promise<{ id: stri
           title={cls.name}
           intro={
             codesWork
-              ? "Chaque élève entre sur co-aut avec son code, à la page « Espace classe ». Il ne voit que les livres de cette classe."
+              ? "Chaque élève entre sur co-aut avec son code, à la page « Espace élève ». Il ne voit que les livres de cette classe."
               : "Tous les livres de cette classe sont terminés : les codes ne marchent plus. Lance un nouveau livre pour les réactiver."
           }
         >

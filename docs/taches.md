@@ -62,7 +62,7 @@
 - [ ] Correction : la clé Claude de production doit être au nom de Co-Aut ; coût avec Opus 5.5 ~1 centime par tour court, ~5 centimes pour 1 500 caractères (avant : ~0,04 centime avec Haiku). À dire à Juliette.
 - [ ] Correction, option non construite : « tout corriger » qui réécrirait aussi la ponctuation des dialogues (tirets, guillemets) et le style. Aujourd'hui l'écran de relecture applique déjà toutes les corrections d'un coup (acceptées par défaut, l'auteur rend un mot d'un geste) ; une réécriture complète contredirait la règle « ne jamais changer la voix de l'auteur » et ne serait plus vérifiable mot par mot par le filtre. À trancher avec Juliette.
 
-- [ ] Tests de bout en bout (écrire un livre jusqu'à la publication, à plusieurs comptes).
+- [x] Tests de bout en bout (24/11, `docs/recette-e2e-2026-11-24.md`) : 14 points relevés. Corrigés le 24/11 et en préprod : n°1 (envoi du tour juste après un collage), n°3 (résumés « Livre commencé - Recherche N co-auteurs : » nettoyés, N sert de nombre de places), n°5 (thèmes en double, migration 0014), n°6 (prénom en double dans une classe), n°7 (admin « équipe vide »), n°8 à n°13 (détails). Restent n°2 (âge, ligne « Livres proposés selon l'âge » ci-dessus), n°4 et n°14 (questions à Juliette).
 - [ ] Retours de Juliette sur la préprod.
 - [ ] Serveur de production : le VPS Infomaniak (2 Go de mémoire, aucune sauvegarde, expiration affichée au 04/12) doit recevoir l'app et la pile Supabase ; vérifier que ça tient, mettre une sauvegarde.
 - [ ] Jour J : export Notion frais, migration 0006, `scripts/import-notion.py --apply`, purge des données de démo, bascule du domaine.
@@ -76,9 +76,10 @@ Abandonnées le 16/11 (décision de Juliette : des couleurs à la place). Les li
 
 - (équipe au complet, 20/11) Un co-auteur quitte un livre en route : aujourd'hui l'écriture s'arrête jusqu'à ce qu'un nouveau co-auteur prenne la place (ou qu'elle baisse le nombre de places dans l'administration). Ou faut-il continuer avec ceux qui restent ?
 - (équipe au complet) Équipe qui ne se complète jamais : laisser le lanceur baisser lui-même le nombre de places, ou fermer le livre au bout d'un délai ?
-- (équipe au complet) Les livres « Lancé » repris de l'ancien site n'ont pas de nombre de places : ils ne sont pas concernés par la règle. Faut-il leur en fixer un ? (Les « Commencé » ont depuis le 23/11 autant de places que de co-auteurs : fermés.)
+- (équipe au complet) Les livres « Lancé » repris de l'ancien site n'avaient pas de nombre de places. Depuis le 24/11, ceux dont le résumé disait « Recherche N co-auteurs » ont lanceur + N places (38 livres) ; il en reste 14 sans nombre, donc hors de la règle « équipe au complet » (recette n°4, ex. un livre à 25 tours et 1 seul auteur, ouvert à tous). Faut-il leur en fixer un ? (Les « Commencé » ont depuis le 23/11 autant de places que de co-auteurs : fermés.)
 
 - (niveaux, 20/11) Le niveau « Enfant » (8 livres repris) n'a pas d'âge : le garder, ou le remplacer par un niveau précis ? Les libellés affichés passent à l'écriture courte (6e, 5e, 2de, 1re au lieu de 6eme, 5ème, 2nde, 1ère) : d'accord ?
+- (recette n°14, 24/11) Les mails (« à toi d'écrire », relances…) n'ont pas de lien pour ne plus les recevoir : en ajouter un (et lesquels restent obligatoires) ?
 - (rejoindre un livre, 23/11) Les 52 livres « Lancé » repris restent à rejoindre, dont beaucoup créés en 2024 sans aucun tour ni co-auteur : les garder visibles, ou les archiver (ou ne montrer que ceux de moins d'un an) ?
 
 - (point du vendredi 20/11) Correction des fautes : la liste de corrections mot par mot validée par l'auteur lui suffit-elle, ou veut-elle un texte réécrit par l'IA ?

@@ -45,6 +45,17 @@ Plus de Vercel ni de Supabase cloud. Depuis le 2026-09-30 la pile tourne dans la
 
 Mise en ligne en une commande depuis un poste qui a l'accès SSH : `scripts/deploy-preprod.sh` (pull dans la VM, build, redémarrage sous verrou, l'image d'avant reste sous `coaut-app:precedente`).
 
+## Production (VPS de Co-Aut)
+
+Plan, état et commandes : `docs/mise-en-prod.md`. Préparée le 25/11 (pile en place, reprise Notion répétée), **bascule pas encore faite** : l'ancienne appli .NET répond toujours sur `app.co-aut.com`.
+
+- **Serveur** : VPS Infomaniak `193.108.55.204` (IPv6 `2001:1600:13:101::16c1`, Debian 12, 4 vCPU, 3,8 Go), SSH par le dédié : `ssh -J ubuntu@54.38.69.101 debian@193.108.55.204`, `sudo docker …`. Aucun snapshot : sauvegarde quotidienne de la base vers le dédié (`/opt/backups/coaut-prod/`).
+- **Pile** `/opt/coaut` = compose de la préprod sans Mailpit, ports sur 127.0.0.1 (app `3100`, Kong `8011`), nginx de l'hôte en frontal (conf dans `scripts/prod/nginx/`, installée par la bascule). Fichiers de référence : `scripts/prod/` (compose, secrets, build, timers, bascule, retour arrière). Variables : `/opt/coaut/.env` (pile) et `/opt/coaut/app.env` (app, pas de clone du repo sur le VPS), root 600, copie dans Bitwarden « Co-Aut — Prod (secrets de la pile) ».
+- **Déployer une nouvelle version** : `scripts/prod/build-image.sh` (build dans la VM agents depuis `main`, NEXT_PUBLIC de prod figées, copie par `docker save | docker load` : pas de build Next sur le VPS), puis `cd /opt/coaut && sudo docker compose up -d app` sur le VPS ; l'image d'avant reste en `coaut-app:prod-precedente`. Migrations : à la main dans `coaut-db` comme en préprod. Sur une base vierge, démarrer GoTrue avant les migrations (il crée `auth.sessions`, utilisé par la 0010).
+- **Mails** : SMTP Brevo (`smtp-relay.brevo.com:587`, STARTTLS, Bitwarden « Co-Aut — Brevo SMTP (prod) », compte gratuit : 300 mails par jour), `MAIL_FROM="Co-Aut <contact@co-aut.com>"`. Avant la bascule, `SMTP_HOST` est vide dans `.env` et `app.env` : rien ne part, la base contient pourtant les vrais auteurs. `scripts/prod/bascule.sh` l'active.
+- **Tâches** : timers systemd, pas de cron (absent du VPS) : `coaut-relances` (9 h-19 h heure de Paris), `coaut-moderation` (15 min), `coaut-sauvegarde` (3 h 30). Scripts et journaux dans `/opt/coaut/cron/`. Relances et modération ne s'activent qu'à la bascule.
+- **Admin** : `contact@co-aut.com` (compte repris de Juliette). Clé Claude au nom de Co-Aut (Bitwarden « Co-Aut — Anthropic API (clé Claude) »).
+
 ## Mails
 
 Deux sources, un seul gabarit (bandeau aubergine, bouton orange, tutoiement) :
@@ -53,7 +64,7 @@ Deux sources, un seul gabarit (bandeau aubergine, bouton orange, tutoiement) :
 - **App (`src/lib/mail/`)** : `notify.ts` (déclencheurs), `templates.ts` (textes), `send.ts` (envoi SMTP + journal), `config.ts` (délais des relances). Appelés depuis `src/app/books/actions.ts` avec `after()` : un mail raté ne bloque jamais l'action. Mails : à toi d'écrire (tour précédent terminé, ou premier co-auteur accepté sur un livre vide), relances à 4 et 8 jours, demande reçue (au lanceur ; si le livre n'a pas de lanceur joignable — pas de lanceur, fiche sans compte, supprimée ou bloquée — aux admins du site, avec un lien vers la fiche admin du livre), demande acceptée ou refusée (au demandeur), livre publié (à l'équipe sauf celui qui publie). L'adresse est lue dans `auth.users` avec la clé service (`src/lib/supabase/admin.ts`) au moment de l'envoi et ne sort jamais du serveur.
 - **Journal `mail_log`** (migration 0007) : une ligne par mail, unique par (type, auteur, clé), donc jamais de doublon ; table invisible par l'API publique. Les relances partent uniquement des lignes « à toi d'écrire » déjà envoyées : les tours ouverts repris de l'ancien site, pour lesquels aucun mail n'est parti, ne sont jamais relancés.
 - **Relances** : `GET /api/cron/relances` avec `Authorization: Bearer $CRON_SECRET`. En préprod : `/opt/coaut/cron-relances.sh`, crontab de `turing`, toutes les heures de 9 h à 19 h (heure de Paris), journal `/opt/coaut/cron-relances.log`.
-- **Variables de l'app** (`/opt/coaut/app/.env`) : `SITE_URL`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE=1` (TLS implicite), `MAIL_FROM`, `CRON_SECRET`, `SUPABASE_SERVICE_ROLE_SECRET`. Sans `SMTP_HOST`, rien ne part (ligne `skipped` dans le journal). En production : brancher le fournisseur SMTP retenu sur l'app et sur GoTrue, et déclarer le domaine d'envoi (SPF, DKIM).
+- **Variables de l'app** (`/opt/coaut/app/.env`) : `SITE_URL`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE=1` (TLS implicite), `MAIL_FROM`, `CRON_SECRET`, `SUPABASE_SERVICE_ROLE_SECRET`. Sans `SMTP_HOST`, rien ne part (ligne `skipped` dans le journal). En production : Brevo sur l'app et sur GoTrue (voir « Production »), domaine d'envoi `co-aut.com` à déclarer chez Brevo (SPF, DKIM dans la zone OVH).
 
 ## Fonctionnement de l'app
 
@@ -92,7 +103,7 @@ Tout texte saisi par un auteur et visible par d'autres passe par `checkText()` (
 - **Bloqué** : rien n'est enregistré, l'auteur voit un message selon la catégorie (`messages.ts`), son texte reste dans le champ (champs contrôlés : React vide les formulaires après une action). Ligne `blocked` dans `moderation_log` (migration 0011, table réservée au serveur : auteur, livre, type, texte, catégorie, raison, source `regex`/`ai`).
 - **IA en panne ou trop lente** : le texte passe après le seul repérage par le code, tour en `moderation_status = 'review'`, ligne `unverified` dans le journal. `GET /api/cron/moderation` (Bearer `CRON_SECRET`) le relit : `ok_after` (tour `ok`) ou `blocked_after` (tour `blocked` + `moderation_reason`). Un texte jugé bloquant après coup **reste en ligne** : il est déjà lu et le retirer casserait le fil ; l'administration tranche. En préprod : `/opt/coaut/cron-moderation.sh`, crontab de `turing`, toutes les 15 min, journal `/opt/coaut/cron-moderation.log`.
 - `turns.moderation_status` : null = pas contrôlé (tours d'avant), `ok`, `review`, `blocked` — mêmes noms que la migration 0010 de l'administration.
-- **Clé** : `ANTHROPIC_API_KEY` dans `/opt/coaut/app/.env`. En préprod c'est la clé de l'agence (coffre Bitwarden « Turing — Claude API ») ; **en production il faudra une clé au nom de Co-Aut**. Sans clé, tout passe en `review`.
+- **Clé** : `ANTHROPIC_API_KEY` dans `/opt/coaut/app/.env`. En préprod c'est la clé de l'agence (coffre Bitwarden « Turing — Claude API ») ; en production, la clé au nom de Co-Aut (`/opt/coaut/app.env` du VPS, Bitwarden « Co-Aut — Anthropic API (clé Claude) »). Sans clé, tout passe en `review`.
 - Limite connue : la RLS laisse un auteur écrire ses tours directement par l'API Supabase, sans passer par l'action serveur ni la modération. Seule la règle « équipe au complet » est aussi imposée par la base.
 
 ## Correction

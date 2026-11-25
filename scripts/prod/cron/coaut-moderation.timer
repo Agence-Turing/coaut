@@ -1,0 +1,9 @@
+[Unit]
+Description=Co-Aut prod : relecture IA des textes non vérifiés (*:0/15)
+
+[Timer]
+OnCalendar=*:0/15
+Persistent=false
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,7 @@
+[Unit]
+Description=Co-Aut prod : sauvegarde de la base vers le dédié
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c '/opt/coaut/cron/sauvegarde.sh >> /opt/coaut/cron/sauvegarde.log 2>&1'

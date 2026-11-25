@@ -1,0 +1,7 @@
+[Unit]
+Description=Co-Aut prod : relances « à toi d'écrire »
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c '/opt/coaut/cron/relances.sh >> /opt/coaut/cron/relances.log 2>&1'

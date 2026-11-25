@@ -1,0 +1,7 @@
+[Unit]
+Description=Co-Aut prod : relecture IA des textes non vérifiés
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c '/opt/coaut/cron/moderation.sh >> /opt/coaut/cron/moderation.log 2>&1'

@@ -30,7 +30,7 @@ Tout est dans `/opt/coaut`, fichiers de référence dans `scripts/prod/` du repo
 
 Mémoire au 25/11, les services .NET tournant encore : pile Co-Aut ~300 Mo (Kong 110, base 100, app 55, GoTrue 35, PostgREST 8), 2,7 Go disponibles sur 3,8. Limites : base 1 Go, app et Kong 512 Mo, GoTrue et PostgREST 256 Mo.
 
-**Brevo** : compte gratuit = **300 mails par jour** (mails GoTrue + mails de l'app confondus). Au-delà, Brevo refuse : surveiller le jour de l'annonce aux auteurs (« mot de passe oublié » en masse) et étaler l'annonce, ou passer à une offre payante.
+**Brevo** : domaine `co-aut.com` déjà authentifié chez Brevo depuis 2023 (vérifié par l'API le 25/11 : `authenticated: true`, `brevo-code` + DKIM `mail._domainkey` dans la zone OVH, DMARC `p=none`) : rien à changer dans le DNS. Compte gratuit = **300 mails par jour** (mails GoTrue + mails de l'app confondus). Au-delà, Brevo refuse : surveiller le jour de l'annonce aux auteurs (« mot de passe oublié » en masse) et étaler l'annonce, ou passer à une offre payante.
 
 ### Répétition de la reprise Notion (25/11, export du jour)
 
@@ -59,7 +59,7 @@ Sur une base vierge, **GoTrue doit démarrer avant nos migrations** : il crée l
 
 ## Bascule (coupure ~1 h)
 
-Pré-requis : SPF + DKIM de Brevo pour `co-aut.com` dans la zone OVH (sinon les mails partent en spam) ; repo local sur `origin/main` ; si le code a changé depuis `34b2857`, refaire l'image (`scripts/prod/build-image.sh`, sans coupure).
+Pré-requis : repo local sur `origin/main` ; si le code a changé depuis `34b2857`, refaire l'image (`scripts/prod/build-image.sh`, sans coupure).
 
 1. Exporter Notion « Bdd - prod » (Markdown & CSV, sous-pages incluses), **au moment de la bascule**.
 2. `scripts/prod/bascule.sh /chemin/export.zip` (demande de taper `BASCULE`) :

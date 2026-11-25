@@ -120,6 +120,7 @@ etape "8/9 Relances (9 h-19 h, heure de Paris) et modération (15 min) activées
 vps "sudo systemctl enable --now coaut-relances.timer coaut-moderation.timer coaut-sauvegarde.timer && systemctl list-timers 'coaut-*' --no-pager"
 
 etape "9/9 Contrôles"
+set +e   # un contrôle raté (poste sans IPv6 par exemple) ne doit pas interrompre les suivants
 for ip in "$IP4" "[$IP6]"; do
   curl -s -o /dev/null -w "https://app.co-aut.com/ via $ip : %{http_code}\n" --resolve "app.co-aut.com:443:$ip" https://app.co-aut.com/
   for n in auth app-api auth-api; do

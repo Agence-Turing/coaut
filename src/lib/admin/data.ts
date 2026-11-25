@@ -68,6 +68,14 @@ export type AdminBookRow = {
   class_name: string | null;
   teacher_review: boolean;
   open_to_join: boolean;
+  /** Début du tour en cours (migration 0017), null pour les livres jamais touchés depuis. */
+  turn_started_at: string | null;
+  /** En attente depuis : début du tour en cours, dernier tour terminé ou lancement (le plus récent). */
+  waiting_since: string;
+  /** Numéro du tour à écrire (brouillon ouvert, sinon dernier + 1). */
+  current_turn_number: number;
+  /** Brouillon du tour en cours commencé le (null = pas de brouillon). */
+  draft_started_at: string | null;
 };
 
 export const BOOK_SORTS: Record<string, string> = {
@@ -364,6 +372,71 @@ export async function listAdminTurns(
     page,
     pages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
     sort,
+  };
+}
+
+/* ---------- Tours en retard ---------- */
+
+/** Seuil par défaut du filtre « tours en retard » (réunion du 24/11). */
+export const LATE_DAYS = 15;
+
+/** Nombre de jours du filtre (?jours=), entre 1 et 365, 15 par défaut. */
+export function lateDaysOf(sp: SearchParams) {
+  const n = Number(param(sp, "jours"));
+  return Number.isInteger(n) && n >= 1 && n <= 365 ? n : LATE_DAYS;
+}
+
+export const LATE_SORTS: Record<string, string> = {
+  livre: "title",
+  numero: "current_turn_number",
+  auteur: "current_writer_nickname",
+  date: "waiting_since",
+};
+
+/**
+ * Tours qui n'avancent pas : livres en cours où quelqu'un a la main (pas en attente de l'équipe)
+ * et dont le tour en cours n'a pas été terminé depuis au moins N jours (vue admin_books,
+ * waiting_since). Pour repérer les tours à passer.
+ */
+export async function listLateTurns(
+  db: SupabaseClient,
+  sp: SearchParams
+): Promise<Listing<AdminBookRow> & { days: number }> {
+  const sort = sortFrom(sp, LATE_SORTS, { key: "date", ascending: true });
+  const page = pageFrom(sp);
+  const days = lateDaysOf(sp);
+  const limit = new Date(Date.now() - days * 86400_000).toISOString();
+  let query = db
+    .from("admin_books")
+    .select("*", { count: "exact" })
+    .eq("status", "launched")
+    .not("current_writer_id", "is", null)
+    .lte("waiting_since", limit);
+
+  const livreId = param(sp, "livre_id");
+  if (UUID_RE.test(livreId)) query = query.eq("id", livreId);
+  const livre = cleanSearch(param(sp, "livre"));
+  if (livre) query = query.or(`title.ilike."*${livre}*",legacy_code.ilike."*${livre}*"`);
+  const auteurId = param(sp, "auteur_id");
+  if (UUID_RE.test(auteurId)) query = query.eq("current_writer_id", auteurId);
+  const auteur = cleanSearch(param(sp, "auteur"));
+  if (auteur) query = query.ilike("current_writer_nickname", `*${auteur}*`);
+
+  const from = (page - 1) * PAGE_SIZE;
+  const { data, count, error } = await query
+    .order(sort.column, { ascending: sort.ascending, nullsFirst: false })
+    .order("id")
+    .range(from, from + PAGE_SIZE - 1);
+  if (error?.code === "PGRST103" && page > 1) return listLateTurns(db, { ...sp, page: undefined });
+  if (error) throw new Error(error.message);
+  const total = count ?? 0;
+  return {
+    rows: (data ?? []) as AdminBookRow[],
+    total,
+    page,
+    pages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+    sort,
+    days,
   };
 }
 

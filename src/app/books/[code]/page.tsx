@@ -6,6 +6,7 @@ import Footer from "@/components/Footer";
 import JoinRequestForm from "@/components/JoinRequestForm";
 import TurnEditor from "@/components/TurnEditor";
 import PublishBookButton from "@/components/PublishBookButton";
+import LauncherSettings from "@/components/LauncherSettings";
 import FavoriteButton from "@/components/FavoriteButton";
 import ClassBookPanel from "@/components/classes/ClassBookPanel";
 import BookCover from "@/components/BookCover";
@@ -190,6 +191,13 @@ export default async function BookPage({
     !pendingReviewOf(book, turns) &&
     (!openTurn || openTurn.author_id === user?.authorId) &&
     (isClassBook || writers.size >= 2);
+
+  // Annulable par le lanceur tant que personne n'a écrit (son propre brouillon part avec le
+  // livre) : même règle que cancelMyBook et book_cancellable() côté base.
+  const cancellable =
+    isLauncher &&
+    book.status === "launched" &&
+    !turns.some((t) => t.is_ended || t.author_id !== user?.authorId);
 
   const myTurn = Boolean(
     writing && user?.authorId && writing.currentAuthorId === user.authorId && isPlayer
@@ -414,6 +422,17 @@ export default async function BookPage({
               </details>
             )}
           </section>
+        )}
+
+        {isLauncher && book.status === "launched" && (!isClassBook || cancellable) && (
+          <LauncherSettings
+            bookRef={ref}
+            maxPlayers={book.max_players}
+            teamSize={book.book_players.length}
+            showPlaces={!isClassBook}
+            cancellable={cancellable}
+            isClassBook={isClassBook}
+          />
         )}
 
         <section aria-label="L'histoire, tour par tour" className="flex flex-col">

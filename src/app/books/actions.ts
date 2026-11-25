@@ -434,6 +434,108 @@ export async function publishBook(
   return { info: "📖 Ton livre est publié ! Il rejoint la bibliothèque de Co-Aut." };
 }
 
+/** Livre dont l'utilisateur connecté est le lanceur, ou un message d'erreur. */
+async function myLaunchedBook(bookRef: string) {
+  const user = await getCurrentUser();
+  if (!user) redirect("/?mode=login");
+  if (!user.authorId) return { error: AUTHOR_MISSING } as const;
+  const book = await getBook(bookRef);
+  if (!book) return { error: "Livre introuvable." } as const;
+  if (book.launcher_id !== user.authorId)
+    return { error: "Seul le lanceur du livre peut le modifier." } as const;
+  if (book.status !== "launched") return { error: "Ce livre n'est plus en cours." } as const;
+  return { user, book, authorId: user.authorId } as const;
+}
+
+/**
+ * Le lanceur change le nombre de co-auteurs de son livre public (réunion du 24/11) : entre 2 et
+ * 10 comme au lancement, jamais moins que l'équipe déjà formée. La base l'impose aussi (trigger
+ * de la migration 0017). Places baissées jusqu'à l'équipe : le livre qui attendait son équipe
+ * reprend, mail « à toi d'écrire » au suivant (comme quand l'administration baisse les places).
+ * Livre de classe : le nombre de places suit la classe, pas de réglage.
+ */
+export async function setMyBookPlaces(
+  _prev: ActionState,
+  formData: FormData
+): Promise<ActionState> {
+  const bookRef = String(formData.get("book_ref") ?? "");
+  const mine = await myLaunchedBook(bookRef);
+  if ("error" in mine) return { error: mine.error };
+  const { book, authorId } = mine;
+  if (book.class_id)
+    return { error: "Dans un livre de classe, l'équipe est la classe : le nombre de places ne se règle pas." };
+
+  const max = Number(formData.get("max_players") ?? 0);
+  const team = book.book_players.length;
+  if (!Number.isInteger(max) || max < 2 || max > 10)
+    return { error: "Choisis un nombre de co-auteurs entre 2 et 10 (toi compris)." };
+  if (max < team)
+    return {
+      error: `Ton équipe compte déjà ${team} co-auteurs (toi compris) : tu ne peux pas descendre en dessous.`,
+    };
+  if (max === book.max_players) return { info: "Nombre de co-auteurs inchangé." };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("books")
+    .update({ max_players: max })
+    .eq("id", book.id)
+    .select("id")
+    .maybeSingle();
+  if (error || !data)
+    return { error: `Enregistrement impossible${error ? ` : ${error.message}` : "."}` };
+
+  // L'équipe vient d'être au complet : le livre démarre ou reprend (notifyBookStarts ne prévient
+  // que si c'est le cas ; le journal des mails évite tout doublon).
+  const wasOpen = book.max_players === null || team < book.max_players;
+  if (wasOpen && team >= max) after(() => notifyBookStarts(book.id, authorId));
+
+  revalidatePath(`/books/${bookRef}`);
+  revalidatePath("/books");
+  return {
+    info:
+      team >= max
+        ? `C'est noté : ${max} co-auteurs, ton équipe est au complet.`
+        : `C'est noté : ${max} co-auteurs, ${placesLeft({ size: max, missing: max - team })}.`,
+  };
+}
+
+/**
+ * Le lanceur annule (supprime) son livre tant que personne n'a écrit : aucun tour terminé, et
+ * pas de brouillon d'un autre que lui (le sien part avec le livre). Même règle en base
+ * (book_cancellable, policy « annuler par le lanceur », migration 0017). Public ou de classe.
+ */
+export async function cancelMyBook(
+  _prev: ActionState,
+  formData: FormData
+): Promise<ActionState> {
+  const bookRef = String(formData.get("book_ref") ?? "");
+  const mine = await myLaunchedBook(bookRef);
+  if ("error" in mine) return { error: mine.error };
+  const { book, authorId } = mine;
+  const turns = await getTurns(book.id);
+  if (turns.some((t) => t.is_ended || t.author_id !== authorId))
+    return { error: "L'écriture a commencé : ce livre ne peut plus être annulé." };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("books")
+    .delete()
+    .eq("id", book.id)
+    .select("id")
+    .maybeSingle();
+  if (error || !data)
+    return { error: "Annulation impossible : l'écriture a peut-être commencé entre-temps. Recharge la page." };
+
+  revalidatePath("/books");
+  revalidatePath("/books/mes-livres");
+  if (book.class_id) {
+    revalidatePath(`/classes/${book.class_id}`);
+    redirect(`/classes/${book.class_id}`);
+  }
+  redirect("/books/mes-livres");
+}
+
 export async function toggleFavorite(formData: FormData) {
   const user = await getCurrentUser();
   if (!user) redirect("/?mode=login");

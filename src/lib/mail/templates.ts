@@ -90,6 +90,20 @@ export function joinRequestMail(book: BookInfo, nickname: string): MailContent {
   });
 }
 
+/** Demande pour un livre dont le lanceur n'est plus joignable : aux admins du site. */
+export function joinRequestAdminMail(book: BookInfo, nickname: string): MailContent {
+  return layout({
+    subject: `${nickname} veut rejoindre « ${book.title} » (lanceur absent)`,
+    title: "Une demande sans lanceur pour y répondre",
+    paragraphs: [
+      `${nickname} demande à rejoindre « ${book.title} », mais le lanceur de ce livre n'est plus joignable sur Co-Aut : personne d'autre ne recevra cette demande.`,
+      "Depuis l'admin, tu peux ajouter cet auteur à l'équipe, puis le faire lanceur s'il reprend le livre.",
+    ],
+    cta: { label: "Ouvrir le livre dans l'admin", path: book.path },
+    footer: "Tu reçois ce message parce que tu administres Co-Aut.",
+  });
+}
+
 export function joinAnswerMail(book: BookInfo, accepted: boolean): MailContent {
   return accepted
     ? layout({

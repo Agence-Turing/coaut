@@ -6,6 +6,7 @@ import { sendToAuthor } from "./send";
 import {
   bookPublishedMail,
   joinAnswerMail,
+  joinRequestAdminMail,
   joinRequestMail,
   turnReminderMail,
   yourTurnMail,
@@ -119,27 +120,68 @@ export async function notifyBookStarts(bookId: string, exceptAuthorId?: string) 
   }
 }
 
+/**
+ * Demande pour rejoindre : au lanceur. Si le livre n'a plus de lanceur joignable (pas de lanceur,
+ * fiche sans compte, auteur supprimé, compte bloqué), la demande va aux admins du site, qui
+ * peuvent ajouter le demandeur à l'équipe ou le faire lanceur depuis l'admin.
+ */
 export async function notifyJoinRequest(bookId: string, requesterAuthorId: string) {
   try {
     const admin = createAdminClient();
     if (!admin) return;
     const book = await loadBook(admin, bookId);
-    if (!book?.launcher_id || book.launcher_id === requesterAuthorId) return;
+    if (!book || book.launcher_id === requesterAuthorId) return;
     const { data: requester } = await admin
       .from("authors")
       .select("nickname")
       .eq("id", requesterAuthorId)
       .maybeSingle();
-    await sendToAuthor({
-      kind: "join_request",
-      authorId: book.launcher_id,
-      bookId,
-      dedupeKey: `${bookId}:${requesterAuthorId}`,
-      content: joinRequestMail(info(book), requester?.nickname ?? "Un auteur"),
-    });
+    const nickname = requester?.nickname ?? "Un auteur";
+
+    if (book.launcher_id && (await reachable(admin, book.launcher_id))) {
+      await sendToAuthor({
+        kind: "join_request",
+        authorId: book.launcher_id,
+        bookId,
+        dedupeKey: `${bookId}:${requesterAuthorId}`,
+        content: joinRequestMail(info(book), nickname),
+      });
+      return;
+    }
+
+    const { data: admins } = await admin.from("admins").select("user_id");
+    const userIds = (admins ?? []).map((a) => a.user_id as string);
+    if (userIds.length === 0) return;
+    const { data: adminAuthors } = await admin
+      .from("authors")
+      .select("id")
+      .in("user_id", userIds)
+      .is("deleted_at", null);
+    for (const a of adminAuthors ?? []) {
+      if (a.id === requesterAuthorId) continue;
+      await sendToAuthor({
+        kind: "join_request",
+        authorId: a.id as string,
+        bookId,
+        dedupeKey: `${bookId}:${requesterAuthorId}:admin`,
+        content: joinRequestAdminMail(
+          { title: book.title, path: `/admin/livres/${book.id}` },
+          nickname
+        ),
+      });
+    }
   } catch (e) {
     console.error("notifyJoinRequest :", e);
   }
+}
+
+/** Le lanceur peut-il recevoir un mail : fiche avec compte, pas supprimée, compte pas bloqué. */
+async function reachable(admin: SupabaseClient, authorId: string): Promise<boolean> {
+  const [{ data: author }, { data: profile }] = await Promise.all([
+    admin.from("authors").select("user_id, deleted_at").eq("id", authorId).maybeSingle(),
+    admin.from("author_profiles").select("blocked_at").eq("author_id", authorId).maybeSingle(),
+  ]);
+  return Boolean(author?.user_id && !author.deleted_at && !profile?.blocked_at);
 }
 
 export async function notifyJoinAnswer(bookId: string, requesterAuthorId: string, accepted: boolean) {

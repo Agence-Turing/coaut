@@ -6,7 +6,12 @@ import { after } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireAdminAction, type AdminContext } from "@/lib/admin/guard";
 import { UUID_RE } from "@/lib/admin/data";
-import { notifyBookPublished, notifyBookStarts, notifyYourTurn } from "@/lib/mail/notify";
+import {
+  notifyBookPublished,
+  notifyBookStarts,
+  notifyJoinRequest,
+  notifyYourTurn,
+} from "@/lib/mail/notify";
 
 /*
  * Actions de l'administration. Chacune vérifie d'abord le rôle (requireAdminAction, qui lève une
@@ -249,6 +254,41 @@ export async function addPlayer(formData: FormData) {
     notifyIfWriterChanged(bookId, before, await currentWriter(ctx.db, bookId));
   }
   done(back, "coauteur_ajoute");
+}
+
+/**
+ * Fait d'un co-auteur le lanceur du livre (lanceur parti, retour de Juliette du 24/11). Il reçoit
+ * les demandes à rejoindre, publie, règle le nombre de places. admin_set_launcher (migration
+ * 0017) garde « à qui le tour » ; sur un livre où rien n'est écrit, il écrit le tour 1. Les
+ * demandes déjà en attente lui sont envoyées par mail (« demande reçue »).
+ */
+export async function setLauncher(formData: FormData) {
+  const ctx = await requireAdminAction();
+  const back = backOf(formData);
+  const bookId = str(formData, "book_id");
+  const authorId = str(formData, "author_id");
+  if (!UUID_RE.test(bookId) || !UUID_RE.test(authorId)) fail(back, "introuvable");
+  const { data: book } = await ctx.db
+    .from("books")
+    .select("status, class_id, launcher_id")
+    .eq("id", bookId)
+    .maybeSingle();
+  if (!book) fail(back, "introuvable");
+  if (book.class_id) fail(back, "lanceur_classe");
+  if (book.launcher_id === authorId) fail(back, "deja_lanceur");
+  const before = book.status === "launched" ? await currentWriter(ctx.db, bookId) : null;
+  const { error } = await ctx.db.rpc("admin_set_launcher", { p_book: bookId, p_author: authorId });
+  if (error) fail(back, error.message.includes("équipe") ? "lanceur_hors_equipe" : "technique");
+  if (book.status === "launched") {
+    notifyIfWriterChanged(bookId, before, await currentWriter(ctx.db, bookId));
+    const { data: pending } = await ctx.db
+      .from("join_requests")
+      .select("author_id")
+      .eq("book_id", bookId)
+      .eq("status", "pending");
+    for (const r of pending ?? []) after(() => notifyJoinRequest(bookId, r.author_id as string));
+  }
+  done(back, "lanceur_change");
 }
 
 /* ---------- Auteurs ---------- */

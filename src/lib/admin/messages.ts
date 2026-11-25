@@ -15,6 +15,8 @@ export const OK_MESSAGES: Record<string, (n: number) => string> = {
   coauteur_retire: () => "Co-auteur retiré de l'équipe.",
   coauteur_ajoute: () => "Co-auteur ajouté à l'équipe.",
   tour_passe: () => "Le tour est passé à l'auteur suivant.",
+  lanceur_change: () =>
+    "Nouveau lanceur enregistré : c'est lui qui reçoit maintenant les demandes pour rejoindre le livre.",
   bloque: (n) => `${n} ${plural(n, "auteur bloqué", "auteurs bloqués")}.`,
   debloque: (n) => `${n} ${plural(n, "auteur débloqué", "auteurs débloqués")}.`,
   auteur_supprime: (n) => `${n} ${plural(n, "auteur supprimé", "auteurs supprimés")}. Leurs tours restent, anonymisés.`,
@@ -38,6 +40,9 @@ export const ERROR_MESSAGES: Record<string, string> = {
   pas_en_cours: "Ce livre n'est pas en cours d'écriture.",
   auteur_inconnu: "Aucun auteur ne porte ce pseudo.",
   deja_equipe: "Cet auteur fait déjà partie de l'équipe.",
+  deja_lanceur: "Cet auteur est déjà le lanceur du livre.",
+  lanceur_hors_equipe: "Le nouveau lanceur doit faire partie de l'équipe : ajoute-le d'abord.",
+  lanceur_classe: "Le lanceur d'un livre de classe est son prof : il ne se change pas.",
   pas_de_fiche: "Ton compte n'a pas de fiche auteur.",
   publier_vide: "Impossible de publier un livre sans aucun tour écrit.",
   pseudo_court: "Le pseudo doit faire entre 3 et 40 caractères.",

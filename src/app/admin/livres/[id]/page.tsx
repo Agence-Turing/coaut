@@ -4,6 +4,7 @@ import {
   addPlayer,
   booksAction,
   removePlayer,
+  setLauncher,
   setMaxPlayers,
   updateBook,
 } from "@/app/admin/actions";
@@ -60,7 +61,9 @@ export default async function AdminBookPage({ params, searchParams }: PageProps<
   const back = `/admin/livres/${id}`;
   const notice = noticeFrom(sp);
   const launched = book.status === "launched";
-  const since = daysSince(book.last_activity_at);
+  // Depuis quand l'auteur dont c'est le tour a la main (migration 0017, même date que le filtre
+  // « Tours en retard » de la page Tours).
+  const since = daysSince(book.waiting_since);
   const meInTeam = Boolean(authorId && team.some((p) => p.author_id === authorId));
   const currentIdx = team.findIndex((p) => p.author_id === book.current_writer_id);
   // Équipe incomplète (règle « équipe au complet », hors livres de classe) : personne n'écrit.
@@ -114,7 +117,7 @@ export default async function AdminBookPage({ params, searchParams }: PageProps<
             <p className="text-[17px] text-ink">
               C&apos;est au tour {aTourDe(book.current_writer_nickname)}
               <strong>{book.current_writer_nickname}</strong>
-              {since !== null && <span className="text-muted"> (dernier mouvement il y a {since} j)</span>}.
+              {since !== null && <span className="text-muted"> (depuis {since} j)</span>}.
               {next && (
                 <>
                   {" "}
@@ -157,7 +160,13 @@ export default async function AdminBookPage({ params, searchParams }: PageProps<
           Équipe ({team.length}
           {book.max_players ? ` sur ${book.max_players}` : ""})
         </h2>
-        <p className="text-sm text-muted">Dans l&apos;ordre de passage.</p>
+        <p className="text-sm text-muted">
+          Dans l&apos;ordre de passage.
+          {!book.class_id && team.length > 0 &&
+            (book.launcher_id && team.some((p) => p.author_id === book.launcher_id)
+              ? " Lanceur parti ? « Faire lanceur » donne ses droits à un autre co-auteur (demandes pour rejoindre, publication, places)."
+              : ` Le lanceur${book.launcher_nickname ? ` (${book.launcher_nickname})` : ""} n'est plus dans l'équipe : « Faire lanceur » donne ses droits à un co-auteur (demandes pour rejoindre, publication, places).`)}
+        </p>
         <ol className="flex flex-col">
           {team.map((p, i) => (
             <li
@@ -177,17 +186,32 @@ export default async function AdminBookPage({ params, searchParams }: PageProps<
                   </>
                 )}
               </span>
-              <form action={removePlayer}>
-                <input type="hidden" name="back" value={back} />
-                <input type="hidden" name="book_id" value={book.id} />
-                <input type="hidden" name="author_id" value={p.author_id} />
-                <ConfirmButton
-                  className={SMALL_BTN_DANGER}
-                  message={`Retirer ${p.authors?.nickname} de l'équipe ? Ses tours écrits restent ; son brouillon en cours est supprimé.`}
-                >
-                  Retirer
-                </ConfirmButton>
-              </form>
+              <div className="flex flex-wrap gap-1.5">
+                {!book.class_id && p.author_id !== book.launcher_id && (
+                  <form action={setLauncher}>
+                    <input type="hidden" name="back" value={back} />
+                    <input type="hidden" name="book_id" value={book.id} />
+                    <input type="hidden" name="author_id" value={p.author_id} />
+                    <ConfirmButton
+                      className={SMALL_BTN}
+                      message={`Faire de ${p.authors?.nickname} le lanceur du livre ? C'est lui qui recevra les demandes pour rejoindre (et leurs mails), pourra publier le livre et régler le nombre de places.${book.launcher_nickname ? ` ${book.launcher_nickname} perd ces droits${team.some((m) => m.author_id === book.launcher_id) ? " et reste co-auteur" : ""}.` : ""}`}
+                    >
+                      Faire lanceur
+                    </ConfirmButton>
+                  </form>
+                )}
+                <form action={removePlayer}>
+                  <input type="hidden" name="back" value={back} />
+                  <input type="hidden" name="book_id" value={book.id} />
+                  <input type="hidden" name="author_id" value={p.author_id} />
+                  <ConfirmButton
+                    className={SMALL_BTN_DANGER}
+                    message={`Retirer ${p.authors?.nickname} de l'équipe ? Ses tours écrits restent ; son brouillon en cours est supprimé.`}
+                  >
+                    Retirer
+                  </ConfirmButton>
+                </form>
+              </div>
             </li>
           ))}
         </ol>

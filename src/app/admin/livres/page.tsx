@@ -117,7 +117,7 @@ export default async function AdminBooksPage({ searchParams }: PageProps<"/admin
         </div>
 
         <div className={TABLE_WRAP}>
-          <table className={`${TABLE} min-w-[74rem]`}>
+          <table className={`${TABLE} min-w-[80rem]`}>
             <thead>
               <tr>
                 <th scope="col" className={`${TH} w-11 p-0`}>
@@ -134,6 +134,7 @@ export default async function AdminBooksPage({ searchParams }: PageProps<"/admin
                 <SortHeader {...sortProps} sortKey="tours" label="Tours" defaultDesc />
                 <SortHeader {...sortProps} sortKey="dernier" label="Dernier tour" defaultDesc />
                 <SortHeader {...sortProps} sortKey="tour" label="À qui le tour" />
+                <SortHeader {...sortProps} sortKey="cree" label="Créé le" defaultDesc />
                 <th scope="col" className={TH}>
                   Actions
                 </th>
@@ -142,7 +143,7 @@ export default async function AdminBooksPage({ searchParams }: PageProps<"/admin
             <tbody>
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={11} className={`${TD} py-8 text-center text-muted`}>
+                  <td colSpan={12} className={`${TD} py-8 text-center text-muted`}>
                     Aucun livre ne correspond à ces filtres.
                   </td>
                 </tr>
@@ -200,6 +201,7 @@ export default async function AdminBooksPage({ searchParams }: PageProps<"/admin
                         </>
                       ) : null}
                     </td>
+                    <td className={`${TD} whitespace-nowrap`}>{formatDate(b.created_at)}</td>
                     <td className={TD}>
                       <div className="flex flex-nowrap gap-1.5">
                         <Link href={`${PATH}/${b.id}`} className={SMALL_BTN}>

@@ -88,6 +88,7 @@ export const BOOK_SORTS: Record<string, string> = {
   dernier: "last_turn_at",
   tour: "current_writer_nickname",
   depuis: "last_activity_at",
+  cree: "created_at",
 };
 
 export const INACTIVE_DAYS = 30;

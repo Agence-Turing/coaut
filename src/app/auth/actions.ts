@@ -10,6 +10,8 @@ export type AuthState = {
   info?: string;
   /** Adresse en attente de confirmation : propose de renvoyer le mail. */
   pendingEmail?: string;
+  /** Jeton du mail déjà échangé contre une session : le formulaire ne le renvoie plus. */
+  tokenUsed?: boolean;
 };
 
 export async function signIn(
@@ -158,9 +160,12 @@ export async function requestPasswordReset(
 
   // Même réponse que le compte existe ou non : on ne révèle pas qui est inscrit.
   return {
-    info: "Si un compte existe avec cet email, un lien vient de partir. Regarde ta boîte mail (et tes indésirables).",
+    info: "Si un compte existe avec cet email, un lien vient de partir. Regarde ta boîte mail (et tes indésirables). Si tu as demandé plusieurs liens, seul le dernier mail fonctionne.",
   };
 }
+
+const LIEN_PERIME =
+  "Ce lien n'est plus valable : il a déjà servi, ou un mail plus récent l'a remplacé. Si tu as reçu plusieurs mails, ouvre le dernier arrivé, ou demande un nouveau lien depuis « Mot de passe oublié ».";
 
 export async function updatePassword(
   _prev: AuthState,
@@ -176,9 +181,22 @@ export async function updatePassword(
   }
 
   const supabase = await createClient();
+  // Arrivée par le lien du mail : le jeton n'est consommé qu'ici (voir /auth/confirm) et
+  // ouvre la session. Si le changement échoue ensuite (ex. même mot de passe qu'avant), le
+  // formulaire ne renvoie plus le jeton (tokenUsed) : le nouvel essai passe par la session.
+  const tokenHash = String(formData.get("token_hash") ?? "").trim();
+  if (tokenHash) {
+    const { error: verifyError } = await supabase.auth.verifyOtp({
+      type: "recovery",
+      token_hash: tokenHash,
+    });
+    if (verifyError) return { error: LIEN_PERIME };
+  }
+
   const { error } = await supabase.auth.updateUser({ password });
   if (error) {
     return {
+      tokenUsed: Boolean(tokenHash) || formData.get("token_used") === "1",
       error:
         error.code === "same_password"
           ? "Choisis un mot de passe différent de l'ancien."

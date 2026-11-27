@@ -20,7 +20,7 @@ export default async function MotDePasseOublie({
       <ForgotPasswordForm
         initialError={
           erreur === "lien"
-            ? "Ce lien n'est plus valable (déjà utilisé ou trop ancien). Demande-en un nouveau."
+            ? "Ce lien n'est plus valable : il a déjà servi, ou un mail plus récent l'a remplacé. Si tu as reçu plusieurs mails, ouvre le dernier arrivé, sinon demande un nouveau lien ici."
             : undefined
         }
       />

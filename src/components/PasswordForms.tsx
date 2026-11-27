@@ -34,10 +34,14 @@ export function ForgotPasswordForm({ initialError }: { initialError?: string }) 
   );
 }
 
-export function NewPasswordForm() {
+export function NewPasswordForm({ tokenHash = "" }: { tokenHash?: string }) {
   const [state, action, pending] = useActionState(updatePassword, {});
+  // Une fois le jeton échangé (essai refusé après coup), la session prend le relais.
+  const sendToken = tokenHash && !state.tokenUsed;
   return (
     <form action={action} className="mt-6 flex flex-col gap-4">
+      {sendToken && <input type="hidden" name="token_hash" value={tokenHash} />}
+      {state.tokenUsed && <input type="hidden" name="token_used" value="1" />}
       <div className="flex flex-col gap-1.5">
         <label htmlFor="new-password" className={LABEL}>
           Nouveau mot de passe

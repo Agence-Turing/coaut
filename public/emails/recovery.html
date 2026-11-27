@@ -13,10 +13,11 @@
             <tr>
               <td style="padding:32px 28px;font-size:16px;line-height:1.5;">
                 <p style="margin:0 0 16px;font-family:'Zilla Slab',Georgia,serif;font-size:26px;line-height:1.15;font-weight:bold;color:#1C1917;">Ton nouveau mot de passe</p>
-                <p style="margin:0 0 24px;">Tu as demandé à choisir un nouveau mot de passe pour ton compte Co-Aut. Clique sur le bouton, le lien est valable une heure.</p>
+                <p style="margin:0 0 24px;">Tu as demandé à choisir un nouveau mot de passe pour ton compte Co-Aut (demande n° {{ .Token }}). Clique sur le bouton, le lien est valable une heure.</p>
                 <p style="margin:0 0 24px;" align="center">
                   <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery" style="display:inline-block;background:#FF8A1E;color:#1C1917;text-decoration:none;font-weight:bold;padding:14px 28px;border-radius:10px;">Choisir mon mot de passe</a>
                 </p>
+                <p style="margin:0 0 12px;font-size:14px;color:#57524D;">Tu as fait plusieurs demandes ? Seul le lien du dernier mail reçu fonctionne.</p>
                 <p style="margin:0;font-size:14px;color:#57524D;">Si tu n'as rien demandé, ignore ce message : ton mot de passe ne change pas.</p>
               </td>
             </tr>

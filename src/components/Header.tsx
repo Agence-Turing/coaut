@@ -2,14 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Logo from "@/components/Logo";
 import { Cta, BTN_SECONDARY } from "@/components/ui";
 import { signOut } from "@/app/auth/actions";
 import { leaveClass } from "@/app/classe/actions";
+import { setReportedUser } from "@/lib/error-reporting";
 
 type HeaderUser = {
   nickname: string;
+  /** Id de la fiche auteur : seul identifiant joint aux erreurs envoyées à GlitchTip. */
+  authorId?: string | null;
   needsBirthDate?: boolean;
   isStudent?: boolean;
   isProfessional?: boolean;
@@ -64,7 +67,7 @@ function ProfileLink({ user }: { user: NonNullable<HeaderUser> }) {
 
 function SignOut({ student = false }: { student?: boolean }) {
   return (
-    <form action={student ? leaveClass : signOut}>
+    <form action={student ? leaveClass : signOut} onSubmit={() => setReportedUser(null)}>
       <button
         type="submit"
         className="inline-flex min-h-11 items-center text-[15px] font-medium text-muted hover:text-ink"
@@ -86,6 +89,13 @@ export default function Header({
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const links = navLinks(user);
+
+  // Erreurs envoyées à GlitchTip : id de la fiche et rôle seulement (auteurs mineurs).
+  const authorId = user?.authorId ?? null;
+  const role = user?.isAdmin ? "admin" : user?.isStudent ? "student" : "adult";
+  useEffect(() => {
+    setReportedUser(authorId ? { id: authorId, role } : null);
+  }, [authorId, role]);
 
   return (
     <header className="border-b border-line bg-paper">

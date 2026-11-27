@@ -130,6 +130,14 @@ Spécification : `docs/administration.md`. Migration `0010_administration.sql` (
 - **Modération** : colonne « Bloqué par l'IA » = `turns.moderation_status` (`blocked` / `review`) et `moderation_reason`, remplies par le chantier Modération.
 - **Données personnelles** : e-mail, nom, âge, note interne ne sont lus que dans les pages `/admin` (vue `admin_authors`, clé service) ; export CSV `/admin/auteurs/export` avec les filtres en cours (séparateur `;`, UTF-8 avec BOM pour Excel).
 
+## Erreurs (GlitchTip)
+
+Les erreurs de la **production** partent sur le GlitchTip de l'agence (https://errors.agence-turing.fr, VPN non requis, org `agence-turing`, projet `coaut`, alertes dans le salon Discord #sentry, compte admin dans Bitwarden « Turing — GlitchTip (erreurs des applis) »). Méthode : `turing-docs/methodes/collecte-erreurs-glitchtip.md`. SDK `@sentry/nextjs` sans assistant ni `withSentryConfig` (pas d'envoi de source maps).
+
+- **Code** : `src/instrumentation-client.ts` (navigateur), `src/instrumentation.ts` (`register` + `onRequestError` : rendu, route handlers, server actions, proxy), `src/app/error.tsx` et `global-error.tsx` (message à l'auteur + `reportError`), options et utilisateur dans `src/lib/error-reporting/index.ts`, filtrage dans `filtre.ts` (tests `filtre.test.ts`, `npm test`).
+- **Sans DSN, rien ne part** : dev, tests et préprod n'en ont pas. Prod : `NEXT_PUBLIC_SENTRY_DSN` (navigateur, figée au build : `build-image.sh` la lit dans `/opt/coaut/app.env` avec les autres `NEXT_PUBLIC_*`) et `SENTRY_DSN` (serveur, lue à l'exécution), même DSN `https://1b368c1af78142e0b6f88943b997a309@errors.agence-turing.fr/4` (pas un secret). `environment=production`, `release` = sha court du build (`NEXT_PUBLIC_SENTRY_RELEASE`, ajoutée par `build-image.sh`).
+- **Données** (auteurs mineurs) : `sendDefaultPii: false`, utilisateur = id de la fiche auteur + rôle (`admin`/`adult`/`student`, posé par `Header`), jamais pseudo ni e-mail. `filtre.ts` masque `token_hash`, `token`, `code`, `access_token`, `refresh_token` (`[filtré]`), retire `q` (recherche), réduit les appels Supabase au chemin, ne garde que l'en-tête `user-agent` (pas de cookies, ni corps de requête, ni variables locales), écarte le fil d'Ariane de la console. GlitchTip enregistre de lui-même l'IP de l'envoyeur, tronquée (dernier octet à 0, réglage du projet) : impossible à couper côté SDK.
+
 ## Couvertures des livres
 
 Couvertures illustrées **abandonnées le 16/11** (décision de Juliette : des couleurs à la place). L'interface n'affiche que la couverture colorée composée par le code (`BookCover`), en liste comme sur la page d'un livre. La colonne `books.cover_path` (migration 0008) et les fichiers déjà générés (`/opt/coaut/couvertures` de la VM, encore monté dans `coaut-app`) sont gardés mais plus lus ; la route `/couvertures/` et le script de génération ont été retirés le 18/11 (récupérables dans l'historique git). Ne plus générer d'image par IA pour les livres.

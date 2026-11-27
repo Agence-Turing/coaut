@@ -114,6 +114,11 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$ANON_KEY
 SUPABASE_ANON_PUBLIC=$ANON_KEY
 SUPABASE_SERVICE_ROLE_SECRET=$SERVICE_ROLE_KEY
 
+# Collecte des erreurs (GlitchTip de l'agence, projet coaut ; le DSN n'est pas un secret).
+# NEXT_PUBLIC_SENTRY_DSN : navigateur, figée au build ; SENTRY_DSN : serveur, lue à l'exécution.
+NEXT_PUBLIC_SENTRY_DSN=https://1b368c1af78142e0b6f88943b997a309@errors.agence-turing.fr/4
+SENTRY_DSN=https://1b368c1af78142e0b6f88943b997a309@errors.agence-turing.fr/4
+
 SITE_URL=https://app.co-aut.com
 MAIL_FROM="Co-Aut <contact@co-aut.com>"
 # SMTP de l'app (src/lib/mail) : Brevo, STARTTLS sur 587 (pas de SMTP_SECURE). Sans SMTP_HOST, rien ne part

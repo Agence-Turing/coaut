@@ -3,8 +3,9 @@
 # puis la copie sur le VPS de Co-Aut (docker save | docker load) : pas de build Next sur le VPS.
 #
 # Les NEXT_PUBLIC_* sont figées au build (comme en préprod : NEXT_PUBLIC_SUPABASE_URL=http://kong:8000,
-# l'API Supabase reste interne au réseau Docker). Le .env de build ne contient que ces deux lignes,
-# lues dans /opt/coaut/app.env du VPS et passées de machine à machine sans être affichées.
+# l'API Supabase reste interne au réseau Docker). Le .env de build ne contient que ces lignes
+# (URL et clé Supabase, DSN GlitchTip), lues dans /opt/coaut/app.env du VPS et passées de machine
+# à machine sans être affichées, plus NEXT_PUBLIC_SENTRY_RELEASE = sha du build.
 # La préprod (/opt/coaut de la VM) n'est pas touchée : clone à part dans /tmp, tag coaut-app:prod.
 #
 # Usage : scripts/prod/build-image.sh [réf git, défaut origin/main]   (poste avec l'accès SSH)
@@ -26,6 +27,8 @@ vps "sudo grep '^NEXT_PUBLIC_' /opt/coaut/app.env" | vm "umask 077; cat > $B/.en
 
 echo "3/4 build"
 SHA=$(vm "git -C $B rev-parse --short HEAD")
+# Release des erreurs envoyées à GlitchTip (NEXT_PUBLIC_SENTRY_DSN vient de app.env) : le sha du build.
+vm "echo NEXT_PUBLIC_SENTRY_RELEASE=$SHA >> $B/.env"
 vm "cd $B && docker build -q -t coaut-app:prod -t coaut-app:prod-$SHA . && rm -f $B/.env"
 
 echo "4/4 copie vers le VPS"

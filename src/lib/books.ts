@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { compareNiveaux } from "@/lib/niveaux";
+import { searchTerm } from "@/lib/search";
 
 export type BookSummary = {
   id: string;
@@ -71,8 +72,8 @@ export async function listBooks(
   if (status === "launched") query = query.is("class_id", null);
 
   if (filters.q) {
-    const q = filters.q.replaceAll("%", "").replaceAll(",", " ");
-    query = query.or(`title.ilike.%${q}%,synopsis.ilike.%${q}%`);
+    const q = searchTerm(filters.q);
+    if (q) query = query.or(`title.ilike."*${q}*",synopsis.ilike."*${q}*"`);
   }
   if (filters.theme) query = query.contains("themes", [filters.theme]);
   if (filters.niveau) query = query.eq("scolar_level", filters.niveau);

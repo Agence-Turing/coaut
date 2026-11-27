@@ -1,5 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { searchTerm } from "@/lib/search";
 
 /*
  * Lectures des tableaux d'administration (vues admin_* de la migration 0010, clé service).
@@ -19,10 +20,7 @@ export function param(sp: SearchParams, key: string): string {
 export const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Texte de recherche sans les caractères qui ont un sens dans les filtres PostgREST. */
-function cleanSearch(q: string) {
-  return q.replace(/[%*,()"\\:]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
-}
+const cleanSearch = searchTerm;
 
 type Sort = { column: string; ascending: boolean; key: string };
 

@@ -127,7 +127,7 @@ services:
     <<: *logs
     mem_limit: 256m
     container_name: coaut-rest
-    image: postgrest/postgrest:v14.8
+    image: postgrest/postgrest:v14.18
     restart: unless-stopped
     depends_on:
       db:

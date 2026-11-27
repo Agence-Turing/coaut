@@ -1,16 +1,55 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { authorsAction, renameAuthor, saveAdminNote } from "@/app/admin/actions";
+import {
+  authorsAction,
+  changeAuthorEmail,
+  renameAuthor,
+  saveAdminNote,
+  updateAuthorProfile,
+} from "@/app/admin/actions";
 import { ConfirmButton } from "@/components/admin/client";
 import { SMALL_BTN_DANGER, Tag } from "@/components/admin/table";
-import { BTN_PRIMARY, BTN_SECONDARY, EYEBROW, INPUT, LABEL, LINK, Notice } from "@/components/ui";
+import { BTN_PRIMARY, BTN_SECONDARY, EYEBROW, HINT, INPUT, LABEL, LINK, Notice } from "@/components/ui";
 import { UUID_RE, formatDate, type AdminAuthorRow } from "@/lib/admin/data";
 import { requireAdminPage } from "@/lib/admin/guard";
 import { noticeFrom } from "@/lib/admin/messages";
+import { NIVEAUX } from "@/lib/niveaux";
 import { ageFrom } from "@/lib/profile";
 
 const SECTION = "flex flex-col gap-4 rounded-2xl border border-line p-4 sm:p-6";
 const H2 = "font-display text-2xl font-bold text-ink";
+const CHECK = "flex min-h-11 items-start gap-3 text-[15px] text-ink";
+const BOX = "mt-0.5 h-5 w-5 flex-none accent-ink";
+
+function Field({
+  label,
+  name,
+  defaultValue,
+  type = "text",
+  maxLength,
+  autoComplete = "off",
+}: {
+  label: string;
+  name: string;
+  defaultValue: string | null;
+  type?: string;
+  maxLength?: number;
+  autoComplete?: string;
+}) {
+  return (
+    <label className="flex flex-col gap-1.5">
+      <span className={LABEL}>{label}</span>
+      <input
+        name={name}
+        type={type}
+        maxLength={maxLength}
+        autoComplete={autoComplete}
+        defaultValue={defaultValue ?? ""}
+        className={INPUT}
+      />
+    </label>
+  );
+}
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -29,6 +68,15 @@ export default async function AdminAuthorPage({ params, searchParams }: PageProp
   const { data } = await db.from("admin_authors").select("*").eq("id", id).maybeSingle();
   if (!data) notFound();
   const a = data as AdminAuthorRow;
+  // Colonnes du profil absentes de la vue admin_authors (lecture par la clé service).
+  const { data: extra } = await db
+    .from("author_profiles")
+    .select("school_level, organization")
+    .eq("author_id", id)
+    .maybeSingle();
+  const schoolLevel = (extra?.school_level as string | null) ?? "";
+  const organization = (extra?.organization as string | null) ?? null;
+  const isStudent = a.kind === "student";
   const back = `/admin/auteurs/${id}`;
   const notice = noticeFrom(sp);
   const deleted = Boolean(a.deleted_at);
@@ -60,7 +108,7 @@ export default async function AdminAuthorPage({ params, searchParams }: PageProp
       {!deleted && (
         <section className={SECTION} aria-labelledby="infos">
           <h2 id="infos" className={H2}>
-            Informations
+            En résumé
           </h2>
           <dl>
             <Row label="Prénom et nom">{a.full_name}</Row>
@@ -86,11 +134,118 @@ export default async function AdminAuthorPage({ params, searchParams }: PageProp
             <input type="hidden" name="back" value={back} />
             <input type="hidden" name="id" value={a.id} />
             <label className="flex flex-1 flex-col gap-1.5">
-              <span className={LABEL}>Pseudo affiché sur ses tours</span>
+              <span className={LABEL}>{isStudent ? "Prénom affiché sur ses tours" : "Pseudo affiché sur ses tours"}</span>
               <input name="nickname" required minLength={3} maxLength={40} defaultValue={a.nickname} className={INPUT} />
             </label>
             <button type="submit" className={BTN_SECONDARY}>
               Enregistrer
+            </button>
+          </form>
+          {!isStudent && <p className={HINT}>Deux auteurs ne peuvent pas avoir le même pseudo.</p>}
+        </section>
+      )}
+
+      {!deleted && (
+        <section className={SECTION} aria-labelledby="email">
+          <h2 id="email" className={H2}>
+            Adresse mail
+          </h2>
+          {isStudent ? (
+            <p className={HINT}>
+              Un élève se connecte avec le code de sa classe : son compte n&apos;a pas d&apos;adresse mail.
+            </p>
+          ) : !a.user_id ? (
+            <p className={HINT}>
+              Cet auteur n&apos;a pas de compte de connexion (fiche reprise de l&apos;ancien site sans
+              compte) : il n&apos;y a pas d&apos;adresse à changer.
+            </p>
+          ) : (
+            <>
+              <form action={changeAuthorEmail} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                <input type="hidden" name="back" value={back} />
+                <input type="hidden" name="id" value={a.id} />
+                <label className="flex flex-1 flex-col gap-1.5">
+                  <span className={LABEL}>Adresse de connexion</span>
+                  <input
+                    name="email"
+                    type="email"
+                    required
+                    maxLength={254}
+                    autoComplete="off"
+                    defaultValue={a.email ?? ""}
+                    className={INPUT}
+                  />
+                </label>
+                <button type="submit" className={BTN_SECONDARY}>
+                  Changer l&apos;adresse
+                </button>
+              </form>
+              <p className={HINT}>
+                Changée tout de suite, sans mail de confirmation : vérifie bien l&apos;adresse. Son mot
+                de passe ne change pas ; les mails de Co-Aut partent vers la nouvelle adresse.
+              </p>
+            </>
+          )}
+        </section>
+      )}
+
+      {!deleted && (
+        <section className={SECTION} aria-labelledby="profil">
+          <h2 id="profil" className={H2}>
+            Modifier ses informations
+          </h2>
+          <form action={updateAuthorProfile} className="flex flex-col gap-4">
+            <input type="hidden" name="back" value={back} />
+            <input type="hidden" name="id" value={a.id} />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Prénom" name="first_name" defaultValue={a.first_name} maxLength={80} />
+              <Field label="Nom" name="last_name" defaultValue={a.last_name} maxLength={80} />
+              <Field label="Date de naissance" name="birth_date" type="date" defaultValue={a.birth_date} />
+              <label className="flex flex-col gap-1.5">
+                <span className={LABEL}>Niveau scolaire</span>
+                <select name="school_level" defaultValue={schoolLevel} className={INPUT}>
+                  <option value="">Non renseigné</option>
+                  {schoolLevel && !NIVEAUX.some((n) => n.value === schoolLevel) && (
+                    <option value={schoolLevel}>{schoolLevel}</option>
+                  )}
+                  {NIVEAUX.map((n) => (
+                    <option key={n.value} value={n.value}>
+                      {n.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Field label="Ville" name="city" defaultValue={a.city} maxLength={120} />
+              <Field label="Pays" name="country" defaultValue={a.country} maxLength={120} />
+            </div>
+            <label className={CHECK}>
+              <input
+                type="checkbox"
+                name="is_professional"
+                value="1"
+                defaultChecked={a.is_professional}
+                className={BOX}
+              />
+              <span>Enseignant ou professionnel (ouvre « Mes classes »)</span>
+            </label>
+            <Field
+              label="Établissement ou structure (si professionnel)"
+              name="organization"
+              defaultValue={organization}
+              maxLength={120}
+            />
+            <label className={CHECK}>
+              <input
+                type="checkbox"
+                name="accepts_marketing"
+                value="1"
+                defaultChecked={a.accepts_marketing}
+                className={BOX}
+              />
+              <span>Accepte de recevoir la newsletter</span>
+            </label>
+            <button type="submit" className={`${BTN_PRIMARY} self-start`}>
+              Enregistrer les informations
             </button>
           </form>
         </section>

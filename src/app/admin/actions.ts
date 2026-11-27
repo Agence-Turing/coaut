@@ -6,6 +6,7 @@ import { after } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireAdminAction, type AdminContext } from "@/lib/admin/guard";
 import { UUID_RE } from "@/lib/admin/data";
+import { parseBirthDate } from "@/lib/profile";
 import {
   notifyBookPublished,
   notifyBookStarts,
@@ -400,9 +401,115 @@ export async function renameAuthor(formData: FormData) {
   const nickname = str(formData, "nickname");
   if (!UUID_RE.test(id)) fail(back, "introuvable");
   if (nickname.length < 3 || nickname.length > 40) fail(back, "pseudo_court");
-  const { error } = await ctx.db.from("authors").update({ nickname }).eq("id", id).is("deleted_at", null);
+  const { data: author, error } = await ctx.db
+    .from("authors")
+    .update({ nickname })
+    .eq("id", id)
+    .is("deleted_at", null)
+    .select("user_id, kind")
+    .maybeSingle();
   if (error) fail(back, error.code === "23505" ? "pseudo_pris" : "technique");
+  if (!author) fail(back, "introuvable");
+  // Le pseudo voyage aussi dans les métadonnées du compte (inscription) : on les garde d'accord.
+  if (author.user_id && author.kind === "adult") {
+    const { error: metaError } = await ctx.db.auth.admin.updateUserById(author.user_id as string, {
+      user_metadata: { nickname },
+    });
+    if (metaError) console.error("renameAuthor (métadonnées) :", metaError.message);
+  }
   done(back, "pseudo");
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Change l'adresse du compte de connexion (auth.users) par la clé service, sans mail de
+ * confirmation : c'est l'administration qui corrige. Pas pour un élève (adresse technique) ni
+ * pour une fiche sans compte.
+ */
+export async function changeAuthorEmail(formData: FormData) {
+  const ctx = await requireAdminAction();
+  const back = backOf(formData);
+  const id = str(formData, "id");
+  const email = str(formData, "email").toLowerCase();
+  if (!UUID_RE.test(id)) fail(back, "introuvable");
+  if (email.length > 254 || !EMAIL_RE.test(email)) fail(back, "email_format");
+  const { data: author } = await ctx.db
+    .from("authors")
+    .select("user_id, kind, deleted_at")
+    .eq("id", id)
+    .maybeSingle();
+  if (!author || author.deleted_at) fail(back, "introuvable");
+  if (!author.user_id) fail(back, "sans_compte");
+  if (author.kind === "student") fail(back, "email_eleve");
+
+  const { data: taken } = await ctx.db
+    .from("admin_authors")
+    .select("id")
+    .eq("email", email)
+    .neq("id", id)
+    .limit(1);
+  if (taken?.length) fail(back, "email_pris");
+
+  const { error } = await ctx.db.auth.admin.updateUserById(author.user_id as string, {
+    email,
+    email_confirm: true,
+  });
+  if (error) {
+    if (error.code === "email_exists" || /already/i.test(error.message)) fail(back, "email_pris");
+    if (error.code === "email_address_invalid" || error.code === "validation_failed") {
+      fail(back, "email_format");
+    }
+    console.error("changeAuthorEmail :", error.message);
+    fail(back, "technique");
+  }
+  done(back, "email");
+}
+
+/** Prénom, nom, date de naissance, niveau, ville, pays, profil pro, newsletter (author_profiles). */
+export async function updateAuthorProfile(formData: FormData) {
+  const ctx = await requireAdminAction();
+  const back = backOf(formData);
+  const id = str(formData, "id");
+  if (!UUID_RE.test(id)) fail(back, "introuvable");
+  const text = (key: string, max: number) => str(formData, key).slice(0, max) || null;
+
+  const rawBirth = str(formData, "birth_date");
+  let birthDate: string | null = null;
+  if (rawBirth) {
+    const parsed = parseBirthDate(rawBirth);
+    if ("error" in parsed) fail(back, "date_naissance");
+    birthDate = parsed.date;
+  }
+  const isProfessional = formData.get("is_professional") === "1";
+
+  const { data: author } = await ctx.db
+    .from("authors")
+    .select("id, deleted_at")
+    .eq("id", id)
+    .maybeSingle();
+  if (!author || author.deleted_at) fail(back, "introuvable");
+
+  const { error } = await ctx.db.from("author_profiles").upsert(
+    {
+      author_id: id,
+      first_name: text("first_name", 80),
+      last_name: text("last_name", 80),
+      birth_date: birthDate,
+      school_level: text("school_level", 40),
+      city: text("city", 120),
+      country: text("country", 120),
+      is_professional: isProfessional,
+      organization: isProfessional ? text("organization", 120) : null,
+      accepts_marketing: formData.get("accepts_marketing") === "1",
+    },
+    { onConflict: "author_id" }
+  );
+  if (error) {
+    console.error("updateAuthorProfile :", error.message);
+    fail(back, "technique");
+  }
+  done(back, "profil");
 }
 
 export async function saveAdminNote(formData: FormData) {

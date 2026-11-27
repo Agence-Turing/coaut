@@ -7,6 +7,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireAdminAction, type AdminContext } from "@/lib/admin/guard";
 import { UUID_RE } from "@/lib/admin/data";
 import { parseBirthDate } from "@/lib/profile";
+import { NIVEAUX } from "@/lib/niveaux";
 import {
   notifyBookPublished,
   notifyBookStarts,
@@ -169,9 +170,19 @@ export async function updateBook(formData: FormData) {
   const synopsis = str(formData, "synopsis");
   if (!UUID_RE.test(id)) fail(back, "introuvable");
   if (title.length < 3) fail(back, "titre");
+  const patch: { title: string; synopsis: string | null; scolar_level?: string | null } = {
+    title,
+    synopsis: synopsis || null,
+  };
+  // Niveau : une valeur de la liste ou vide ; une ancienne valeur hors liste, renvoyée telle quelle, ne change pas.
+  if (formData.has("scolar_level")) {
+    const level = str(formData, "scolar_level");
+    if (!level) patch.scolar_level = null;
+    else if (NIVEAUX.some((n) => n.value === level)) patch.scolar_level = level;
+  }
   const { error } = await ctx.db
     .from("books")
-    .update({ title, synopsis: synopsis || null })
+    .update(patch)
     .eq("id", id);
   if (error) fail(back, "technique");
   done(back, "livre_modifie");

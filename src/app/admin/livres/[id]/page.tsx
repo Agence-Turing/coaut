@@ -22,6 +22,7 @@ import {
 import { requireAdminPage } from "@/lib/admin/guard";
 import { noticeFrom } from "@/lib/admin/messages";
 import { deName } from "@/lib/fr";
+import { NIVEAUX } from "@/lib/niveaux";
 
 /** « d' » ou « de » devant le pseudo : « au tour d'André », « au tour de Léa ». */
 const aTourDe = (pseudo: string) => deName(pseudo).slice(0, -pseudo.length);
@@ -35,23 +36,26 @@ export default async function AdminBookPage({ params, searchParams }: PageProps<
   if (!UUID_RE.test(id)) notFound();
   const sp = await searchParams;
 
-  const [{ data: bookData }, { data: teamData }, { data: nicknames }] = await Promise.all([
-    db.from("admin_books").select("*").eq("id", id).maybeSingle(),
-    db
-      .from("book_players")
-      .select("author_id, position, joined_at, authors(nickname, deleted_at)")
-      .eq("book_id", id)
-      .order("position")
-      .order("joined_at"),
-    db
-      .from("authors")
-      .select("nickname")
-      .eq("kind", "adult")
-      .is("deleted_at", null)
-      .order("nickname")
-      .limit(5000),
-  ]);
+  const [{ data: bookData }, { data: teamData }, { data: nicknames }, { data: levelData }] =
+    await Promise.all([
+      db.from("admin_books").select("*").eq("id", id).maybeSingle(),
+      db
+        .from("book_players")
+        .select("author_id, position, joined_at, authors(nickname, deleted_at)")
+        .eq("book_id", id)
+        .order("position")
+        .order("joined_at"),
+      db
+        .from("authors")
+        .select("nickname")
+        .eq("kind", "adult")
+        .is("deleted_at", null)
+        .order("nickname")
+        .limit(5000),
+      db.from("books").select("scolar_level").eq("id", id).maybeSingle(),
+    ]);
   if (!bookData) notFound();
+  const level = (levelData?.scolar_level as string | null) ?? "";
   const book = bookData as AdminBookRow;
   const team = (teamData ?? []) as unknown as {
     author_id: string;
@@ -265,7 +269,7 @@ export default async function AdminBookPage({ params, searchParams }: PageProps<
 
       <section className={SECTION} aria-labelledby="texte">
         <h2 id="texte" className={H2}>
-          Titre et résumé
+          Titre, résumé et niveau
         </h2>
         <form action={updateBook} className="flex flex-col gap-4">
           <input type="hidden" name="back" value={back} />
@@ -282,6 +286,20 @@ export default async function AdminBookPage({ params, searchParams }: PageProps<
               defaultValue={book.synopsis ?? ""}
               className={`${INPUT} min-h-32`}
             />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className={LABEL}>Niveau</span>
+            <select name="scolar_level" defaultValue={level} className={`${INPUT} sm:max-w-xs`}>
+              <option value="">Sans niveau</option>
+              {level && !NIVEAUX.some((n) => n.value === level) && (
+                <option value={level}>{level}</option>
+              )}
+              {NIVEAUX.map((n) => (
+                <option key={n.value} value={n.value}>
+                  {n.label}
+                </option>
+              ))}
+            </select>
           </label>
           <button type="submit" className={`${BTN_PRIMARY} self-start`}>
             Enregistrer

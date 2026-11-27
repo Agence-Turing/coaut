@@ -102,7 +102,7 @@ KONG_HTTP_PORT=8011
 # Modèles et sujets des mails GoTrue (fichiers du repo, public/emails/, servis par l'app)
 MAILER_TEMPLATES_RECOVERY=http://app:3000/emails/recovery.html
 MAILER_TEMPLATES_CONFIRMATION=http://app:3000/emails/confirmation.html
-MAILER_SUBJECTS_RECOVERY="Ton nouveau mot de passe Co-Aut"
+MAILER_SUBJECTS_RECOVERY="Ton nouveau mot de passe Co-Aut (demande n° {{ .Token }})"
 MAILER_SUBJECTS_CONFIRMATION="Confirme ton adresse pour entrer sur Co-Aut"
 EOF
 
